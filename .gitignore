@@ -158,3 +158,6 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+/noethysweb/noethysweb/settings_production.py
+/noethysweb/static/
