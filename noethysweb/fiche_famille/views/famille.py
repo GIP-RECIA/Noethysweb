@@ -177,8 +177,9 @@ class Onglet(CustomView):
         # Récupérer les paramètres généraux pour filtrer les onglets
         parametres = Get_dict_parametres()
 
-        # Vérifier si le compte famille est actif depuis la session
-        compte_famille_active = self.request.session.get('compte_famille_active', False)
+        # Vérifier directement dans les paramètres si le compte famille est actif 
+        # au lieu de se fier à la session qui peut ne pas être correctement initialisée
+        compte_famille_active = parametres.get("compte_famille", False)
 
         # Appliquer les permissions et les paramètres pour afficher les onglets
         context['liste_onglets'] = [

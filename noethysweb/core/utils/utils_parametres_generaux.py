@@ -83,8 +83,27 @@ LISTE_PARAMETRES = [
 
 ]
 
+def initialize_default_compte_settings():
+    """ S'assure que les paramètres de compte existent avec "Compte Famille" comme défaut """
+    # Vérifier si les paramètres de compte existent déjà
+    compte_famille_exists = PortailParametre.objects.filter(code="compte_famille").exists()
+    compte_individu_exists = PortailParametre.objects.filter(code="compte_individu").exists()
+    
+    # Si les deux paramètres n'existent pas encore, créer avec "Compte Famille" comme défaut
+    if not compte_famille_exists and not compte_individu_exists:
+        PortailParametre.objects.create(code="compte_famille", valeur="True")
+        PortailParametre.objects.create(code="compte_individu", valeur="False")
+    # Si seulement un paramètre existe, s'assurer que la configuration est cohérente
+    elif compte_famille_exists and not compte_individu_exists:
+        PortailParametre.objects.create(code="compte_individu", valeur="False")
+    elif not compte_famille_exists and compte_individu_exists:
+        PortailParametre.objects.create(code="compte_famille", valeur="True")
+
 def Get_dict_parametres():
     """ Renvoi un dict code: valeur des paramètres """
+    # S'assure que les paramètres de compte ont des valeurs par défaut correctes
+    initialize_default_compte_settings()
+    
     dict_parametres = {parametre.code: parametre for parametre in LISTE_PARAMETRES}
 
     for parametre_db in PortailParametre.objects.all():
