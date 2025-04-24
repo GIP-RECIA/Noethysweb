@@ -13,7 +13,7 @@ from core.utils.utils_parametres_generaux import LISTE_PARAMETRES
 
 
 LISTE_RUBRIQUES = [
-    ("Compte Utilisateurs", ["compte_famille", "compte_individu"]),
+    ("Compte Utilisateurs", ["type_compte"]),
 
     ("Fiche Individu", ["questionnaire_afficher_page_individu" , "liens_afficher_page_individu", "regimes_alimentaires_afficher_page_individu",
              "maladies_afficher_page_individu" ,"medical_afficher_page_individu" , "assurances_afficher_page_individu" , "contacts_afficher_page_individu" ,
@@ -33,6 +33,14 @@ LISTE_RUBRIQUES = [
 
 
 class Formulaire(FormulaireBase, forms.Form):
+    type_compte = forms.ChoiceField(
+        label="",  # Label vide pour ne pas afficher "Type de compte*"
+        choices=[("famille", "Compte Famille"), ("individu", "Compte Individu")],
+        widget=forms.RadioSelect(),
+        initial="famille",
+        help_text="Sélectionnez le type de compte à utiliser pour se connecter au portail"
+    )
+    
     def __init__(self, *args, **kwargs):
         super(Formulaire, self).__init__(*args, **kwargs)
         self.helper = FormHelper()
@@ -50,11 +58,38 @@ class Formulaire(FormulaireBase, forms.Form):
         for parametre_db in PortailParametre.objects.all():
             if parametre_db.code in dict_parametres:
                 dict_parametres[parametre_db.code].From_db(parametre_db.valeur)
+                
+        # Initialiser le champ type_compte en fonction des valeurs actuelles
+        # Rechercher si le compte individu est explicitement activé (seul cas où on le sélectionne)
+        compte_individu_actif = False
+        compte_famille_actif = False
+        
+        for parametre_db in PortailParametre.objects.filter(code__in=["compte_famille", "compte_individu"]):
+            if parametre_db.code == "compte_individu" and parametre_db.valeur.lower() in ["true", "1"]:
+                compte_individu_actif = True
+            if parametre_db.code == "compte_famille" and parametre_db.valeur.lower() in ["true", "1"]:
+                compte_famille_actif = True
+        
+        # Règle d'initialisation :
+        # - Utiliser "individu" uniquement si c'est explicitement activé ET que famille ne l'est pas
+        # - Utiliser "famille" dans tous les autres cas
+        # Note: Avec les boutons radio, il ne sera plus possible d'avoir les deux options activées 
+        # simultanément à l'avenir, mais ce code doit gérer les données existantes pendant la transition
+        if compte_individu_actif and not compte_famille_actif:
+            self.fields["type_compte"].initial = "individu"
+        else:
+            self.fields["type_compte"].initial = "famille"
 
         # Création des fields
         for titre_rubrique, liste_parametres in LISTE_RUBRIQUES:
             liste_fields = []
             for code_parametre in liste_parametres:
+                # Si c'est notre champ personnalisé type_compte, il est déjà défini dans la classe
+                if code_parametre == "type_compte":
+                    liste_fields.append(InlineRadios(code_parametre))
+                    continue
+                
+                # Pour les autres champs standard
                 self.fields[code_parametre] = dict_parametres[code_parametre].Get_ctrl()
                 self.fields[code_parametre].initial = dict_parametres[code_parametre].valeur
                 liste_fields.append(Field(code_parametre))
@@ -62,44 +97,5 @@ class Formulaire(FormulaireBase, forms.Form):
 
         self.helper.layout.append(HTML("<br>"))
 
-        self.helper.layout.append(HTML(EXTRA_SCRIPT))
-
-    def clean(self):
-        cleaned_data = super().clean()
-        compte_individu = cleaned_data.get("compte_individu")
-        compte_famille = cleaned_data.get("compte_famille")
-        # Validation pour s'assurer qu'un seul champ est sélectionné
-        if compte_individu and compte_famille:
-            raise forms.ValidationError("Vous ne pouvez sélectionner qu'un seul compte à la fois.")
-        return cleaned_data
-
-
-EXTRA_SCRIPT = """
-<script>
-window.onload = function() {
-    const checkboxIndividu = document.getElementById("id_compte_individu"); 
-    const checkboxFamille = document.getElementById("id_compte_famille");  
-
-    console.log("Checkboxes trouvées avec succès"); // Vérifie si les cases à cocher sont trouvées
-
-    checkboxIndividu.addEventListener('change', function() {
-            if (this.checked) {
-                checkboxFamille.checked = false;
-                checkboxFamille.disabled = true;
-            } else {
-                checkboxFamille.disabled = false;
-            }
-        });
-
-    checkboxFamille.addEventListener('change', function() {
-            if (this.checked) {
-                checkboxIndividu.checked = false;
-                checkboxIndividu.disabled = true;
-            } else {
-                checkboxIndividu.disabled = false;
-            }
-        });
-};
-</script>
-<br>
-"""
+    # La méthode clean() a été supprimée car elle n'est plus nécessaire
+    # Les boutons radio garantissent qu'un seul choix est possible

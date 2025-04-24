@@ -32,6 +32,17 @@ class Modifier(CustomView, TemplateView):
         # Enregistrement
         dict_parametres = {parametre.code: parametre for parametre in PortailParametre.objects.all()}
         liste_modifications = []
+        
+        # Traiter le type de compte (radio buttons) et le convertir en deux valeurs booléennes
+        type_compte = form.cleaned_data.pop("type_compte", "individu")
+        compte_individu = (type_compte == "individu")
+        compte_famille = (type_compte == "famille")
+        
+        # Ajouter les paramètres de compte dans les données à traiter
+        form.cleaned_data["compte_individu"] = compte_individu
+        form.cleaned_data["compte_famille"] = compte_famille
+        
+        # Enregistrer tous les paramètres
         for code, valeur in form.cleaned_data.items():
             if code in dict_parametres:
                 dict_parametres[code].valeur = str(valeur)
@@ -41,9 +52,9 @@ class Modifier(CustomView, TemplateView):
         if liste_modifications:
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
-        # Stocker les états des cases à cocher dans la session
-        request.session['compte_individu_active'] = form.cleaned_data.get("compte_individu", False)
-        request.session['compte_famille_active'] = form.cleaned_data.get("compte_famille", False)
+        # Stocker les états des comptes dans la session
+        request.session['compte_individu_active'] = compte_individu
+        request.session['compte_famille_active'] = compte_famille
         cache.delete("parametres_portail")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')
