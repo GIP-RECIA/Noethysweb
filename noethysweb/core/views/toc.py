@@ -22,4 +22,10 @@ class Toc(CustomView, TemplateView):
         context['page_titre'] = menu.titre
         context['mode_demo'] = settings.MODE_DEMO
 
+        # Prépare la liste des sous-menus visibles et leurs enfants visibles
+        context['submenu_items'] = [
+            (submenu, submenu.GetVisibleChildren(self.request.user))
+            for submenu in menu.GetVisibleChildren(self.request.user)
+        ]
+
         return context

@@ -572,6 +572,10 @@ class Menu():
         self.toujours_afficher = toujours_afficher
         self.compatible_demo = compatible_demo
         self.masquer = masquer
+        # Ajout des attributs pour la gestion de visibilité dynamique
+        self._toujours_afficher = False
+        self._superutilisateur_only = False
+        self._masquer = False
 
     def __repr__(self):
         return "<Menu '%s'>" % self.titre
@@ -583,17 +587,13 @@ class Menu():
         # Créer l'objet menu
         menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user,
                     compatible_demo=compatible_demo, toujours_afficher=toujours_afficher)
-        # Déterminer si ce menu doit être affiché
-        should_display = (
-                toujours_afficher or  # Toujours afficher si marqué comme tel
-                (code and self.user and self.user.has_perm(
-                    f"core.{code}")) or  # Afficher si l'utilisateur a la permission
-                self.toujours_afficher  # Si le parent est marqué comme toujours visible
-        )
-        # Ajouter le menu uniquement s'il doit être affiché
-        if should_display:
-            self.children.append(menu)
-        return menu  # Retourne toujours le menu, même s'il n'est pas affiché
+        # On ajoute TOUJOURS le menu pour garantir la génération de toutes les permissions
+        self.children.append(menu)
+        # On stocke les infos nécessaires pour la visibilité dynamique
+        menu._toujours_afficher = toujours_afficher
+        menu._superutilisateur_only = superutilisateur_only
+        menu._masquer = masquer
+        return menu  # Retourne toujours le menu, l'affichage sera filtré dynamiquement
 
     def GetUrl(self):
         if self.args:
@@ -602,6 +602,40 @@ class Menu():
 
     def GetChildren(self):
         return self.children
+
+    def GetVisibleChildren(self, user=None):
+        """
+        Retourne la liste des sous-menus visibles pour l'utilisateur donné.
+        À utiliser dans les templates ou vues pour filtrer dynamiquement les menus :
+        [menu for menu in parent.GetChildren() if menu.is_visible(request.user)]
+        Ou plus simplement : parent.GetVisibleChildren(request.user)
+        """
+        user = user or self.user
+        return [child for child in self.children if child.is_visible(user)]
+
+    def is_visible(self, user=None):
+        """
+        Détermine si ce menu doit être affiché pour l'utilisateur donné.
+        À utiliser dans le template ou la vue :
+        [menu for menu in parent.GetChildren() if menu.is_visible(request.user)]
+        """
+        user = user or self.user
+        # Masqué explicitement ?
+        if getattr(self, '_masquer', False):
+            return False
+        # Superutilisateur only ?
+        if getattr(self, '_superutilisateur_only', False) and (not user or not user.is_superuser):
+            return False
+        # Toujours afficher ?
+        if getattr(self, '_toujours_afficher', False) or self.toujours_afficher:
+            return True
+        # Permission requise ?
+        if self.code and user and user.has_perm(f"core.{self.code}"):
+            return True
+        # Hérite du parent ?
+        if self.parent and getattr(self.parent, '_toujours_afficher', False):
+            return True
+        return False
 
     def GetChildrenParts(self):
         """ Divise la liste des items en 2 colonnes """

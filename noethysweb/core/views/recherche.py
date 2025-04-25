@@ -87,9 +87,9 @@ class View(CustomView, TemplateView):
         # Recherche dans le menu
         resultats["commandes"] = []
         menu_principal = GetMenuPrincipal(user=self.request.user)
-        for menu in menu_principal.GetChildren():
-            for sous_menu in menu.GetChildren():
-                for commande in sous_menu.GetChildren():
+        for menu in menu_principal.GetVisibleChildren(self.request.user):
+            for sous_menu in menu.GetVisibleChildren(self.request.user):
+                for commande in sous_menu.GetVisibleChildren(self.request.user):
                     if texte.lower() in commande.titre.lower():
                         resultats["commandes"].append(commande)
 

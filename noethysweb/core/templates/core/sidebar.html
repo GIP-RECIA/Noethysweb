@@ -123,7 +123,7 @@
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
                 <li class="nav-header">{{ menu_principal.titre|upper }}</li>
-                {% for child in menu_principal.GetChildren %}
+                {% for child in visible_children %}
                     {% if child.toujours_afficher or child.HasChildren %}
                         <li class="nav-item" title="{{ child.titre }}">
                             <a class="nav-link {% if child in breadcrumb %} active{% endif %}" {% if child.code %}href="{% url child.code %}"{% endif %}>

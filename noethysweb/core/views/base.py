@@ -158,6 +158,12 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin): #, PermissionRequired
         # Mémorise le menu actif
         menu_actif = menu_principal.Find(code=self.menu_code)
         context['menu_actif'] = menu_actif
+
+        # La sidebar affiche TOUJOURS les enfants du menu principal
+        user = self.request.user
+        context['visible_children'] = menu_principal.GetVisibleChildren(user)
+        context['menu_for_sidebar'] = menu_principal
+
         if menu_actif:
             context['menu_brothers'] = menu_actif.GetBrothers()
         context['afficher_menu_brothers'] = False

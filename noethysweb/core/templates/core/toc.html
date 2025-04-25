@@ -26,7 +26,7 @@
 {% block contenu_page %}
 
     <div class="card-columns">
-        {% for submenu in menu_actif.GetChildren %}
+        {% for submenu, items in submenu_items %}
             {% if submenu.HasChildren %}
                 <div class="card card-solid m-2">
                     {% if submenu.titre %}
@@ -36,7 +36,7 @@
                     {% endif %}
                     <div class="card-body p-0">
                         <ul class="list-group list-group-flush">
-                            {% for item in submenu.GetChildren %}
+                            {% for item in items %}
                                 <a class="list-group-item list-group-item-action {% if mode_demo and not item.compatible_demo %}disabled{% endif %}" href="{{ item.GetUrl }}">
                                     <i class="fa fa-{{ item.icone }} mr-1"></i> {{ item.titre }} {% if mode_demo and not item.compatible_demo %}<small class="badge badge-warning"><i class="fa fa-lock"></i> Mode démo</small>{% endif %}
                                 </a>
