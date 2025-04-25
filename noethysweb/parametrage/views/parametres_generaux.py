@@ -33,13 +33,12 @@ class Modifier(CustomView, TemplateView):
         dict_parametres = {parametre.code: parametre for parametre in PortailParametre.objects.all()}
         liste_modifications = []
         
-        # Traiter le type de compte (radio buttons) et le convertir en deux valeurs booléennes
-        type_compte = form.cleaned_data.pop("type_compte", "individu")
-        compte_individu = (type_compte == "individu")
+        # Traiter le type de compte (radio buttons) et le convertir en une seule valeur booléenne
+        # compte_famille = True si on a sélectionné "famille", False si on a sélectionné "individu"
+        type_compte = form.cleaned_data.pop("type_compte", "famille")
         compte_famille = (type_compte == "famille")
         
-        # Ajouter les paramètres de compte dans les données à traiter
-        form.cleaned_data["compte_individu"] = compte_individu
+        # Ajouter uniquement le paramètre compte_famille dans les données à traiter
         form.cleaned_data["compte_famille"] = compte_famille
         
         # Enregistrer tous les paramètres
@@ -52,8 +51,7 @@ class Modifier(CustomView, TemplateView):
         if liste_modifications:
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
-        # Stocker les états des comptes dans la session
-        request.session['compte_individu_active'] = compte_individu
+        # Stocker uniquement l'état du compte famille dans la session
         request.session['compte_famille_active'] = compte_famille
         cache.delete("parametres_portail")
 

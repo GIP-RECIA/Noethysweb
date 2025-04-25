@@ -59,26 +59,20 @@ class Formulaire(FormulaireBase, forms.Form):
             if parametre_db.code in dict_parametres:
                 dict_parametres[parametre_db.code].From_db(parametre_db.valeur)
                 
-        # Initialiser le champ type_compte en fonction des valeurs actuelles
-        # Rechercher si le compte individu est explicitement activé (seul cas où on le sélectionne)
-        compte_individu_actif = False
-        compte_famille_actif = False
+        # Initialiser le champ type_compte en fonction du paramètre compte_famille
+        # Si compte_famille=True => "famille", Si compte_famille=False => "individu"
+        # Par défaut, compte_famille est True (compte famille)
         
-        for parametre_db in PortailParametre.objects.filter(code__in=["compte_famille", "compte_individu"]):
-            if parametre_db.code == "compte_individu" and parametre_db.valeur.lower() in ["true", "1"]:
-                compte_individu_actif = True
-            if parametre_db.code == "compte_famille" and parametre_db.valeur.lower() in ["true", "1"]:
-                compte_famille_actif = True
-        
-        # Règle d'initialisation :
-        # - Utiliser "individu" uniquement si c'est explicitement activé ET que famille ne l'est pas
-        # - Utiliser "famille" dans tous les autres cas
-        # Note: Avec les boutons radio, il ne sera plus possible d'avoir les deux options activées 
-        # simultanément à l'avenir, mais ce code doit gérer les données existantes pendant la transition
-        if compte_individu_actif and not compte_famille_actif:
-            self.fields["type_compte"].initial = "individu"
-        else:
-            self.fields["type_compte"].initial = "famille"
+        # Récupérer la valeur du paramètre compte_famille (True par défaut)
+        compte_famille_actif = True
+        try:
+            parametre = PortailParametre.objects.get(code="compte_famille")
+            compte_famille_actif = parametre.valeur.lower() in ["true", "1"]
+        except PortailParametre.DoesNotExist:
+            pass
+            
+        # Sélectionner le type de compte approprié
+        self.fields["type_compte"].initial = "famille" if compte_famille_actif else "individu"
 
         # Création des fields
         for titre_rubrique, liste_parametres in LISTE_RUBRIQUES:

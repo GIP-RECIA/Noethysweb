@@ -33,8 +33,7 @@ class Parametre():
 LISTE_PARAMETRES = [
 
     # Compte utilisateurs
-    Parametre(code="compte_famille", label="Compte Famille", valeur=False, type="boolean", help_text="Cochez cette case pour se connecter sur le portail en tant que Famille."),
-    Parametre(code="compte_individu", label="Compte Individu",  valeur=True, type="boolean", help_text="Cochez cette case pour se connecter sur le portail en tant que Individu."),
+    Parametre(code="compte_famille", label="Type de compte", valeur=True, type="boolean", help_text="True = Compte Famille (par défaut), False = Compte Individu."),
 
     # Fiche Individu
     Parametre(code="questionnaire_afficher_page_individu", label="Afficher la page Questionnaire", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Questionnaire sur la fiche Individu."),
@@ -84,19 +83,12 @@ LISTE_PARAMETRES = [
 ]
 
 def initialize_default_compte_settings():
-    """ S'assure que les paramètres de compte existent avec "Compte Famille" comme défaut """
-    # Vérifier si les paramètres de compte existent déjà
+    """ S'assure que le paramètre compte_famille existe avec True comme valeur par défaut """
+    # Vérifier si le paramètre compte_famille existe déjà
     compte_famille_exists = PortailParametre.objects.filter(code="compte_famille").exists()
-    compte_individu_exists = PortailParametre.objects.filter(code="compte_individu").exists()
     
-    # Si les deux paramètres n'existent pas encore, créer avec "Compte Famille" comme défaut
-    if not compte_famille_exists and not compte_individu_exists:
-        PortailParametre.objects.create(code="compte_famille", valeur="True")
-        PortailParametre.objects.create(code="compte_individu", valeur="False")
-    # Si seulement un paramètre existe, s'assurer que la configuration est cohérente
-    elif compte_famille_exists and not compte_individu_exists:
-        PortailParametre.objects.create(code="compte_individu", valeur="False")
-    elif not compte_famille_exists and compte_individu_exists:
+    # Créer le paramètre s'il n'existe pas encore
+    if not compte_famille_exists:
         PortailParametre.objects.create(code="compte_famille", valeur="True")
 
 def Get_dict_parametres():

@@ -129,14 +129,15 @@ class Onglet(CustomView):
 
         # Récupération des droits utilisateur et paramètres spécifiques
         titulaire_rattachement = self.get_titulaire_rattachement()
-        compte_individu_active = self.request.session.get('compte_individu_active', False)
+        # La logique du compte individu est déduite de compte_famille (inversion logique)
+        compte_famille_active = self.request.session.get('compte_famille_active', True)
 
         # Filtrage des onglets en fonction des permissions et paramètres
         context['liste_onglets'] = [
             dict_onglet for dict_onglet in self.liste_onglets
             if self.request.user.has_perm("core.individu_%s" % dict_onglet["code"])  # Vérifie les permissions
                and parametres.get(f"{dict_onglet['code']}_afficher_page_individu", True)  # Filtre selon les paramètres
-               and (dict_onglet["code"] != "portail" or (compte_individu_active and titulaire_rattachement == 1))
+               and (dict_onglet["code"] != "portail" or (not compte_famille_active and titulaire_rattachement == 1))
             # Logique spécifique au portail
         ]
 
