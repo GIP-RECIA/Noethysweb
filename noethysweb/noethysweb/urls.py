@@ -3,12 +3,12 @@
 #  Distribué sous licence GNU GPL.
 
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from core.views import erreurs
 
-
+# Définir les patterns de base
 urlpatterns = [
     path(settings.URL_GESTION, admin.site.urls),
     path(settings.URL_BUREAU, include('core.urls')),
@@ -46,14 +46,34 @@ if settings.PORTAIL_ACTIF:
     urlpatterns.append(path(settings.URL_PORTAIL, include('portail.urls')))
 
 if settings.DEBUG:
-    # Ajoute le répertoire Media
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
     # Ajoute le debugtoolbar
     import debug_toolbar
     urlpatterns = [
         path('__debug__/', include(debug_toolbar.urls)),
     ] + urlpatterns
+    
+    # Ajoute le répertoire Media pour le développement
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    
+    # Configuration des fichiers statiques pour qu'ils respectent le préfixe URL_ROOT
+    from django.contrib.staticfiles import views
+    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
+    
+    # Désactiver tous les patterns de fichiers statiques existants
+    # pour éviter les conflits avec notre configuration personalisée
+    
+    # Ajoute manuellement la configuration pour servir les fichiers statiques
+    if settings.URL_ROOT:
+        # Pour le cas avec URL_ROOT, on utilise le STATIC_URL configuré dans settings.py
+        # qui inclut déjà URL_ROOT
+        urlpatterns += [
+            re_path(r'^%s(?P<path>.*)$' % settings.STATIC_URL.lstrip('/'), views.serve, {'document_root': settings.STATIC_ROOT}),
+        ]
+    else:
+        # Pour le cas sans URL_ROOT, on utilise la configuration standard de Django
+        urlpatterns += staticfiles_urlpatterns()
+
+# Le middleware URLPrefixMiddleware gère déjà le préfixe URL_ROOT pour les URL normales
 
 
 # Modifie les noms dans l'admin
