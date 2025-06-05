@@ -15,6 +15,7 @@ Installation
     - `pip3 install -r requirements.txt`
 - Allez dans le répertoire *noethysweb/noethysweb* et renommez le fichier *settings_production_modele.py* en *settings_production.py*.
 - Personnalisez le fichier *settings_production.py* selon vos besoins.
+  - Pour héberger plusieurs instances sur le même domaine, configurez la variable `URL_ROOT` avec le chemin racine désiré (ex: "/app1/").
 - Exécutez les commandes suivantes depuis le répertoire *noethysweb* :
     - `python3 manage.py makemigrations`
     - `python3 manage.py migrate`
