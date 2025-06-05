@@ -9,6 +9,7 @@ import crispy_forms
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # URLS
+URL_ROOT = ""  # URL racine pour héberger plusieurs instances sur un même domaine
 URL_GESTION = "administrateur/"
 URL_BUREAU = "utilisateur/"
 URL_PORTAIL = ""
@@ -119,6 +120,7 @@ INTERNAL_IPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.URLPrefixMiddleware',  # Doit être en premier pour gérer le préfixe URL_ROOT
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -126,10 +128,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'axes.middleware.AxesMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',
-    'axes.middleware.AxesMiddleware',
     'noethysweb.middleware.CustomMiddleware',
 ]
 
@@ -193,11 +195,13 @@ LOCALE_PATHS = (
 
 # Static files (CSS, JavaScript, Images)
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
-STATIC_URL = '/static/'
+# Modification pour prendre en compte URL_ROOT dans les chemins statiques
+STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
 
 # Media files
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
+# Modification pour prendre en compte URL_ROOT dans les chemins media
+MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
 
 # Stockage
 STORAGE_PROBLEME = "django.core.files.storage.FileSystemStorage"
