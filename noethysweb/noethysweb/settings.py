@@ -120,7 +120,8 @@ INTERNAL_IPS = [
 ]
 
 MIDDLEWARE = [
-    'core.middleware.URLPrefixMiddleware',  # Doit être en premier pour gérer le préfixe URL_ROOT
+    'core.middleware.URLPrefixReverseMiddleware',  # Doit être placé avant tout pour préfixer les URLs générées
+    'core.middleware.URLPrefixMiddleware',  # Doit être en second pour gérer le préfixe URL_ROOT dans les URLs entrantes
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -149,6 +150,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'django.template.context_processors.media',
+                'core.context_processors.url_root',
             ],
         },
     },
@@ -230,12 +232,12 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'complet': {
-            'format': '[{levelname} {asctime} {module}]  {message}',
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
-        'simple': {
-            'format': '{levelname} {message}',
+        'complet': {
+            'format': '[{levelname} {asctime} {module}]  {message}',
             'style': '{',
         },
     },
@@ -249,7 +251,7 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': 'DEBUG',  # Modifié à DEBUG pour voir nos messages de débogage
             'filters': ['require_debug_true'],
             'class': 'logging.StreamHandler',
             'formatter': 'complet',
@@ -272,6 +274,13 @@ LOGGING = {
     'root': {
         'handlers': ['console', 'file', 'mail_admins'],
         'level': 'DEBUG',
+    },
+    'loggers': {
+        'core.middleware': {  # Logger spécifique pour notre middleware
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
     },
 }
 

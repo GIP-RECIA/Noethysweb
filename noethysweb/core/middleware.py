@@ -4,6 +4,7 @@
 
 from django.conf import settings
 from django.http import HttpResponseRedirect
+from django.urls.base import set_script_prefix, get_script_prefix, clear_script_prefix, reverse
 
 class URLPrefixMiddleware:
     """Middleware pour gérer le préfixe URL_ROOT"""
@@ -54,6 +55,36 @@ class URLPrefixMiddleware:
             
         # Tout le reste passe normalement
         return self.get_response(request)
+
+
+class URLPrefixReverseMiddleware:
+    """Middleware pour configurer le préfixe URL utilisé par Django pour générer les URLs.
+    Ce middleware utilise set_script_prefix() pour ajouter automatiquement le préfixe URL_ROOT
+    à toutes les URLs générées par Django via la fonction reverse() et le tag template {% url %}."""
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+        
+    def __call__(self, request):
+        # Sauvegarder le préfixe d'origine pour le restaurer après le traitement
+        original_prefix = get_script_prefix()
+        
+        try:
+            # Configurer le préfixe URL pour générer les URLs avec URL_ROOT
+            if settings.URL_ROOT:
+                # Normalisation du préfixe pour éviter les doubles slashes
+                prefix = '/' + settings.URL_ROOT.strip('/') + '/'
+                prefix = prefix.replace('//', '/')
+                set_script_prefix(prefix)
+            
+            # Traiter la requête normalement
+            response = self.get_response(request)
+            return response
+        finally:
+            # Restaurer le préfixe d'origine une fois la requête traitée
+            set_script_prefix(original_prefix)
+            
+        return response
 
 
 # Middleware original de Noethysweb (ne pas supprimer)
