@@ -44,15 +44,6 @@ URL_PORTAIL = ""
 PORTAIL_ACTIF = True
 
 #########################################################################################
-# URLS des statics et media : à éviter de modifier
-#########################################################################################
-
-# Modification pour prendre en compte URL_ROOT dans les chemins statiques
-STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
-# Modification pour prendre en compte URL_ROOT dans les chemins media
-MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
-
-#########################################################################################
 # HOSTS : Saisissez les hosts autorisés (IP ou urls du serveur).
 # Obligatoire pour fonctionner sur un serveur.
 # Exemple : ALLOWED_HOSTS = ["127.0.0.1", "www.monsite.com"]

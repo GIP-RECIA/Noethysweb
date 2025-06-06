@@ -333,6 +333,15 @@ try:
 except:
     print("Settings en production non trouvés : Utilisation des settings par défaut.")
 
+#########################################################################################
+# URLS des statics et media : à charger après les settings de production
+#########################################################################################
+
+# Modification pour prendre en compte URL_ROOT dans les chemins statiques
+STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
+# Modification pour prendre en compte URL_ROOT dans les chemins media
+MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
+
 # Intégration des plugins
 for nom_plugin in PLUGINS:
     INSTALLED_APPS.append("plugins.%s.apps.%s" % (nom_plugin, nom_plugin))
