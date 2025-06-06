@@ -38,9 +38,19 @@ class URLPrefixMiddleware:
             request.path_info = '/'
             return self.get_response(request)
         
-        # Si l'URL est la racine, on la redirige vers le préfixe
-        elif request.path_info == '/' and not request.path_info.startswith('/static/'):
-            return HttpResponseRedirect(f'/{url_prefix}/')
+        # Si l'URL est une URL standard (pas /static/ ou /media/), on la redirige vers le préfixe
+        elif not any(request.path_info.startswith(prefix) for prefix in ['/static/', '/media/']):
+            # Construction de l'URL avec le préfixe
+            new_url = f'/{url_prefix}{request.path_info}'
+            # Si l'URL se termine par un slash et que new_url a un double slash, on le corrige
+            new_url = new_url.replace('//', '/')
+            # On ajoute le slash final si l'URL originale en avait un
+            if request.path_info.endswith('/') and not new_url.endswith('/'):
+                new_url += '/'
+            # On ajoute les paramètres de requête s'il y en a
+            if request.GET:
+                new_url += '?' + request.META.get('QUERY_STRING', '')
+            return HttpResponseRedirect(new_url)
             
         # Tout le reste passe normalement
         return self.get_response(request)
