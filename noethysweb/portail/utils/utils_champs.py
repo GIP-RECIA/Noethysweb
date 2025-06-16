@@ -40,11 +40,13 @@ LISTE_CHAMPS = [
     Champ(page="famille_consentements", code="consentements", label="Consentements", famille="MODIFIABLE"),
 
     Champ(page="individu_identite", code="nom", label="Nom de famille", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
+    Champ(page="individu_identite", code="nom_jfille", label="Nom de naissance", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="civilite", label="Civilité", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="prenom", label="Prénom", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="date_naiss", label="Date de naissance", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="cp_naiss", label="CP naissance", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="ville_naiss", label="Ville de naissance", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
+    Champ(page="individu_identite", code="pays_naiss_insee", label="Pays de naissance", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE", choix_obligatoire=True),
     Champ(page="individu_identite", code="type_sieste", label="Type de sieste", representant="MASQUER", enfant="MODIFIABLE", contact="MASQUER", choix_obligatoire=True),
 
     Champ(page="individu_coords", code="type_adresse", label="Type d'adresse", representant="MODIFIABLE", enfant="MODIFIABLE", contact="MODIFIABLE"),
@@ -140,6 +142,10 @@ def Get_renseignements_manquants(famille=None):
             # Recherche si une valeur existe déjà dans les renseignements modifiés
             if code in dict_renseignements:
                 valeur = dict_renseignements[code]
+
+            # Exige le nom de naissance uniquement si la civilité = 3 (Madame)
+            if code == "nom_jfille" and rattachement and rattachement.individu.civilite != 3:
+                valeur = True
 
             if not valeur:
                 label = dict_labels[code]

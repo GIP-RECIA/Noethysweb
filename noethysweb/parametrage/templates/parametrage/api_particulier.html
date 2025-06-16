@@ -1,0 +1,182 @@
+{% extends "core/page.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% load embed %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script type="text/javascript" src="{% static 'lib/bootbox/bootbox.min.js' %}"></script>
+{% endblock scripts %}
+
+{% block contenu_page %}
+
+    {% embed 'core/box.html' %}
+        {% block box_theme %}card-outline card-lightblue{% endblock %}
+        {% block box_titre %}{{ box_titre }}{% endblock %}
+        {% block box_introduction %}
+            Vous pouvez ici configurer l'accès à l'API Particulier pour votre compte utilisateur.
+        {% endblock %}
+        {% block box_contenu %}
+            <div class="mb-4">
+                <div id="erreurs" class="text-red"></div>
+                <button type='button' onclick="$('#modal_saisie_token').modal('show');"
+                    {% if token_exists %}
+                        class="btn btn-primary"><i class="fa fa-pencil margin-r-5"></i> Remplacer le token
+                    {% else %}
+                        class="btn btn-success"><i class="fa fa-plus margin-r-5"></i> Saisir le token
+                    {% endif %}
+                </button>
+                {% if token_exists %}
+                    <button type='button' id="supprimer_token" class="btn btn-warning"><i class="fa fa-trash margin-r-5"></i> Supprimer le token</button>
+                {% endif %}
+            </div>
+            <div>
+                <dt>A quoi sert l'API Particulier ?</dt>
+                <dd>
+                    L'API Particulier est un service proposé par la Direction Interministerielle du Numérique (DINUM) pour les administrations publiques.
+                    Il permet notamment de récupérer facilement les quotients familiaux des familles allocataires de la CAF ou de la MSA.
+                    Si vous êtes agent dans une collectivité, vous pouvez demander une habilitation à la DINUM.
+                    Vous obtiendrez alors un token (ou jeton), une longue chaîne alphanumérique qui sera à saisir sur cette page.
+                    Dès lors, il sera possible de récupérer les quotients depuis Noethysweb. 
+                    Vous pouvez en découvrir davantage sur l'API Particulier sur la page suivante : <a href="https://particulier.api.gouv.fr/cas_usages/tarification_municipale_enfance" target="_blank">l'API Particulier pour la tarification municipale</a>.
+                </dd>
+                <dt>Quels sont les pré-requis ?</dt>
+                <dd>
+                    <ol>
+                        <li>Vous êtes éligible à cette habilitation uniquement si vous représentez une collectivité ou une administration.</li>
+                        <li>Vous devez avoir enregistré dans les fiches familles pour chaque adulte représentant : <i>Le nom de famille, le nom de naissance, le prénom, la ville de naissance</i>.
+                            Si ce n'est pas déjà le cas, envoyez un mail aux familles pour leur demander de renseigner les champs manquants sur le portail.</li>
+                    </ol>
+                </dd>
+                <dt>Comment obtenir votre token API Particulier ?</dt>
+                <dd>
+                    <ol>
+                        <li>Faites une demande d'habilitation sur la page <a href="https://api-particulier.v2.datapass.api.gouv.fr/formulaires/api-particulier-noethys/demande/nouveau" target="_blank">Demande d'habilitation API Particulier pour Noethys</a>.</li>
+                        <li>Suivez la procédure indiquée :
+                            <ul>
+                                <li>S'identifier avec ProConnect (Vous devez utiliser votre adresse mail professionnelle).</li>
+                                <li>Remplir le questionnaire (Cochez généralement les 4 données suivantes : QF, allocataires, enfants, adresse).</li>
+                                <li>Attendre la validation.</li>
+                            </ul>
+                        </li>
+                        <li>Après deux semaines d'attente environ, vous recevrez une validation de la DINUM.</li>
+                        <li>Vous avez désormais accès à votre token (jeton) d'accès.</li>
+                    </ol>
+                </dd>
+                <dt>Comment préparer l'utilisation ?</dt>
+                <dd>
+                    <ol>
+                        <li>Cliquez sur le bouton ci-dessus "Saisir le token" et copiez-collez le token qui vous a été communiqué.</li>
+                        <li>Dans le menu Paramétrage > Portail > Paramètres des renseignements, ajustez les paramètres ainsi :
+                            <ul>
+                                <li>Nom de naissance - représentant = Obligatoire</li>
+                                <li>CP de naissance - représentant = Obligatoire</li>
+                                <li>Ville de naissance - représentant = Obligatoire</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </dd>
+                <dt>Comment l'utiliser ?</dt>
+                <dd>Vous pouvez importer les quotients familiaux de deux façons :
+                    <ul>
+                        <li>Import pour une famille : <i>Fiche famille > Quotients familiaux > Importer depuis l'API Particulier</i>.</li>
+                        <li>Import pour un lot de familles : <i>Menu Individus > Importer des quotients depuis l'API Particulier</i>.</li>
+                    </ul>
+                </dd>
+                <dt>Comment cela fonctionne ?</dt>
+                <dd>Pour chaque famille souhaitée, Noethysweb va rechercher l'existence d'un dossier CAF et MSA pour chaque adulte de la famille dans l'ordre suivant :
+                    <ol>
+                        <li>L'allocataire (renseigné dans la fiche famille > Caisse).</li>
+                        <li>Le titulaire Hélios (renseigné dans la fiche famille > Paramètres).</li>
+                        <li>Chaque représentant titulaire du dossier.</li>
+                    </ol>
+                    La recherche s'arrête dès qu'une recherche est concluante. Si vous souhaitez que la recherche soit orientée sur l'un des représentants en priorité,
+                    il suffit donc de le définir comme "Allocataire" dans la rubrique Caisse de la fiche famille.
+                </dd>
+
+            </div>
+        {% endblock %}
+
+    {% endembed %}
+
+    {# Modal Sélection de la période #}
+    {% embed 'core/modal.html' %}
+        {% block modal_id %}modal_saisie_token{% endblock %}
+        {% block modal_titre %}{% if token_exists %}Remplacer{% else %}Saisir{% endif %} le token{% endblock %}
+        {% block modal_body %}
+            <div id="modal_erreurs" class="text-red"></div>
+            {% crispy form %}
+            <div class="buttonHolder">
+                <div class="modal-footer" style="padding-bottom:0px;padding-right:0px;padding-left:0px;">
+                    <button type="button" class="btn btn-primary" id="valider_token"><i class="fa fa-check margin-r-5"></i>Valider</button>
+                    <button type="button" class="btn btn-danger" data-dismiss="modal"><i class='fa fa-ban margin-r-5'></i>Annuler</button>
+                </div>
+            </div>
+        {% endblock %}
+    {% endembed %}
+
+    <script>
+        $(document).ready(function() {
+            $("#valider_token").on('click', function(event) {
+                $('#modal_saisie_token').modal('hide');
+                
+                event.preventDefault();
+                bootbox.dialog({
+                    message: "<p class='text-center mb-0'><i class='fa fa-spin fa-cog'></i> <b>Enregistrement et préparation de l'API Particulier en cours</b><br><br>Cette opération peut durer plusieurs minutes. Veuillez patienter...</p>",
+                    closeButton: false
+                });
+
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'ajax_api_particulier_saisir_token' %}",
+                    data: $("#form_api_particulier").serialize(),
+                    datatype: "json",
+                    success: function(data){
+                        bootbox.hideAll();
+                        bootbox.alert("<p><h6 class='text-success'><i class='icon fa fa-check'></i> Le token a bien été mémorisé et associé à votre compte utilisateur.</h6></p><p>Attention, à chaque fois que vous utiliserez l'API particulier, il vous sera demandé de saisir le code ci-dessous. Conservez-le précieusement et ne le partagez pas.</p><h1 class='text-center'>" + data.code_autorisation + "</h1>",
+                            function(){window.location.reload(true);}
+                        );
+                    },
+                    error: function(data) {
+                        bootbox.hideAll();
+                        toastr.error(data.responseJSON.erreur);
+                    }
+                });
+            });
+
+            $("#supprimer_token").on('click', function(event) {
+                bootbox.dialog({
+                    title: "Suppression",
+                    message: "Confirmez-vous la suppression du token existant ?",
+                    buttons: {
+                        ok: {
+                            label: "<i class='fa fa-trash'></i> Supprimer",
+                            className: 'btn-warning',
+                            callback: function(){
+                                $.ajax({
+                                    type: "POST",
+                                    url: "{% url 'ajax_api_particulier_supprimer_token' %}",
+                                    data: {csrfmiddlewaretoken: '{{ csrf_token }}'},
+                                    datatype: "json",
+                                    success: function(data){
+                                        window.location.reload(true);
+                                    },
+                                    error: function(data) {
+                                        bootbox.hideAll();
+                                        toastr.error(data.responseJSON.erreur);
+                                    }
+                                })
+                            }
+                        },
+                        cancel: {
+                            label: "<i class='fa fa-ban'></i> Annuler",
+                            className: 'btn-danger',
+                        }
+                    }
+                });
+            });
+        });
+
+    </script>
+
+{% endblock %}

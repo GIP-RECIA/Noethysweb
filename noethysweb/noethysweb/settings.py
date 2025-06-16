@@ -9,6 +9,7 @@ import crispy_forms
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # URLS
+URL_ROOT = ""  # URL racine pour héberger plusieurs instances sur un même domaine
 URL_GESTION = "administrateur/"
 URL_BUREAU = "utilisateur/"
 URL_PORTAIL = ""
@@ -54,6 +55,7 @@ CORRECTEUR_JOURS_RETROACTION = 30
 PURGE_HISTORIQUE_JOURS = 365
 ATTRIBUTION_TARIF_FRATERIE_AINES = True
 ATTRIBUTION_TARIF_FRATERIE_TARIF_IDENTIQUE = True
+PORTAIL_AUTORISER_AJOUT_REGIME = True
 
 # CONFIGURATION ACCUEIL
 CONFIG_ACCUEIL_DEFAUT = [
@@ -118,6 +120,8 @@ INTERNAL_IPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.URLPrefixReverseMiddleware',  # Doit être placé avant tout pour préfixer les URLs générées
+    'core.middleware.URLPrefixMiddleware',  # Doit être en second pour gérer le préfixe URL_ROOT dans les URLs entrantes
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -125,10 +129,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'axes.middleware.AxesMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',
-    'axes.middleware.AxesMiddleware',
     'noethysweb.middleware.CustomMiddleware',
 ]
 
@@ -146,6 +150,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'django.template.context_processors.media',
+                'core.context_processors.url_root',
             ],
         },
     },
@@ -192,11 +197,13 @@ LOCALE_PATHS = (
 
 # Static files (CSS, JavaScript, Images)
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
-STATIC_URL = '/static/'
+# Modification pour prendre en compte URL_ROOT dans les chemins statiques
+STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
 
 # Media files
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
+# Modification pour prendre en compte URL_ROOT dans les chemins media
+MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
 
 # Stockage
 STORAGE_PROBLEME = "django.core.files.storage.FileSystemStorage"
@@ -225,12 +232,12 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'complet': {
-            'format': '[{levelname} {asctime} {module}]  {message}',
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
-        'simple': {
-            'format': '{levelname} {message}',
+        'complet': {
+            'format': '[{levelname} {asctime} {module}]  {message}',
             'style': '{',
         },
     },
@@ -244,7 +251,7 @@ LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': 'DEBUG',  # Modifié à DEBUG pour voir nos messages de débogage
             'filters': ['require_debug_true'],
             'class': 'logging.StreamHandler',
             'formatter': 'complet',
@@ -268,11 +275,19 @@ LOGGING = {
         'handlers': ['console', 'file', 'mail_admins'],
         'level': 'DEBUG',
     },
+    'loggers': {
+        'core.middleware': {  # Logger spécifique pour notre middleware
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
 }
 
 CSP_DEFAULT_SRC = (
     "'self'",
     "https://api-adresse.data.gouv.fr/",
+    "https://particulier.api.gouv.fr/",
 )
 
 CSP_IMG_SRC = (
@@ -280,6 +295,7 @@ CSP_IMG_SRC = (
     "data:",
     "https://*.openstreetmap.org",
     "https://api-adresse.data.gouv.fr/",
+    "https://particulier.api.gouv.fr/",
 )
 
 CSP_FONT_SRC = (
@@ -316,6 +332,15 @@ try:
     from .settings_production import *
 except:
     print("Settings en production non trouvés : Utilisation des settings par défaut.")
+
+#########################################################################################
+# URLS des statics et media : à charger après les settings de production
+#########################################################################################
+
+# Modification pour prendre en compte URL_ROOT dans les chemins statiques
+STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
+# Modification pour prendre en compte URL_ROOT dans les chemins media
+MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
 
 # Intégration des plugins
 for nom_plugin in PLUGINS:

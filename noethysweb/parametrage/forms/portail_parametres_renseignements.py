@@ -33,7 +33,7 @@ class Formulaire(FormulaireBase, forms.Form):
         dict_champs = {(champ.page, champ.code): champ for champ in copy.copy(utils_champs.LISTE_CHAMPS)}
         for champ in PortailChamp.objects.all():
             for public in ("famille", "representant", "enfant", "contact"):
-                if (champ.page, champ.code) in dict_champs:
+                if (champ.page, champ.code) in dict_champs and ((public == "famille" and "famille" in champ.page) or (public != "famille" and "individu" in champ.page)):
                     if getattr(dict_champs[(champ.page, champ.code)], public):
                         setattr(dict_champs[(champ.page, champ.code)], public, getattr(champ, public))
 
@@ -44,7 +44,7 @@ class Formulaire(FormulaireBase, forms.Form):
                 if champ.page == onglet.code:
                     liste_checks = []
                     for public_code, public_label in (("famille", "Famille"), ("representant", "Représentant"), ("enfant", "Enfant"), ("contact", "Contact")):
-                        if getattr(champ, public_code, None):
+                        if getattr(champ, public_code, None) and ((public_code == "famille" and "famille" in champ.page) or (public_code != "famille" and "individu" in champ.page)):
                             code_field = "%s:%s:%s" % (champ.page, champ.code, public_code)
                             choix_etat = [("MASQUER", "Masqué"), ("AFFICHER", "Affiché"), ("MODIFIABLE", "Modifiable")]
                             if champ.choix_obligatoire:
