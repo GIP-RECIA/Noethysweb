@@ -142,3 +142,6 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SESSION_COOKIE_AGE = 60*60*12 # 12 heures
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# Définir le chemin des cookies pour qu'il corresponde uniquement à URL_ROOT
+SESSION_COOKIE_PATH = '/' + URL_ROOT.strip('/') if URL_ROOT else '/'
+CSRF_COOKIE_PATH = '/' + URL_ROOT.strip('/') if URL_ROOT else '/'
