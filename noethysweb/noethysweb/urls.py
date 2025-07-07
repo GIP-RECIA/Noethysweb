@@ -6,7 +6,14 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
+from django.contrib.staticfiles import views
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from core.views import erreurs
+
+# Import optionnel pour le debug toolbar (utilisé uniquement si DEBUG=True)
+if settings.DEBUG:
+    import debug_toolbar
 
 # Définir les patterns de base
 urlpatterns = [
@@ -47,17 +54,26 @@ if settings.PORTAIL_ACTIF:
 
 if settings.DEBUG:
     # Ajoute le debugtoolbar
-    import debug_toolbar
     urlpatterns = [
         path('__debug__/', include(debug_toolbar.urls)),
     ] + urlpatterns
     
     # Ajoute le répertoire Media pour le développement
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Modification pour prendre en compte URL_ROOT dans les chemins media
+    if settings.URL_ROOT:
+        # Pour les fichiers média avec URL_ROOT
+        # Ajout d'un pattern sans le préfixe URL_ROOT pour gérer le cas où le middleware l'a retiré
+        urlpatterns += [
+            # Pattern pour les chemins avec le préfixe URL_ROOT
+            re_path(r'^%s(?P<path>.*)$' % settings.MEDIA_URL.lstrip('/'), serve, {'document_root': settings.MEDIA_ROOT}),
+            # Pattern pour les chemins sans le préfixe URL_ROOT (après traitement par le middleware)
+            re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+        ]
+    else:
+        # Configuration standard pour les fichiers média sans URL_ROOT
+        urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
     # Configuration des fichiers statiques pour qu'ils respectent le préfixe URL_ROOT
-    from django.contrib.staticfiles import views
-    from django.contrib.staticfiles.urls import staticfiles_urlpatterns
     
     # Désactiver tous les patterns de fichiers statiques existants
     # pour éviter les conflits avec notre configuration personalisée
