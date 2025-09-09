@@ -1,0 +1,130 @@
+{% extends "core/page.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% load embed %}
+
+
+{% block styles %}
+    {{ block.super }}
+    <style>
+        .surlignage {
+            background-color: #ffffcf;
+        }
+        .dark-mode .surlignage {
+            background-color: #545454;
+        }
+
+        .table-hover th {
+            font-size: 12px;
+            font-weight: normal;
+            padding: 0px;
+            vertical-align: middle;
+            text-align: left;
+            color: #b1b1b1;
+            padding-left: 10px;
+            padding-bottom: 0px !important;
+            padding-top: 0px !important;
+            padding-right: 0px !important;
+        }
+        .table-hover td {
+            vertical-align: middle;
+        }
+    </style>
+{% endblock %}
+
+
+{% block contenu_page %}
+
+<div class="mb-3">
+    <a type="button" class="btn btn-default" onclick="history.back();"><i class="fa fa-reply margin-r-5"></i>Revenir aux paramètres de recherche</a>
+</div>
+
+{% if resultats_ent %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Individus</h3><small class="text-gray" style="margin-left: 5px;"></small>
+        </div>
+        <div class="card-body table-responsive p-0">
+            <table class="table table-sm table-hover" style="cursor: pointer;">
+                <thead>
+                    <tr>
+                        <th>Nom</th>
+                        <th>Prenom</th>
+                        <th>Adresse</th>
+                        <th>Email</th>
+                        <th width="100px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in resultats_ent %}
+                    <tr>
+                        <td>{{ item.nom }}</td>
+                        <td>{{ item.prenom }}</td>
+                        <td>{{ item.adresse|default:"" }} {{ item.ville|default:"" }} {{ item.code_postal|default:"" }}</td>
+                        <td>{{ item.email|default:"" }}</td>
+                        <td>
+                            <button type="button"
+                                    class="btn btn-success btn-xs ajouter-btn"
+                                    data-entid="{{ item.ent_id }}"
+                                    data-civilite="{{ item.civilite }}"
+                                    data-nom="{{ item.nom }}"
+                                    data-nomusage="{{ item.nom_usage }}"
+                                    data-prenom="{{ item.prenom }}"
+                                    data-date_naissance="{{ item.date_naissance }}"
+                                    data-adresse="{{ item.adresse }}"
+                                    data-ville="{{ item.ville }}"
+                                    data-codepostal="{{ item.code_postal }}"
+                                    data-telephone_fixe="{{ item.telephone_fixe }}"
+                                    data-telephone_domicile="{{ item.telephone_domicile }}"
+                                    data-telephone_portable="{{ item.telephone_portable }}"
+                                    data-email="{{ item.email }}">
+                                <i class="fa fa-plus"></i> Ajouter
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+{# Si recherche infructueuse #}
+{% if not resultats_ent %}
+    Aucun résultat pour cette recherche.
+{% endif %}
+
+<script>
+$(document).ready(function() {
+    $(".ajouter-btn").click(function(e) {
+        e.stopPropagation(); // évite le clic sur la ligne
+
+        let data = {
+            ent_id: $(this).data("entid"),
+            civilite: $(this).data("civilite"),
+            nom: $(this).data("nom"),
+            nom_usage: $(this).data("nomusage"),
+            prenom: $(this).data("prenom"),
+            date_naissance: $(this).data("date_naissance"),
+            adresse: $(this).data("adresse"),
+            ville: $(this).data("ville"),
+            code_postal: $(this).data("codepostal"),
+            telephone_fixe: $(this).data("telephone_fixe"),
+            telephone_domicile: $(this).data("telephone_domicile"),
+            telephone_portable: $(this).data("telephone_portable"),
+            email: $(this).data("email"),
+            csrfmiddlewaretoken: '{{ csrf_token }}'
+        };
+
+        $.post("{% url 'ajouter_individu_ent' %}", data, function(response) {
+            if (response.success) {
+                alert("✅ Utilisateur ajouté avec succès ! ID = " + response.id);
+            } else {
+                alert("❌ Erreur : " + response.error);
+            }
+        });
+    });
+});
+</script>
+
+{% endblock contenu_page %}

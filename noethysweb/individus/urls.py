@@ -14,7 +14,7 @@ from individus.views import liste_pieces_manquantes, liste_pieces_fournies, list
                             edition_contacts, edition_renseignements, edition_informations, liste_photos_manquantes, recherche_avancee, inscriptions_modifier, \
                             liste_titulaires_helios, inscriptions_activite_liste, effacer_familles, liste_transports, liste_progtransports, inscriptions_changer_groupe, \
                             abonnes_listes_diffusion, abonnes_listes_diffusion_ajouter, liste_mails, imprimer_liste_inscrits, sondages_reponses, certifications, \
-                            certifications_individus, certifications_familles, inscriptions_saisir_lot, importer_individus, importer_quotients
+                            certifications_individus, certifications_familles, inscriptions_saisir_lot, importer_individus, importer_individus_ent, importer_quotients
 
 urlpatterns = [
 
@@ -33,7 +33,8 @@ urlpatterns = [
     path('individus/recherche_avancee', recherche_avancee.View.as_view(), name='individus_recherche_avancee'),
     path('individus/effacer_familles', effacer_familles.Liste.as_view(), name='effacer_familles'),
     path('individus/importer_individus', importer_individus.View.as_view(), name='importer_individus'),
-
+    path('individus/importer_individus_ent', importer_individus_ent.View.as_view(), name='importer_individus_ent'),
+    path('individus/ajouter_individu_ent', importer_individus_ent.ajouter_individu, name='ajouter_individu_ent'),
     # Inscriptions
     path('individus/inscriptions', inscriptions_liste.Liste.as_view(), name='inscriptions_liste'),
     path('individus/inscriptions/ajouter', inscriptions_liste.Ajouter.as_view(), name='inscriptions_ajouter'),

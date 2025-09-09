@@ -240,6 +240,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
     menu_gestion_individus.Add(code="individus_recherche_avancee", titre="Recherche avancée d'individus", icone="file-text-o")
     menu_gestion_individus.Add(code="effacer_familles", titre="Effacer des fiches familles", icone="file-text-o")
     menu_gestion_individus.Add(code="importer_individus", titre="Importer des individus", icone="file-text-o")
+    menu_gestion_individus.Add(code="importer_individus_ent", titre="Importer des individus de l'ENT", icone="file-text-o")
 
     # Inscriptions
     menu_inscriptions = menu_individus.Add(titre="Inscriptions")

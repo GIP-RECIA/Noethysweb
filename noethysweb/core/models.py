@@ -1665,6 +1665,7 @@ class CategorieCompteInternet(models.Model):
 class Individu(models.Model):
     idindividu = models.AutoField(verbose_name="ID", db_column='IDindividu', primary_key=True)
     civilite = models.IntegerField(verbose_name=_("Civilité"), db_column='IDcivilite', choices=data_civilites.GetListeCivilitesForModels(), default=1)
+    ent_id = encrypt(models.IntegerField(verbose_name=_("ent_id"), blank=True, null=True))
     nom = models.CharField(verbose_name=_("Nom"), max_length=200)
     nom_jfille = models.CharField(verbose_name=_("Nom de naissance"), max_length=200, blank=True, null=True)
     prenom = models.CharField(verbose_name=_("Prénom"), max_length=200, blank=True, null=True)
