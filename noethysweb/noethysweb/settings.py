@@ -341,6 +341,8 @@ except:
 STATIC_URL = '/' + URL_ROOT.strip('/') + '/static/' if URL_ROOT else '/static/'
 # Modification pour prendre en compte URL_ROOT dans les chemins media
 MEDIA_URL = '/' + URL_ROOT.strip('/') + '/media/' if URL_ROOT else '/media/'
+# Modification pour prendre en compte URL_ROOT dans les chemins media
+AXES_LOCKOUT_URL = '/' + URL_ROOT.strip('/') + '/locked'
 
 # Définir le chemin des cookies pour qu'il corresponde uniquement à URL_ROOT
 SESSION_COOKIE_PATH = '/' + URL_ROOT.strip('/') if URL_ROOT else '/'
