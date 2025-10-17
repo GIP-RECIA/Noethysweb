@@ -1,0 +1,416 @@
+{% extends "fiche_individu/individu.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% load embed %}
+
+{% block page_titre %}{{ page_titre }}{% endblock page_titre %}
+
+{% block detail_individu %}
+    <div class="col-md-9">
+        {% embed 'core/box.html' %}
+            {% block box_theme %}card-outline card-lightblue{% endblock %}
+            {% block box_titre %}{{ box_titre }}{% endblock %}
+            {% block box_introduction %}{{ box_introduction|safe }}{% endblock %}
+        {% endembed %}
+
+        {% if user_not_found %}
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-user-times fa-5x text-muted mb-4"></i>
+                    <h4 class="text-muted">Utilisateur introuvable dans l'ENT</h4>
+                    <p class="text-secondary mb-4">
+                        Aucune information n'a été trouvée dans l'ENT pour cet utilisateur.<br>
+                        <strong>ENT ID :</strong> {{ individu.ent_id|default:"Non renseigné" }}
+                    </p>
+                    <div class="alert alert-warning d-inline-block">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Vérifiez que l'identifiant ENT est correct ou que l'utilisateur existe bien dans l'ENT.
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <form method="post" id="syncForm">
+            {% csrf_token %}
+            
+            <div class="card">
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Légende :</strong>
+                        <span class="badge badge-success ml-2">Identique</span>
+                        <span class="badge badge-warning ml-2">Différent</span>
+                        <span class="badge badge-secondary ml-2">Sélectionné pour synchronisation</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="selectAllDiff">
+                            <i class="fas fa-check-double"></i> Sélectionner tous les différents
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAll">
+                            <i class="fas fa-times"></i> Tout désélectionner
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" id="selectAll" title="Tout sélectionner">
+                                    </th>
+                                    <th>Champ</th>
+                                    <th>CoCliCo</th>
+                                    <th>ENT</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Civilité -->
+                                <tr class="sync-row {% if local.civilite != external.civilite %}row-different{% endif %}" 
+                                    data-different="{% if local.civilite != external.civilite %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="civilite" 
+                                               class="sync-checkbox"
+                                               {% if local.civilite == external.civilite %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Civilité</strong></td>
+                                    <td class="{% if local.civilite != external.civilite %}bg-warning text-dark{% endif %}">
+                                        {{ local.civilite|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.civilite != external.civilite %}bg-info text-white{% endif %}">
+                                        {{ external.civilite|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Nom -->
+                                <tr class="sync-row {% if local.nom != external.nom %}row-different{% endif %}"
+                                    data-different="{% if local.nom != external.nom %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="nom" 
+                                               class="sync-checkbox"
+                                               {% if local.nom == external.nom %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Nom</strong></td>
+                                    <td class="{% if local.nom != external.nom %}bg-warning text-dark{% endif %}">
+                                        {{ local.nom|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.nom != external.nom %}bg-info text-white{% endif %}">
+                                        {{ external.nom|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Nom de jeune fille -->
+                                <tr class="sync-row {% if local.nom_jfille != external.nom_jfille %}row-different{% endif %}"
+                                    data-different="{% if local.nom_jfille != external.nom_jfille %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="nom_jfille" 
+                                               class="sync-checkbox"
+                                               {% if local.nom_jfille == external.nom_jfille %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Nom de jeune fille</strong></td>
+                                    <td class="{% if local.nom_jfille != external.nom_jfille %}bg-warning text-dark{% endif %}">
+                                        {{ local.nom_jfille|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.nom_jfille != external.nom_jfille %}bg-info text-white{% endif %}">
+                                        {{ external.nom_jfille|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Prénom -->
+                                <tr class="sync-row {% if local.prenom != external.prenom %}row-different{% endif %}"
+                                    data-different="{% if local.prenom != external.prenom %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="prenom" 
+                                               class="sync-checkbox"
+                                               {% if local.prenom == external.prenom %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Prénom</strong></td>
+                                    <td class="{% if local.prenom != external.prenom %}bg-warning text-dark{% endif %}">
+                                        {{ local.prenom|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.prenom != external.prenom %}bg-info text-white{% endif %}">
+                                        {{ external.prenom|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Rue -->
+                                <tr class="sync-row {% if local.rue != external.rue %}row-different{% endif %}"
+                                    data-different="{% if local.rue != external.rue %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="rue" 
+                                               class="sync-checkbox"
+                                               {% if local.rue == external.rue %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Rue</strong></td>
+                                    <td class="{% if local.rue != external.rue %}bg-warning text-dark{% endif %}">
+                                        {{ local.rue|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.rue != external.rue %}bg-info text-white{% endif %}">
+                                        {{ external.rue|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Code postal -->
+                                <tr class="sync-row {% if local.cp != external.cp %}row-different{% endif %}"
+                                    data-different="{% if local.cp != external.cp %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="cp" 
+                                               class="sync-checkbox"
+                                               {% if local.cp == external.cp %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Code postal</strong></td>
+                                    <td class="{% if local.cp != external.cp %}bg-warning text-dark{% endif %}">
+                                        {{ local.cp|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.cp != external.cp %}bg-info text-white{% endif %}">
+                                        {{ external.cp|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Ville -->
+                                <tr class="sync-row {% if local.ville != external.ville %}row-different{% endif %}"
+                                    data-different="{% if local.ville != external.ville %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="ville" 
+                                               class="sync-checkbox"
+                                               {% if local.ville == external.ville %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Ville</strong></td>
+                                    <td class="{% if local.ville != external.ville %}bg-warning text-dark{% endif %}">
+                                        {{ local.ville|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.ville != external.ville %}bg-info text-white{% endif %}">
+                                        {{ external.ville|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Téléphone mobile -->
+                                <tr class="sync-row {% if local.tel_mobile != external.tel_mobile %}row-different{% endif %}"
+                                    data-different="{% if local.tel_mobile != external.tel_mobile %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="tel_mobile" 
+                                               class="sync-checkbox"
+                                               {% if local.tel_mobile == external.tel_mobile %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Téléphone mobile</strong></td>
+                                    <td class="{% if local.tel_mobile != external.tel_mobile %}bg-warning text-dark{% endif %}">
+                                        {{ local.tel_mobile|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.tel_mobile != external.tel_mobile %}bg-info text-white{% endif %}">
+                                        {{ external.tel_mobile|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                <!-- Mail personnel -->
+                                <tr class="sync-row {% if local.mail != external.mail %}row-different{% endif %}"
+                                    data-different="{% if local.mail != external.mail %}true{% else %}false{% endif %}">
+                                    <td class="text-center">
+                                        <input type="checkbox" 
+                                               name="sync_fields" 
+                                               value="mail" 
+                                               class="sync-checkbox"
+                                               {% if local.mail == external.mail %}disabled{% endif %}>
+                                    </td>
+                                    <td><strong>Mail personnel</strong></td>
+                                    <td class="{% if local.mail != external.mail %}bg-warning text-dark{% endif %}">
+                                        {{ local.mail|default:"-" }}
+                                    </td>
+                                    <td class="{% if local.mail != external.mail %}bg-info text-white{% endif %}">
+                                        {{ external.mail|default:"-" }}
+                                    </td>
+                                </tr>
+
+                                {% if has_scolarite %}
+                                    <!-- Section Scolarité -->
+                                    <tr class="table-secondary">
+                                        <td colspan="4" class="font-weight-bold">
+                                            <i class="fas fa-graduation-cap"></i> Informations de scolarité
+                                        </td>
+                                    </tr>
+
+                                    <!-- École -->
+                                    <tr class="sync-row {% if local.ecole_nom != external.ecole_nom %}row-different{% endif %}"
+                                        data-different="{% if local.ecole_nom != external.ecole_nom %}true{% else %}false{% endif %}">
+                                        <td class="text-center">
+                                            <input type="checkbox" 
+                                                   name="sync_fields" 
+                                                   value="ecole_nom" 
+                                                   class="sync-checkbox"
+                                                   {% if local.ecole_nom == external.ecole_nom %}disabled{% endif %}>
+                                        </td>
+                                        <td><strong>École</strong></td>
+                                        <td class="{% if local.ecole_nom != external.ecole_nom %}bg-warning text-dark{% endif %}">
+                                            {{ local.ecole_nom|default:"-" }}
+                                        </td>
+                                        <td class="{% if local.ecole_nom != external.ecole_nom %}bg-info text-white{% endif %}">
+                                            {{ external.ecole_nom|default:"-" }}
+                                        </td>
+                                    </tr>
+
+                                    <!-- Classe -->
+                                    <tr class="sync-row {% if local.classe_nom != external.classe_nom %}row-different{% endif %}"
+                                        data-different="{% if local.classe_nom != external.classe_nom %}true{% else %}false{% endif %}">
+                                        <td class="text-center">
+                                            <input type="checkbox" 
+                                                   name="sync_fields" 
+                                                   value="classe_nom" 
+                                                   class="sync-checkbox"
+                                                   {% if local.classe_nom == external.classe_nom %}disabled{% endif %}>
+                                        </td>
+                                        <td><strong>Classe</strong></td>
+                                        <td class="{% if local.classe_nom != external.classe_nom %}bg-warning text-dark{% endif %}">
+                                            {{ local.classe_nom|default:"-" }}
+                                        </td>
+                                        <td class="{% if local.classe_nom != external.classe_nom %}bg-info text-white{% endif %}">
+                                            {{ external.classe_nom|default:"-" }}
+                                        </td>
+                                    </tr>
+
+                                    <!-- Niveau -->
+                                    <tr class="sync-row {% if local.niveau_nom != external.niveau_nom %}row-different{% endif %}"
+                                        data-different="{% if local.niveau_nom != external.niveau_nom %}true{% else %}false{% endif %}">
+                                        <td class="text-center">
+                                            <input type="checkbox" 
+                                                   name="sync_fields" 
+                                                   value="niveau_nom" 
+                                                   class="sync-checkbox"
+                                                   {% if local.niveau_nom == external.niveau_nom %}disabled{% endif %}>
+                                        </td>
+                                        <td><strong>Niveau</strong></td>
+                                        <td class="{% if local.niveau_nom != external.niveau_nom %}bg-warning text-dark{% endif %}">
+                                            {{ local.niveau_nom|default:"-" }}
+                                        </td>
+                                        <td class="{% if local.niveau_nom != external.niveau_nom %}bg-info text-white{% endif %}">
+                                            {{ external.niveau_nom|default:"-" }}
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span id="selectedCount" class="badge badge-primary badge-lg">0</span>
+                            <span class="ml-2">champ(s) sélectionné(s)</span>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-success" id="submitBtn" disabled>
+                                <i class="fas fa-sync-alt"></i> Synchroniser les champs sélectionnés
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+        {% endif %}
+
+        <style>
+            .table td {
+                vertical-align: middle;
+                padding: 8px;
+            }
+            
+            .sync-row.selected {
+                background-color: #e3f2fd !important;
+            }
+            
+            .sync-row.selected td {
+                border-color: #2196F3 !important;
+            }
+            
+            .sync-checkbox:disabled {
+                cursor: not-allowed;
+            }
+            
+            .badge-lg {
+                font-size: 1.1em;
+                padding: 0.5em 0.8em;
+            }
+            
+            #submitBtn:disabled {
+                cursor: not-allowed;
+            }
+            
+            .table-secondary td {
+                background-color: #f8f9fa !important;
+            }
+        </style>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script>
+        $(document).ready(function() {
+            // Fonction pour mettre à jour le compteur et le bouton
+            function updateCounter() {
+                const checkedCount = $('.sync-checkbox:checked').length;
+                $('#selectedCount').text(checkedCount);
+                $('#submitBtn').prop('disabled', checkedCount === 0);
+                
+                // Mettre à jour le style des lignes sélectionnées
+                $('.sync-row').removeClass('selected');
+                $('.sync-checkbox:checked').closest('.sync-row').addClass('selected');
+            }
+
+            // Gestion des checkboxes individuelles
+            $('.sync-checkbox').on('change', function() {
+                updateCounter();
+            });
+
+            // Sélectionner tout
+            $('#selectAll').on('change', function() {
+                const isChecked = $(this).prop('checked');
+                $('.sync-checkbox:not(:disabled)').prop('checked', isChecked);
+                updateCounter();
+            });
+
+            // Sélectionner uniquement les différents
+            $('#selectAllDiff').on('click', function() {
+                $('.sync-row[data-different="true"] .sync-checkbox').prop('checked', true);
+                $('#selectAll').prop('checked', false);
+                updateCounter();
+            });
+
+            // Tout désélectionner
+            $('#deselectAll').on('click', function() {
+                $('.sync-checkbox').prop('checked', false);
+                $('#selectAll').prop('checked', false);
+                updateCounter();
+            });
+
+            // Confirmation avant soumission
+            $('#syncForm').on('submit', function(e) {
+                const checkedCount = $('.sync-checkbox:checked').length;
+                if (checkedCount > 0) {
+                    const confirmed = confirm(
+                        `Êtes-vous sûr de vouloir synchroniser ${checkedCount} champ(s) ?\n\n` +
+                        `Les valeurs de CoCliCo seront remplacées par celles de l'ENT.`
+                    );
+                    if (!confirmed) {
+                        e.preventDefault();
+                    }
+                }
+            });
+
+            // Initialisation
+            updateCounter();
+        });
+    </script>
+{% endblock scripts %}

@@ -10,7 +10,7 @@ from collaborateurs.views import collaborateur, collaborateur_identite, collabor
                                 collaborateur_pieces, collaborateur_notes, collaborateur_contrats, collaborateur_evenements, planning_collaborateurs, \
                                 collaborateur_appliquer_modele_planning, liste_contrats, collaborateur_outils, collaborateur_historique, \
                                 collaborateur_emails, collaborateur_sms, appliquer_modele_planning, collaborateur_groupes, collaborateur_voir_contrat, \
-                                fusionner_contrats_word
+                                fusionner_contrats_word, collaborateur_ent
 
 
 urlpatterns = [
@@ -20,12 +20,14 @@ urlpatterns = [
 
     # Collaborateurs
     path('collaborateurs/collaborateurs/liste', collaborateur.Liste.as_view(), name='collaborateur_liste'),
+    path('collaborateurs/collaborateurs/ent/liste', collaborateur_ent.EntListeCollaborateur.as_view(), name='collaborateur_recherche_ent'),
     path('collaborateurs/collaborateurs/ajouter', collaborateur.Ajouter.as_view(), name='collaborateur_ajouter'),
     path('collaborateurs/collaborateurs/supprimer/<int:idcollaborateur>', collaborateur.Supprimer.as_view(), name='collaborateur_supprimer'),
     path('collaborateurs/collaborateurs/resume/<int:idcollaborateur>', collaborateur.Resume.as_view(), name='collaborateur_resume'),
 
     path('collaborateurs/collaborateurs/identite/<int:idcollaborateur>', collaborateur_identite.Consulter.as_view(), name='collaborateur_identite'),
     path('collaborateurs/collaborateurs/identite/modifier/<int:idcollaborateur>', collaborateur_identite.Modifier.as_view(), name='collaborateur_identite_modifier'),
+    path('collaborateurs/collaborateurs/synchroniser/<int:idcollaborateur>', collaborateur_ent.SynchroniserCollaborateur.as_view(), name='collaborateur_synchroniser'),
 
     path('collaborateurs/collaborateurs/groupes/<int:idcollaborateur>', collaborateur_groupes.Consulter.as_view(), name='collaborateur_groupes'),
     path('collaborateurs/collaborateurs/groupes/modifier/<int:idcollaborateur>', collaborateur_groupes.Modifier.as_view(), name='collaborateur_groupes_modifier'),

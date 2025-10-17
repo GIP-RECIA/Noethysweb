@@ -27,6 +27,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
         menu_structure.Add(code="organisateur_ajouter", titre="Organisateur", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="structures_liste", titre="Structures", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="parametres_generaux", titre="Paramètres généraux ", icone="file-text-o")
+    menu_structure.Add(code="parametres_ent", titre="Paramètres ENT ", icone="file-text-o")
 
     # Activités
     menu_activites = menu_parametrage.Add(titre="Activités")
@@ -241,6 +242,8 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
     menu_gestion_individus.Add(code="effacer_familles", titre="Effacer des fiches familles", icone="file-text-o")
     menu_gestion_individus.Add(code="importer_individus", titre="Importer des individus", icone="file-text-o")
     menu_gestion_individus.Add(code="importer_individus_ent", titre="Importer des individus de l'ENT", icone="file-text-o")
+    menu_gestion_individus.Add(code="synchroniser_familles", titre="Synchroniser des familles", icone="file-text-o")
+    menu_gestion_individus.Add(code="mettre_a_jour_liste_individu_ent", titre="Mettre à jour des individus ENT", icone="file-text-o")
 
     # Inscriptions
     menu_inscriptions = menu_individus.Add(titre="Inscriptions")

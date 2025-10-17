@@ -1,0 +1,538 @@
+{% extends "core/page.html" %}
+{% load static %}
+
+{% block contenu_page %}
+<style>
+.family-card {
+    margin-bottom: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.family-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.family-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+}
+
+.family-header span {
+    font-size: 1.1rem;
+}
+
+.btn-sync {
+    transition: all 0.3s;
+}
+
+.btn-sync:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-sync:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-sync .fa-refresh {
+    transition: transform 0.3s;
+}
+
+.btn-sync.loading .fa-refresh {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+.no-results {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+    font-size: 1.1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.result-content {
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+    margin-top: 1rem;
+}
+
+.diff-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+}
+
+.diff-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    background: #f8f9fa;
+    border-left: 4px solid #17a2b8;
+}
+
+.diff-item.representant {
+    border-left-color: #007bff;
+}
+
+.diff-item.enfant {
+    border-left-color: #28a745;
+}
+
+.diff-header {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.diff-details {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-left: 1rem;
+}
+
+.diff-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    background: white;
+    border: 1px solid #dee2e6;
+}
+
+.diff-field-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.diff-field-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.25rem;
+}
+
+.diff-field-values {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.old-value {
+    color: #dc3545;
+    padding: 0.25rem 0.5rem;
+    background: #f8d7da;
+    border-radius: 4px;
+}
+
+.new-value {
+    color: #28a745;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    background: #d4edda;
+    border-radius: 4px;
+}
+
+.diff-checkbox {
+    margin-left: 1rem;
+}
+
+.diff-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.select-all-box {
+    background: #e7f3ff;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.select-all-box input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.select-all-box label {
+    margin: 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.success-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #d4edda;
+    color: #155724;
+    border-radius: 6px;
+    border: 1px solid #c3e6cb;
+}
+
+.sync-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.selected-count {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.selected-count strong {
+    color: #007bff;
+}
+
+.alert-warning-list {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+}
+
+.alert-warning-list ul {
+    margin: 0.5rem 0 0 1.5rem;
+    padding: 0;
+}
+
+.alert-warning-list li {
+    color: #856404;
+    margin-bottom: 0.25rem;
+}
+</style>
+
+<div class="container-fluid">
+    <h2 class="mb-4">
+        <i class="fa fa-users"></i> Familles non synchronisées
+        <span class="badge badge-secondary">{{ familles_non_sync|length }}</span>
+    </h2>
+
+    {% if familles_non_sync %}
+        {% for fam in familles_non_sync %}
+        <div class="card family-card">
+            <div class="family-header">
+                <span>
+                    <i class="fa fa-home"></i> Famille {{ fam.nom }}
+                    <small class="ml-3" style="opacity: 0.9;">
+                        {{ fam.rattachement_set.count }} membre{{ fam.rattachement_set.count|pluralize }}
+                    </small>
+                </span>
+                <button class="btn btn-sm btn-success btn-sync" data-id="{{ fam.idfamille }}">
+                    <i class="fa fa-refresh"></i> Vérifier et Synchroniser
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="initial-{{ fam.idfamille }}">
+                    <p class="text-muted">
+                        <i class="fa fa-info-circle"></i> 
+                        Cliquez sur "Vérifier et Synchroniser" pour comparer avec les données de l'ENT
+                    </p>
+                </div>
+                <div id="result-{{ fam.idfamille }}" class="result-content" style="display: none;"></div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="no-results">
+            <i class="fa fa-check-circle fa-3x mb-3" style="color: #28a745;"></i>
+            <p>Aucune famille non synchronisée trouvée</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+function updateSelectedCount(familleId) {
+    const checkboxes = document.querySelectorAll(`#result-${familleId} .field-checkbox:checked`);
+    const countElement = document.querySelector(`#count-${familleId}`);
+    if (countElement) {
+        countElement.textContent = checkboxes.length;
+    }
+    
+    const validateBtn = document.querySelector(`#result-${familleId} .btn-valider-sync`);
+    if (validateBtn) {
+        validateBtn.disabled = checkboxes.length === 0;
+    }
+}
+
+function createDiffHTML(person, type, familleId, index) {
+    let html = `<li class="diff-item ${type}" data-person-id="${person.id}" data-person-type="${type}">`;
+    html += `<div class="diff-header">`;
+    html += `<span><i class="fa fa-${type === 'representant' ? 'user' : 'child'}"></i> ${type === 'representant' ? 'Représentant' : 'Enfant'}: ${person.nom || 'ID ' + person.id}</span>`;
+    html += `</div>`;
+    html += `<div class="diff-details">`;
+    
+    if (person.differences && typeof person.differences === 'object') {
+        const diffEntries = Object.entries(person.differences);
+        
+        // Vérifier si c'est un cas "non trouvé" ou "erreur"
+        const isNotFound = diffEntries.length === 1 && 
+                          (diffEntries[0][0] === 'statut' || diffEntries[0][0] === 'erreur');
+        
+        if (isNotFound) {
+            // Affichage simplifié pour les individus non trouvés
+            const [field, values] = diffEntries[0];
+            html += `<div class="alert alert-warning mb-0" style="border-left: 4px solid #ffc107;">`;
+            html += `<i class="fa fa-exclamation-triangle"></i> `;
+            html += `<strong>${values.new}</strong>`;
+            html += `</div>`;
+        } else {
+            // Affichage normal avec checkboxes pour les différences
+            if (diffEntries.length > 0) {
+                html += `<div class="select-all-box">`;
+                html += `<input type="checkbox" id="select-all-${type}-${index}" class="select-all-person" data-person="${type}-${index}">`;
+                html += `<label for="select-all-${type}-${index}">Tout sélectionner pour cette personne</label>`;
+                html += `</div>`;
+            }
+            
+            diffEntries.forEach(([field, values], fieldIndex) => {
+                const fieldId = `${type}-${index}-field-${fieldIndex}`;
+                html += `<div class="diff-field">`;
+                html += `<div class="diff-field-info">`;
+                html += `<div class="diff-field-label">${field}</div>`;
+                html += `<div class="diff-field-values">`;
+                html += `<span class="old-value">${values.old || 'vide'}</span>`;
+                html += `<i class="fa fa-arrow-right" style="color: #6c757d;"></i>`;
+                html += `<span class="new-value">${values.new || 'vide'}</span>`;
+                html += `</div>`;
+                html += `</div>`;
+                html += `<div class="diff-checkbox">`;
+                html += `<input type="checkbox" id="${fieldId}" class="field-checkbox" data-person-type="${type}" data-person-id="${person.id}" data-field="${field}" data-person-index="${type}-${index}" checked>`;
+                html += `</div>`;
+                html += `</div>`;
+            });
+        }
+    }
+    
+    html += `</div></li>`;
+    return html;
+}
+document.querySelectorAll(".btn-sync").forEach(btn => {
+    btn.addEventListener("click", function() {
+        const familleId = this.dataset.id;
+        const resultDiv = document.getElementById("result-" + familleId);
+        const initialDiv = document.getElementById("initial-" + familleId);
+        const icon = this.querySelector(".fa-refresh");
+
+        this.disabled = true;
+        this.classList.add("loading");
+        resultDiv.style.display = "none";
+        initialDiv.innerHTML = '<p class="text-info"><i class="fa fa-spinner fa-spin"></i> Synchronisation en cours...</p>';
+
+        fetch("", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrftoken,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: "famille_id=" + familleId
+        })
+        .then(r => {
+            if (!r.ok) throw new Error("Erreur réseau");
+            return r.json();
+        })
+        .then(data => {
+            initialDiv.style.display = "none";
+            resultDiv.style.display = "block";
+
+            if (data.success) {
+                const repDiffs = data.differences.representants || [];
+                const enfDiffs = data.differences.enfants || [];
+                const hasDifferences = repDiffs.length > 0 || enfDiffs.length > 0;
+
+                let html = '<h5 class="mb-3"><i class="fa fa-exchange"></i> Résultat de la synchronisation</h5>';
+                
+                if (!hasDifferences) {
+                    html += '<div class="success-badge"><i class="fa fa-check-circle"></i> Aucune différence trouvée - Données synchronisées</div>';
+                } else {
+                    html += '<ul class="diff-list">';
+                    
+                    repDiffs.forEach((rep, index) => {
+                        html += createDiffHTML(rep, 'representant', familleId, index);
+                    });
+                    
+                    enfDiffs.forEach((enf, index) => {
+                        html += createDiffHTML(enf, 'enfant', familleId, index);
+                    });
+                    
+                    html += '</ul>';
+                    
+                    const totalFields = repDiffs.reduce((acc, r) => acc + Object.keys(r.differences || {}).length, 0) + 
+                                       enfDiffs.reduce((acc, e) => acc + Object.keys(e.differences || {}).length, 0);
+                    
+                    html += '<div class="sync-actions">';
+                    html += `<div class="selected-count">Modifications sélectionnées : <strong id="count-${familleId}">${totalFields}</strong></div>`;
+                    html += '<div>';
+                    html += `<button class="btn btn-primary btn-valider-sync" data-id="${familleId}">`;
+                    html += '<i class="fa fa-check"></i> Valider la synchronisation</button>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                resultDiv.innerHTML = html;
+                
+                // Ajout des event listeners pour les checkboxes
+                resultDiv.querySelectorAll('.field-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', () => updateSelectedCount(familleId));
+                });
+                
+                // Event listeners pour "Tout sélectionner"
+                resultDiv.querySelectorAll('.select-all-person').forEach(selectAll => {
+                    selectAll.addEventListener('change', function() {
+                        const personIndex = this.dataset.person;
+                        const checkboxes = resultDiv.querySelectorAll(`.field-checkbox[data-person-index="${personIndex}"]`);
+                        checkboxes.forEach(cb => cb.checked = this.checked);
+                        updateSelectedCount(familleId);
+                    });
+                });
+                
+                // Event listener pour le bouton de validation
+                const validateBtn = resultDiv.querySelector('.btn-valider-sync');
+                if (validateBtn) {
+                    validateBtn.addEventListener('click', function() {
+                        const selectedFields = {};
+                        resultDiv.querySelectorAll('.field-checkbox:checked').forEach(checkbox => {
+                            const personId = checkbox.dataset.personId;
+                            const personType = checkbox.dataset.personType;
+                            const field = checkbox.dataset.field;
+                            
+                            const key = `${personType}_${personId}`;
+                            if (!selectedFields[key]) {
+                                selectedFields[key] = {
+                                    id: personId,
+                                    type: personType,
+                                    fields: []
+                                };
+                            }
+                            selectedFields[key].fields.push(field);
+                        });
+                        
+                        if (Object.keys(selectedFields).length === 0) {
+                            alert('Veuillez sélectionner au moins un champ à synchroniser');
+                            return;
+                        }
+                        
+                        const selectedCount = Object.values(selectedFields).reduce((acc, p) => acc + p.fields.length, 0);
+                        
+                        if (!confirm(`Êtes-vous sûr de vouloir synchroniser ${selectedCount} champ(s) ?\n\nLes valeurs de la base de données seront remplacées par celles de l'ENT.`)) {
+                            return;
+                        }
+                        
+                        // Envoi de la validation au serveur
+                        this.disabled = true;
+                        this.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Validation en cours...';
+                        
+                        fetch("", {
+                            method: "POST",
+                            headers: {
+                                "X-CSRFToken": csrftoken,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                famille_id: familleId,
+                                action: 'validate',
+                                selected_fields: selectedFields
+                            })
+                        })
+                        .then(r => {
+                            if (!r.ok) throw new Error("Erreur réseau");
+                            return r.json();
+                        })
+                        .then(response => {
+                            if (response.success) {
+                                let successHtml = '<div class="alert alert-success">';
+                                successHtml += '<i class="fa fa-check-circle"></i> ';
+                                successHtml += `<strong>Synchronisation effectuée avec succès!</strong><br>`;
+                                successHtml += `${response.updated_count} champ(s) mis à jour.`;
+                                
+                                if (response.warnings && response.warnings.length > 0) {
+                                    successHtml += '</div>';
+                                    successHtml += '<div class="alert-warning-list">';
+                                    successHtml += '<strong><i class="fa fa-exclamation-triangle"></i> Avertissements :</strong>';
+                                    successHtml += '<ul>';
+                                    response.warnings.forEach(warning => {
+                                        successHtml += `<li>${warning}</li>`;
+                                    });
+                                    successHtml += '</ul>';
+                                    successHtml += '</div>';
+                                    
+                                    // Si des erreurs, demander si on recharge
+                                    successHtml += '<div class="mt-3">';
+                                    successHtml += '<button class="btn btn-primary" onclick="location.reload()"><i class="fa fa-refresh"></i> Recharger la page</button>';
+                                    successHtml += '</div>';
+                                } else {
+                                    successHtml += '</div>';
+                                    // Rechargement automatique seulement si pas d'erreurs
+                                    setTimeout(() => location.reload(), 2500);
+                                }
+                                
+                                resultDiv.innerHTML = successHtml;
+                            } else {
+                                resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur:</strong> ' + (response.error || 'Erreur inconnue') + '</div>';
+                            }
+                        })
+                        .catch(error => {
+                            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur de connexion:</strong> ' + error.message + '</div>';
+                        });
+                    });
+                }
+            } else {
+                resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur:</strong> ' + (data.error || 'Erreur inconnue') + '</div>';
+            }
+        })
+        .catch(error => {
+            initialDiv.style.display = "none";
+            resultDiv.style.display = "block";
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur de connexion:</strong> ' + error.message + '</div>';
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.classList.remove("loading");
+        });
+    });
+});
+</script>
+{% endblock %}

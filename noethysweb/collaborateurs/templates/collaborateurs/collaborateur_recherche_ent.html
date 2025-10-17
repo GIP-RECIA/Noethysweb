@@ -1,0 +1,181 @@
+{% extends "core/page.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block styles %}
+    {{ block.super }}
+    <style>
+        .collaborator-card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid #e1e5e9;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        .collaborator-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .collaborator-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 20px;
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .card-body {
+            padding: 18px;
+            background: #fafbfc;
+        }
+
+        .collaborator-info {
+            padding: 14px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            background: #f0f8ff;
+            border: 1px solid #bee3f8;
+            border-left: 4px solid #4299e1;
+            transition: all 0.15s ease;
+        }
+
+        .collaborator-info:hover {
+            background: #e6f3ff;
+            border-color: #90cdf4;
+        }
+
+        .info-line {
+            font-size: 13px;
+            margin: 4px 0;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .info-line strong {
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        .info-line .emoji {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .btn-add {
+            background: #48bb78;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            font-size: 13px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .btn-add:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .btn-add-new {
+            background: #48bb78;
+            border: none;
+            color: white;
+            padding: 12px 20px;
+            font-size: 14px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-add-new:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            color: white;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+            background: #f7fafc;
+            border-radius: 10px;
+            border: 1px dashed #cbd5e0;
+            margin-bottom: 30px;
+        }
+
+        .separator {
+            border-top: 1px solid #e2e8f0;
+            margin: 20px 0;
+        }
+    </style>
+{% endblock %}
+
+{% block contenu_page %}
+<div class="mb-4">
+    <a href="#" class="btn-back" onclick="history.back();">
+        <i class="fa fa-reply"></i> 
+        Revenir aux paramètres de recherche
+    </a>
+</div>
+
+{% if collaborateurs %}
+    {% for collab in collaborateurs %}
+    <div class="collaborator-card">
+        <div class="collaborator-header">
+            {{ collab.prenom }} {{ collab.nom }}
+            <form method="post" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="collaborateur_id" value="{{ collab.ent_id }}">
+                <button type="submit" class="btn-add">
+                    <i class="fa fa-user-plus"></i> Importer
+                </button>
+            </form>
+        </div>
+        <div class="card-body">
+            <div class="collaborator-info">
+                <div class="info-line"><span class="emoji">📧</span> <strong>Email :</strong> {{ collab.mail }}</div>
+                <div class="info-line"><span class="emoji">📞</span> <strong>Téléphones :</strong> {{ collab.numeros_de_telephone|join:", " }}</div>
+                <div class="info-line"><span class="emoji">👤</span> <strong>Profil :</strong> {{ collab.profil }}</div>
+                <div class="info-line"><span class="emoji">🏫</span> <strong>École :</strong> {{ collab.ecole }}</div>
+            </div>
+        </div>
+    </div>
+    {% if not forloop.last %}
+        <div class="separator"></div>
+    {% endif %}
+    {% endfor %}
+{% else %}
+    <div class="no-results">
+        <i class="fa fa-search" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i>
+        <p>Aucun collaborateur trouvé.</p>
+    </div>
+{% endif %}
+
+<!-- Toujours afficher la section "Ajouter un nouveau collaborateur" -->
+<div class="collaborator-card">
+    <div class="collaborator-header">
+        Pas trouvé le bon collaborateur ?
+    </div>
+    <div class="card-body text-center">
+        <p class="mb-3 text-gray-700">
+            Aucun collaborateur ne correspond à ce que vous souhaitez ajouter?
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="ajouter_nouveau_collaborateur">
+            <button type="submit" class="btn-add-new">
+                <i class="fa fa-user-plus"></i> Ajouter un nouveau collaborateur
+            </button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

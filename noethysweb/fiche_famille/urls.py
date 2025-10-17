@@ -10,20 +10,23 @@ from fiche_famille.views import famille, famille_questionnaire, famille_notes, f
                             famille_abo_recus_email, famille_abo_depots_email, famille_outils, famille_attestations, famille_devis, famille_historique, famille_export_xml, famille_sms, \
                             famille_voir_rappel, famille_rappels, famille_portail, famille_emails, reglement_recu, famille_messagerie_portail, famille_mandats, famille_voir_mandat, famille_prestations_modele, \
                             famille_attestations_fiscales, famille_voir_attestation_fiscale, famille_locations, famille_voir_location, famille_remboursement, famille_factures_consulter, famille_factures_selection, \
-                            famille_edition_renseignements, reglement_recu_auto, famille_formulaires, famille_releve_prestations, famille_liste_consommations
+                            famille_edition_renseignements, reglement_recu_auto, famille_formulaires, famille_releve_prestations, famille_liste_consommations, famille_ent
 
 urlpatterns = [
 
     # # Individus
     path('individus/individus/ajouter/<int:idfamille>', famille_ajouter.Ajouter_individu.as_view(), name='individu_ajouter'),
+    path('individus/individus/ent_liste/<int:idfamille>', famille_ent.EntListeIndividus.as_view(), name='ent_liste_individus'),
     path('individus/individus/supprimer/<int:idfamille>/<int:idindividu>', famille_ajouter.Supprimer_individu.as_view(), name='individu_supprimer'),
     path('individus/individus/detacher/<int:idfamille>/<int:idindividu>', famille_ajouter.Detacher_individu.as_view(), name='individu_detacher'),
 
     # Familles
     path('individus/familles/liste', famille.Liste.as_view(), name='famille_liste'),
+    path('individus/familles/ent_liste/', famille_ent.EntListeIndividus.as_view(), name='ent_liste_familles'),
     path('individus/familles/ajouter', famille_ajouter.Creer_famille.as_view(), name='famille_ajouter'),
     path('individus/familles/supprimer/<int:idfamille>', famille.Supprimer_famille.as_view(), name='famille_supprimer'),
     path('individus/familles/resume/<int:idfamille>', famille.Resume.as_view(), name='famille_resume'),
+    path('individus/familles/ent/synchroniser', famille_ent.FamillesSynchroView.as_view(), name='synchroniser_familles'),
 
     path('individus/familles/questionnaire/<int:idfamille>', famille_questionnaire.Consulter.as_view(), name='famille_questionnaire'),
     path('individus/familles/questionnaire/modifier/<int:idfamille>', famille_questionnaire.Modifier.as_view(), name='famille_questionnaire_modifier'),

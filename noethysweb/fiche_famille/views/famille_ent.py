@@ -1,0 +1,629 @@
+from django.views.generic import TemplateView
+from core.views.base import CustomView
+from django.db import transaction
+from core.utils import utils_questionnaires
+from fiche_famille.utils import utils_internet
+from core.models import Individu, Famille, Rattachement, Utilisateur, Ecole, Classe, Scolarite, NiveauScolaire
+from django.http import HttpResponseRedirect
+from django.urls import reverse_lazy
+import logging
+from django.contrib import messages
+from django.http import JsonResponse
+from core.utils.utils_ent import get_ent_user_info
+import time
+import json
+
+logger = logging.getLogger(__name__)
+
+
+
+class EntListeIndividus(CustomView, TemplateView):
+    menu_code = "ent_liste_individus"
+    template_name = "fiche_famille/famille_ent_liste.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        idfamille = kwargs.get("idfamille", None)
+        context['rattachements'] = self.request.session.get('ent_users_data', [])
+        context['page_titre'] = "Liste des familles de l'ENT"
+
+        # Récupération des informations de recherche depuis la session
+        search_info = self.request.session.get('search_info', {})
+        context['search_nom'] = search_info.get('nom', '')
+        context['search_prenom'] = search_info.get('prenom', '')
+        context['search_categorie'] = search_info.get('categorie', '')
+
+        if idfamille:
+            context["mode"] = "individus"
+            context["idfamille"] = int(idfamille)
+        else:
+            context["mode"] = "familles"
+
+        return context
+    
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "")
+        idfamille = kwargs.get("idfamille", None)
+        search_info = self.request.session.get('search_info', {})
+        # Ce parametre est utilisé pour identifier s'il s'agit d'un ajout de toute une famille ou juste un individu à une famille
+        individu_id = request.POST.get("individu_id")
+
+        if action == "ajouter_nouvel_individu":
+            # L’action est utilisée pour savoir si l’on veut simplement ajouter un nouvel individu indépendamment des données de l’ENT
+            if idfamille:
+                new_famille = Famille.objects.get(pk=idfamille)
+                
+            else:
+                new_famille = self.creation_famille()
+            self.creation_nouvel_individu(search_info, new_famille)
+            url_success = reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk})
+        else:
+            familles = request.session.get("ent_users_data", [])
+            if idfamille:
+                new_famille = Famille.objects.get(pk=idfamille)
+                if individu_id:
+                    individu_trouve = self.trouver_individu_par_ent_id(individu_id, familles)
+                    self.creation_individu_ent(individu_trouve, new_famille, search_info.get('categorie', ''))
+            else:
+                index = int(request.POST.get("famille_index"))
+                famille = familles[index]
+                # Avant de créer la famille, on vérifie si l’un des enfants appartient déjà à une famille dans la base (dans ce cas, cette famille existe déjà).
+                # Si une telle famille existe, on redirige alors l’utilisateur vers la fiche de cette famille.
+                new_famille = self.chercher_famille_avec_ent_id(famille)
+                if new_famille:
+                     messages.add_message(self.request, messages.ERROR, "Famille existe déjà")
+                else:     
+                    new_famille = self.creation_famille()
+                    for indiv in famille["representants"]:
+                        self.creation_individu_ent(indiv, new_famille, 1)
+
+                    for enf in famille["enfants"]:
+                        self.creation_individu_ent(enf, new_famille, 2)
+                    new_famille.Maj_infos()
+            url_success = reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk})
+
+        return HttpResponseRedirect(url_success)
+
+
+    def trouver_individu_par_ent_id(self, individu_id, familles):
+        """
+        Trouve un individu dans les données de session par son id_ent
+        """        
+        for famille in familles:
+            # Chercher dans les représentants
+            for rep in famille.get("representants", []):
+                if str(rep.get("id_ent")) == str(individu_id):
+                    return rep
+            
+            # Chercher dans les enfants
+            for enfant in famille.get("enfants", []):
+                if str(enfant.get("id_ent")) == str(individu_id):
+                    return enfant
+        
+        return None
+    
+    @transaction.atomic
+    def creation_famille(self):
+        """ Le transaction.atomic permet de faire que les enregistrements suivants soient tous effectués en même temps dans la db """
+        famille = Famille.objects.create()
+
+        # Création des questionnaires de type famille
+        utils_questionnaires.Creation_reponses(categorie="famille", liste_instances=[famille])
+
+        # Création et enregistrement des codes pour le portail
+        internet_identifiant = utils_internet.CreationIdentifiant(IDfamille=famille.pk)
+        internet_mdp, date_expiration_mdp = utils_internet.CreationMDP()
+
+        # Mémorisation des codes internet dans la table familles
+        famille.internet_identifiant = internet_identifiant
+        famille.internet_mdp = internet_mdp
+
+        # Création de l'utilisateur
+        utilisateur = Utilisateur(username=internet_identifiant, categorie="famille", force_reset_password=True, date_expiration_mdp=date_expiration_mdp)
+        utilisateur.set_password(internet_mdp)
+        utilisateur.save()
+        # Association de l'utilisateur à la famille
+        famille.utilisateur = utilisateur
+        famille.save()
+        return famille
+
+
+    @transaction.atomic
+    def creation_nouvel_individu(self, new_indiv, famille):
+        categorie = new_indiv.get("categorie")
+        individu = Individu(
+            # Attributs principaux
+            prenom=new_indiv.get("prenom"),
+            nom=new_indiv.get("nom"),
+            civilite=new_indiv.get("civilite")
+        )
+        individu.save()
+        # Création des questionnaires de type individu
+        utils_questionnaires.Creation_reponses(categorie="individu", liste_instances=[individu])
+        internet_identifiant_individu = utils_internet.CreationIdentifiantIndividu(IDindividu=individu.pk)
+        internet_mdp_individu, date_expiration_mdp_individu = utils_internet.CreationMDP()
+        individu.internet_identifiant = internet_identifiant_individu
+        individu.internet_mdp = internet_mdp_individu
+
+        # Vous pouvez aussi créer un utilisateur pour l'individu si nécessaire
+        utilisateur_individu = Utilisateur(
+            username=internet_identifiant_individu,
+            categorie="individu",  # Ou une autre catégorie, selon votre besoin
+            force_reset_password=True,
+            date_expiration_mdp=date_expiration_mdp_individu
+        )
+        utilisateur_individu.set_password(internet_mdp_individu)
+        utilisateur_individu.save()
+
+        # Association de l'utilisateur à l'individu
+        individu.utilisateur = utilisateur_individu
+        individu.save()
+        titulaire = 1 if categorie!=2 else 0
+        rattachement = Rattachement(famille=famille, individu=individu, categorie=categorie, titulaire=titulaire)
+        rattachement.save()
+
+    
+    @transaction.atomic
+    def creation_individu_ent(self, new_indiv, famille, categorie):
+        individu = Individu.objects.filter(ent_id=new_indiv.get("id_ent")).first()
+        if not individu:
+            individu = Individu(
+                # Attributs principaux
+                prenom=new_indiv.get("prenom"),
+                nom=new_indiv.get("nom"),
+                civilite=1 if new_indiv.get("civilite") in ("M.", "Mr", "Monsieur") else 2,  # mapping simple
+                mail=new_indiv.get("email"),
+                tel_mobile=new_indiv.get("telephone"),
+                internet_actif=True,
+                ent_id=new_indiv.get("id_ent")
+            )
+            individu.save()
+            # Création des questionnaires de type individu
+            utils_questionnaires.Creation_reponses(categorie="individu", liste_instances=[individu])
+            internet_identifiant_individu = utils_internet.CreationIdentifiantIndividu(IDindividu=individu.pk)
+            internet_mdp_individu, date_expiration_mdp_individu = utils_internet.CreationMDP()
+            individu.internet_identifiant = internet_identifiant_individu
+            individu.internet_mdp = internet_mdp_individu
+
+            # Vous pouvez aussi créer un utilisateur pour l'individu si nécessaire
+            utilisateur_individu = Utilisateur(
+                username=internet_identifiant_individu,
+                categorie="individu",  # Ou une autre catégorie, selon votre besoin
+                force_reset_password=True,
+                date_expiration_mdp=date_expiration_mdp_individu
+            )
+            utilisateur_individu.set_password(internet_mdp_individu)
+            utilisateur_individu.save()
+
+            # Association de l'utilisateur à l'individu
+            individu.utilisateur = utilisateur_individu
+            individu.save()
+        titulaire = 1 if categorie==1 else 0
+        rattachement = Rattachement(famille=famille, individu=individu, categorie=categorie, titulaire=titulaire)
+        rattachement.save()
+        if new_indiv.get("scolarite"):
+            self.creation_scolarite(individu, new_indiv.get("scolarite"))
+
+
+    @transaction.atomic
+    def creation_scolarite(self, new_indiv, scolarite):
+        # Vérifie si cet utilisateur a déjà une scolarité
+        scolarite_ancienne = Scolarite.objects.filter(individu=new_indiv).first()
+        if not scolarite_ancienne:
+            # Création / récupération école
+            ecole= Ecole.objects.filter(
+                uai=scolarite.get("ecole", {}).get("uai")).first()
+
+            # Création / récupération classe
+            classe= Classe.objects.get_or_create(
+                nom=scolarite.get("classe", {}).get("nom"),ecole=ecole).first()
+
+            # Création / récupération niveau
+            niveau= NiveauScolaire.objects.filter(nom=scolarite.get("niveau", {}).get("nom")).first()
+
+            # Création scolarité
+            scolarite_obj = Scolarite.objects.create(
+                individu=new_indiv,
+                date_debut=scolarite.get("date_debut"),
+                date_fin=scolarite.get("date_fin"),
+                ecole=ecole,
+                classe=classe,
+                niveau=niveau
+            )
+            scolarite_obj.save()
+
+
+    def chercher_famille_avec_ent_id(self, famille_ent):
+        # Cette fonction vérifie si une famille existe déjà en utilisant les ent_id des enfants
+        for enfant in famille_ent.get("enfants", []):
+            rattachemnt = Rattachement.objects.filter(individu__ent_id = enfant.get("id_ent", "")).first()
+            if rattachemnt:
+                return rattachemnt.famille
+        return None
+    
+class FamillesSynchroView(CustomView, TemplateView):
+    template_name = "fiche_famille/familles_synchro.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["familles_non_sync"] = self.get_familles_non_sync()
+        context["page_titre"] = "Familles non synchronisées"
+        return context
+    
+    def get_familles_non_sync(self):
+        rattachements = Rattachement.objects.filter(individu__ent_id__isnull=True)
+        familles = Famille.objects.filter(idfamille__in=rattachements.values_list('famille_id', flat=True).distinct())
+        return familles
+    
+    def post(self, request, *args, **kwargs):
+        """Gérer la synchronisation d'une famille"""
+        try:
+            # Vérifier si c'est une requête JSON (validation) ou form data (vérification)
+            if request.content_type == 'application/json':
+                data = json.loads(request.body)
+                action = data.get('action')
+                logger.info(f"Action: {action}")
+                
+                if action == 'validate':
+                    return self.valider_synchronisation(data)
+            
+            # Sinon, c'est une vérification classique
+            famille_id = request.POST.get('famille_id')
+            logger.info(f"Vérification de la famille ID: {famille_id}")
+            time.sleep(1)
+            
+            famille = Famille.objects.get(idfamille=famille_id)
+            logger.info(f"Famille trouvée: {famille}")
+            
+            differences = self.comparer_famille(famille)
+            logger.info(f"Différences trouvées: {len(differences.get('representants', []))} représentants, {len(differences.get('enfants', []))} enfants")
+            
+            return JsonResponse({
+                'success': True,
+                'differences': differences
+            })
+            
+        except Famille.DoesNotExist:
+            logger.error(f"Famille {famille_id} introuvable")
+            return JsonResponse({
+                'success': False,
+                'error': 'Famille introuvable'
+            }, status=404)
+        except Exception as e:
+            logger.exception(f"Erreur dans post(): {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+    
+    def valider_synchronisation(self, data):
+        """
+        Valide et applique les modifications sélectionnées
+        """
+        try:
+            famille_id = data.get('famille_id')
+            selected_fields = data.get('selected_fields', {})
+            
+            if not selected_fields:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Aucun champ sélectionné'
+                }, status=400)
+            
+            famille = Famille.objects.get(idfamille=famille_id)
+            updated_count = 0
+            errors = []
+            
+            # Traiter chaque individu séparément avec sa propre transaction
+            for key, person_data in selected_fields.items():
+                individu_id = person_data.get('id')
+                person_type = person_data.get('type')
+                fields_to_update = person_data.get('fields', [])
+                
+                try:
+                    # Transaction séparée pour chaque individu
+                    with transaction.atomic():
+                        # Récupérer l'individu
+                        individu = Individu.objects.select_for_update().get(idindividu=individu_id)
+                        
+                        # Récupérer les données de l'API
+                        ent_result = get_ent_user_info(individu.nom, individu.prenom)
+                        
+                        if not ent_result:
+                            errors.append(f"{individu.prenom} {individu.nom}: Données API introuvables")
+                            continue
+                        
+                        individu_api = ent_result[0] if isinstance(ent_result, list) else ent_result
+                        
+                        # Appliquer les modifications pour chaque champ sélectionné
+                        for field_label in fields_to_update:
+                            result = self.appliquer_modification(individu, individu_api, field_label)
+                            if result['success']:
+                                updated_count += 1
+                            else:
+                                errors.append(f"{individu.prenom} {individu.nom} - {field_label}: {result['error']}")
+                        individu.ent_id = individu_api.get("ent_id", None)
+                        # Sauvegarder l'individu
+                        individu.save()
+                        
+                except Individu.DoesNotExist:
+                    errors.append(f"Individu ID {individu_id} introuvable")
+                except Exception as e:
+                    errors.append(f"Erreur pour l'individu ID {individu_id}: {str(e)}")
+            
+            response_data = {
+                'success': True,
+                'updated_count': updated_count,
+                'message': f'{updated_count} champ(s) mis à jour avec succès'
+            }
+            
+            if errors:
+                response_data['warnings'] = errors
+            
+            return JsonResponse(response_data)
+            
+        except Famille.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Famille introuvable'
+            }, status=404)
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Erreur lors de la synchronisation: {str(e)}'
+            }, status=500)
+    
+    def appliquer_modification(self, individu, individu_api, field_label):
+        """
+        Applique une modification à un individu à partir des données API
+        Retourne un dict avec 'success' et 'error' si applicable
+        """
+        # Mapping inverse: label français -> (champ DB, champ API)
+        field_mapping = {
+            'Nom': ('nom', 'nom'),
+            'Prénom': ('prenom', 'prenom'),
+            'Civilité': ('civilite', 'civilite'),
+            'Date de naissance': ('date_naiss', 'date_naissance'),
+            'Code postal de naissance': ('cp_naiss', 'code_postal_naissance'),
+            'Ville de naissance': ('ville_naiss', 'ville_naissance'),
+            'Email': ('mail', 'email'),
+            'Téléphone mobile': ('tel_mobile', 'telephone_mobile'),
+            'Téléphone domicile': ('tel_domicile', 'telephone'),
+            'Adresse': ('adresse_auto', 'adresse'),
+            'Code postal': ('cp_auto', 'code_postal'),
+            'Ville': ('ville_auto', 'ville'),
+            'ID ENT': ('ent_id', 'ent_id'),
+        }
+        
+        if field_label not in field_mapping:
+            return {'success': False, 'error': 'Champ inconnu'}
+        
+        champ_db, champ_api = field_mapping[field_label]
+        
+        try:
+            # Extraire la valeur de l'API
+            valeur_api = self.extraire_valeur_api(individu_api, champ_api)
+            
+            if valeur_api is None:
+                return {'success': False, 'error': 'Valeur API introuvable'}
+            
+            # Traitement spécial pour la civilité
+            if champ_db == 'civilite':
+                valeur_api = self.convertir_civilite(valeur_api)
+            
+            # Traitement spécial pour les dates
+            if champ_db == 'date_naiss' and isinstance(valeur_api, str):
+                from datetime import datetime
+                try:
+                    # Essayer différents formats de date
+                    for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']:
+                        try:
+                            valeur_api = datetime.strptime(valeur_api, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                except:
+                    return {'success': False, 'error': f'Format de date invalide: {valeur_api}'}
+            
+            # Appliquer la valeur
+            setattr(individu, champ_db, valeur_api)
+            return {'success': True}
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def convertir_civilite(self, valeur):
+        """
+        Convertit la civilité de l'API en valeur compatible avec la base de données
+        Adapter selon votre modèle (CharField, IntegerField avec choices, FK, etc.)
+        """
+        # Si c'est un CharField, retourner tel quel
+        # Vérifier le type de champ dans votre modèle Individu
+        from django.db.models import CharField, IntegerField
+        
+        field = Individu._meta.get_field('civilite')
+        
+        if isinstance(field, IntegerField):
+            # Si c'est un IntegerField avec choices (1=M, 2=Mme, etc.)
+            mapping_civilite = {
+                'M.': 1,
+                'M': 1,
+                'Monsieur': 1,
+                'Mme': 2,
+                'Madame': 2,
+                'Mlle': 3,
+                'Mademoiselle': 3,
+            }
+            return mapping_civilite.get(valeur, 1)  # Par défaut M.
+        
+        elif isinstance(field, CharField):
+            # Si c'est un CharField, retourner la valeur normalisée
+            return valeur
+        
+        else:
+            # Si c'est une ForeignKey, il faudrait récupérer l'objet correspondant
+            # À adapter selon votre structure
+            return valeur
+    
+    def comparer_famille(self, famille):
+        """
+        Compare les données de chaque membre de la famille avec l'API
+        """
+        differences = {
+            'representants': [],
+            'enfants': []
+        }
+        
+        rattachements = famille.rattachement_set.select_related('individu').all()
+        
+        for ratt in rattachements:
+            individu = ratt.individu
+            
+            try:
+                ent_result = get_ent_user_info(individu.nom, individu.prenom)
+                
+                if ent_result:
+                    individu_api = ent_result[0] if isinstance(ent_result, list) else ent_result
+                    diff = self.comparer_individu(individu, individu_api)
+                    
+                    if diff:
+                        diff_entry = {
+                            'id': individu.idindividu,
+                            'nom': f"{individu.prenom} {individu.nom}",
+                            'differences': diff
+                        }
+                        
+                        if ratt.categorie in [1, 3]:
+                            differences['representants'].append(diff_entry)
+                        else:
+                            differences['enfants'].append(diff_entry)
+                else:
+                    diff_entry = {
+                        'id': individu.idindividu,
+                        'nom': f"{individu.prenom} {individu.nom}",
+                        'differences': {
+                            'statut': {
+                                'old': 'En base de données',
+                                'new': 'Non trouvé dans l\'ENT'
+                            }
+                        }
+                    }
+                    
+                    if ratt.categorie in [1, 2]:
+                        differences['representants'].append(diff_entry)
+                    else:
+                        differences['enfants'].append(diff_entry)
+                        
+            except Exception as e:
+                diff_entry = {
+                    'id': individu.idindividu,
+                    'nom': f"{individu.prenom} {individu.nom}",
+                    'differences': {
+                        'erreur': {
+                            'old': 'Erreur',
+                            'new': f'Erreur API: {str(e)}'
+                        }
+                    }
+                }
+                
+                if ratt.categorie in [1, 2]:
+                    differences['representants'].append(diff_entry)
+                else:
+                    differences['enfants'].append(diff_entry)
+        
+        return differences
+    
+    def comparer_individu(self, individu_db, individu_api):
+        """
+        Compare un individu en base avec ses données API
+        """
+        differences = {}
+        
+        champs_a_comparer = {
+            'nom': 'nom',
+            'prenom': 'prenom',
+            'civilite': 'civilite',
+            'date_naiss': 'date_naissance',
+            'cp_naiss': 'code_postal_naissance',
+            'ville_naiss': 'ville_naissance',
+            'mail': 'email',
+            'tel_mobile': 'telephone_mobile',
+            'tel_domicile': 'telephone',
+            'adresse_auto': 'adresse',
+            'cp_auto': 'code_postal',
+            'ville_auto': 'ville',
+            'ent_id': 'id',
+        }
+        
+        for champ_db, champ_api in champs_a_comparer.items():
+            valeur_db = getattr(individu_db, champ_db, None)
+            valeur_api = self.extraire_valeur_api(individu_api, champ_api)
+            
+            valeur_db_str = self.normaliser_valeur(valeur_db)
+            valeur_api_str = self.normaliser_valeur(valeur_api)
+            
+            if valeur_db_str != valeur_api_str:
+                nom_champ_affiche = self.traduire_nom_champ(champ_db)
+                
+                differences[nom_champ_affiche] = {
+                    'old': valeur_db_str if valeur_db_str else '(vide)',
+                    'new': valeur_api_str if valeur_api_str else '(vide)'
+                }
+        
+        return differences if differences else None
+    
+    def extraire_valeur_api(self, individu_api, champ):
+        """
+        Extrait une valeur de l'objet API (qui peut être imbriqué)
+        """
+        if '.' in champ:
+            keys = champ.split('.')
+            valeur = individu_api
+            for key in keys:
+                if isinstance(valeur, dict):
+                    valeur = valeur.get(key)
+                else:
+                    return None
+            return valeur
+        else:
+            return individu_api.get(champ) if isinstance(individu_api, dict) else None
+    
+    def normaliser_valeur(self, valeur):
+        """
+        Normalise une valeur pour la comparaison
+        """
+        if valeur is None or valeur == '':
+            return ''
+        
+        if hasattr(valeur, 'strftime'):
+            return valeur.strftime('%d/%m/%Y')
+        
+        valeur_str = str(valeur).strip()
+        
+        if valeur_str and any(char.isdigit() for char in valeur_str):
+            valeur_str = ''.join(filter(lambda x: x.isdigit() or x == '+', valeur_str))
+        
+        return valeur_str
+    
+    def traduire_nom_champ(self, champ_db):
+        """
+        Traduit les noms de champs techniques en français pour l'affichage
+        """
+        traductions = {
+            'nom': 'Nom',
+            'prenom': 'Prénom',
+            'civilite': 'Civilité',
+            'date_naiss': 'Date de naissance',
+            'cp_naiss': 'Code postal de naissance',
+            'ville_naiss': 'Ville de naissance',
+            'mail': 'Email',
+            'tel_mobile': 'Téléphone mobile',
+            'tel_domicile': 'Téléphone domicile',
+            'adresse_auto': 'Adresse',
+            'cp_auto': 'Code postal',
+            'ville_auto': 'Ville',
+            'ent_id': 'ID ENT',
+        }
+        
+        return traductions.get(champ_db, champ_db)
