@@ -611,6 +611,7 @@ class Organisateur(models.Model):
     logo = ResizedImageField(verbose_name="Logo", upload_to=get_uuid_path, blank=True, null=True)
     gps = models.CharField(verbose_name="GPS", max_length=200, blank=True, null=True)
     logo_update = models.DateTimeField(verbose_name="Date MAJ Logo", max_length=200, blank=True, null=True)
+    ent_active = models.BooleanField(verbose_name="ENT activé", default=False)
 
     class Meta:
         db_table = 'organisateur'
@@ -795,6 +796,7 @@ class TypeVaccin(models.Model):
 
 class Ecole(models.Model):
     idecole = models.AutoField(verbose_name="ID", db_column='IDecole', primary_key=True)
+    uai = models.CharField(verbose_name="UAI", max_length=200, blank=True, null=True)
     nom = models.CharField(verbose_name="Nom", max_length=300)
     rue = models.CharField(verbose_name="Rue", max_length=200, blank=True, null=True)
     cp = models.CharField(verbose_name="Code postal", max_length=50, blank=True, null=True)
@@ -1665,7 +1667,7 @@ class CategorieCompteInternet(models.Model):
 class Individu(models.Model):
     idindividu = models.AutoField(verbose_name="ID", db_column='IDindividu', primary_key=True)
     civilite = models.IntegerField(verbose_name=_("Civilité"), db_column='IDcivilite', choices=data_civilites.GetListeCivilitesForModels(), default=1)
-    ent_id = encrypt(models.IntegerField(verbose_name=_("ent_id"), blank=True, null=True))
+    ent_id = models.CharField(verbose_name="ent_id", max_length=200, blank=True, null=True)
     nom = models.CharField(verbose_name=_("Nom"), max_length=200)
     nom_jfille = models.CharField(verbose_name=_("Nom de naissance"), max_length=200, blank=True, null=True)
     prenom = models.CharField(verbose_name=_("Prénom"), max_length=200, blank=True, null=True)
@@ -4180,6 +4182,7 @@ class Collaborateur(models.Model):
     nom = models.CharField(verbose_name="Nom", max_length=200)
     nom_jfille = models.CharField(verbose_name="Nom de naissance", max_length=200, blank=True, null=True)
     prenom = models.CharField(verbose_name="Prénom", max_length=200, blank=True, null=True)
+    ent_id = models.CharField(verbose_name="ent_id", max_length=200, blank=True, null=True)
     rue_resid = encrypt(models.CharField(verbose_name="Rue", max_length=200, blank=True, null=True))
     cp_resid = encrypt(models.CharField(verbose_name="Code postal", max_length=50, blank=True, null=True))
     ville_resid = encrypt(models.CharField(verbose_name="Ville", max_length=200, blank=True, null=True))
