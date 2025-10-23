@@ -10,6 +10,7 @@ import logging
 from django.contrib import messages
 from django.http import JsonResponse
 from core.utils.utils_ent import get_ent_user_info
+from core.data import data_civilites
 import time
 import json
 
@@ -320,21 +321,32 @@ class FamillesSynchroView(CustomView, TemplateView):
                 individu_id = person_data.get('id')
                 person_type = person_data.get('type')
                 fields_to_update = person_data.get('fields', [])
-                
+                # Récupérer l'index de la personne sélectionnée (si plusieurs personnes avec même nom/prénom)
+                index_personne = person_data.get('index_personne', 0)
+
                 try:
                     # Transaction séparée pour chaque individu
                     with transaction.atomic():
                         # Récupérer l'individu
                         individu = Individu.objects.select_for_update().get(idindividu=individu_id)
-                        
-                        # Récupérer les données de l'API
-                        ent_result = get_ent_user_info(individu.nom, individu.prenom)
-                        
-                        if not ent_result:
+
+                        # Récupérer les données de l'API (toutes les personnes avec ce nom/prénom)
+                        ent_results = get_ent_user_info(individu.nom, individu.prenom)
+
+                        if not ent_results:
                             errors.append(f"{individu.prenom} {individu.nom}: Données API introuvables")
                             continue
-                        
-                        individu_api = ent_result[0] if isinstance(ent_result, list) else ent_result
+
+                        # S'assurer que c'est une liste
+                        if not isinstance(ent_results, list):
+                            ent_results = [ent_results]
+
+                        # Sélectionner la bonne personne selon l'index
+                        if index_personne >= len(ent_results):
+                            errors.append(f"{individu.prenom} {individu.nom}: Index de personne invalide")
+                            continue
+
+                        individu_api = ent_results[index_personne]
                         
                         # Appliquer les modifications pour chaque champ sélectionné
                         for field_label in fields_to_update:
@@ -436,69 +448,119 @@ class FamillesSynchroView(CustomView, TemplateView):
     def convertir_civilite(self, valeur):
         """
         Convertit la civilité de l'API en valeur compatible avec la base de données
-        Adapter selon votre modèle (CharField, IntegerField avec choices, FK, etc.)
+        Utilise le dictionnaire data_civilites pour la conversion
         """
-        # Si c'est un CharField, retourner tel quel
-        # Vérifier le type de champ dans votre modèle Individu
         from django.db.models import CharField, IntegerField
-        
+
         field = Individu._meta.get_field('civilite')
-        
+
         if isinstance(field, IntegerField):
-            # Si c'est un IntegerField avec choices (1=M, 2=Mme, etc.)
-            mapping_civilite = {
-                'M.': 1,
+            # Créer un mapping inverse à partir de data_civilites
+            dict_civilites_data = data_civilites.GetDictCivilites()
+
+            # Mapping: texte API -> ID civilité
+            mapping_civilite = {}
+            for civ_id, civ_info in dict_civilites_data.items():
+                # Ajouter le label complet
+                if civ_info.get('label'):
+                    mapping_civilite[civ_info['label']] = civ_id
+                # Ajouter l'abrégé si disponible
+                if civ_info.get('abrege'):
+                    mapping_civilite[civ_info['abrege']] = civ_id
+
+            # Ajouter des variations courantes
+            variations = {
                 'M': 1,
-                'Monsieur': 1,
-                'Mme': 2,
-                'Madame': 2,
-                'Mlle': 3,
-                'Mademoiselle': 3,
+                'M.': 1,
+                'Mr': 1,
+                'Melle': 2,  # Correspond à Mademoiselle (id 2)
+                'Mlle': 2,
             }
-            return mapping_civilite.get(valeur, 1)  # Par défaut M.
-        
+            mapping_civilite.update(variations)
+
+            return mapping_civilite.get(valeur, 1)  # Par défaut Monsieur (id=1)
+
         elif isinstance(field, CharField):
             # Si c'est un CharField, retourner la valeur normalisée
             return valeur
-        
+
         else:
             # Si c'est une ForeignKey, il faudrait récupérer l'objet correspondant
-            # À adapter selon votre structure
             return valeur
     
     def comparer_famille(self, famille):
         """
-        Compare les données de chaque membre de la famille avec l'API
+        Compare les données de chaque membre de la famille avec l'API.
+        Si plusieurs personnes dans l'ENT ont le même nom/prénom, on affiche toutes les familles correspondantes.
         """
         differences = {
             'representants': [],
-            'enfants': []
+            'enfants': [],
+            'info_recherche': None  # Info sur les résultats de recherche
         }
-        
+
         rattachements = famille.rattachement_set.select_related('individu').all()
-        
+
         for ratt in rattachements:
             individu = ratt.individu
-            
+
             try:
-                ent_result = get_ent_user_info(individu.nom, individu.prenom)
-                
-                if ent_result:
-                    individu_api = ent_result[0] if isinstance(ent_result, list) else ent_result
-                    diff = self.comparer_individu(individu, individu_api)
-                    
-                    if diff:
-                        diff_entry = {
-                            'id': individu.idindividu,
-                            'nom': f"{individu.prenom} {individu.nom}",
-                            'differences': diff
+                # get_ent_user_info retourne TOUTES les personnes avec ce nom/prénom
+                ent_results = get_ent_user_info(individu.nom, individu.prenom)
+
+                if ent_results:
+                    # S'assurer que c'est toujours une liste
+                    if not isinstance(ent_results, list):
+                        ent_results = [ent_results]
+
+                    nb_resultats = len(ent_results)
+
+                    # Message informatif si plusieurs résultats
+                    if nb_resultats > 1 and not differences['info_recherche']:
+                        differences['info_recherche'] = {
+                            'message': f"{nb_resultats} personnes trouvées avec le nom/prénom '{individu.prenom} {individu.nom}' dans l'ENT",
+                            'type': 'warning'
                         }
-                        
-                        if ratt.categorie in [1, 3]:
-                            differences['representants'].append(diff_entry)
-                        else:
-                            differences['enfants'].append(diff_entry)
+
+                    # Afficher chaque personne trouvée dans l'ENT
+                    for index, individu_api in enumerate(ent_results):
+                        diff = self.comparer_individu(individu, individu_api)
+
+                        # Créer le nom d'affichage
+                        nom_affiche = f"{individu.prenom} {individu.nom}"
+
+                        # Si plusieurs personnes, ajouter un badge pour différencier
+                        if nb_resultats > 1:
+                            # Récupérer des infos distinctives de l'API (email, téléphone, etc.)
+                            info_distinctive = []
+                            if individu_api.get('email'):
+                                info_distinctive.append(f"Email: {individu_api.get('email')}")
+                            if individu_api.get('telephone'):
+                                info_distinctive.append(f"Tél: {individu_api.get('telephone')}")
+                            if individu_api.get('adresse'):
+                                info_distinctive.append(f"Ville: {individu_api.get('ville', '')}")
+
+                            info_text = ' | '.join(info_distinctive[:2]) if info_distinctive else f"Personne {index + 1}"
+                            nom_affiche += f" <span class='badge badge-info' style='font-size:0.8em;'>{info_text}</span>"
+
+                        # Toujours afficher si plusieurs personnes, sinon seulement si différences
+                        if diff or nb_resultats > 1:
+                            diff_entry = {
+                                'id': individu.idindividu,
+                                'nom': nom_affiche,
+                                'differences': diff or {},
+                                'multiple_personnes': nb_resultats > 1,
+                                'index_personne': index,
+                                'total_personnes': nb_resultats,
+                                'info_distinctive': individu_api.get('email', '') or individu_api.get('telephone', '')
+                            }
+
+                            if ratt.categorie in [1, 3]:
+                                differences['representants'].append(diff_entry)
+                            else:
+                                differences['enfants'].append(diff_entry)
                 else:
+                    # Personne non trouvée dans l'ENT
                     diff_entry = {
                         'id': individu.idindividu,
                         'nom': f"{individu.prenom} {individu.nom}",
@@ -507,15 +569,17 @@ class FamillesSynchroView(CustomView, TemplateView):
                                 'old': 'En base de données',
                                 'new': 'Non trouvé dans l\'ENT'
                             }
-                        }
+                        },
+                        'multiple_personnes': False
                     }
-                    
+
                     if ratt.categorie in [1, 2]:
                         differences['representants'].append(diff_entry)
                     else:
                         differences['enfants'].append(diff_entry)
-                        
+
             except Exception as e:
+                logger.exception(f"Erreur lors de la comparaison pour {individu.prenom} {individu.nom}")
                 diff_entry = {
                     'id': individu.idindividu,
                     'nom': f"{individu.prenom} {individu.nom}",
@@ -524,14 +588,15 @@ class FamillesSynchroView(CustomView, TemplateView):
                             'old': 'Erreur',
                             'new': f'Erreur API: {str(e)}'
                         }
-                    }
+                    },
+                    'multiple_personnes': False
                 }
-                
+
                 if ratt.categorie in [1, 2]:
                     differences['representants'].append(diff_entry)
                 else:
                     differences['enfants'].append(diff_entry)
-        
+
         return differences
     
     def comparer_individu(self, individu_db, individu_api):
@@ -559,18 +624,19 @@ class FamillesSynchroView(CustomView, TemplateView):
         for champ_db, champ_api in champs_a_comparer.items():
             valeur_db = getattr(individu_db, champ_db, None)
             valeur_api = self.extraire_valeur_api(individu_api, champ_api)
-            
-            valeur_db_str = self.normaliser_valeur(valeur_db)
-            valeur_api_str = self.normaliser_valeur(valeur_api)
-            
+
+            # Passer le nom du champ pour traitement spécial (civilité, etc.)
+            valeur_db_str = self.normaliser_valeur(valeur_db, champ_db)
+            valeur_api_str = self.normaliser_valeur(valeur_api, champ_db)
+
             if valeur_db_str != valeur_api_str:
                 nom_champ_affiche = self.traduire_nom_champ(champ_db)
-                
+
                 differences[nom_champ_affiche] = {
                     'old': valeur_db_str if valeur_db_str else '(vide)',
                     'new': valeur_api_str if valeur_api_str else '(vide)'
                 }
-        
+
         return differences if differences else None
     
     def extraire_valeur_api(self, individu_api, champ):
@@ -589,21 +655,52 @@ class FamillesSynchroView(CustomView, TemplateView):
         else:
             return individu_api.get(champ) if isinstance(individu_api, dict) else None
     
-    def normaliser_valeur(self, valeur):
+    def normaliser_valeur(self, valeur, champ_db=None):
         """
-        Normalise une valeur pour la comparaison
+        Normalise une valeur pour la comparaison et l'affichage
         """
         if valeur is None or valeur == '':
             return ''
-        
+
+        # Traitement spécial pour la civilité
+        if champ_db == 'civilite':
+            # Récupérer le dictionnaire des civilités
+            dict_civilites_data = data_civilites.GetDictCivilites()
+
+            # Si c'est un nombre (valeur DB)
+            if isinstance(valeur, int):
+                civilite_info = dict_civilites_data.get(valeur)
+                if civilite_info:
+                    return civilite_info.get('abrege') or civilite_info.get('label', str(valeur))
+                return str(valeur)
+
+            # Si c'est déjà une chaîne (valeur API)
+            if isinstance(valeur, str):
+                # Normaliser les variations courantes
+                valeur_norm = valeur.strip()
+                mapping_api_to_abrege = {
+                    'M.': 'M.',
+                    'M': 'M.',
+                    'Monsieur': 'M.',
+                    'Mr': 'M.',
+                    'Mme': 'Mme',
+                    'Madame': 'Mme',
+                    'Melle': 'Melle',
+                    'Mlle': 'Melle',
+                    'Mademoiselle': 'Melle',
+                }
+                return mapping_api_to_abrege.get(valeur_norm, valeur_norm)
+
+        # Traitement des dates
         if hasattr(valeur, 'strftime'):
             return valeur.strftime('%d/%m/%Y')
-        
+
         valeur_str = str(valeur).strip()
-        
-        if valeur_str and any(char.isdigit() for char in valeur_str):
+
+        # Pour les numéros de téléphone, ne garder que les chiffres
+        if valeur_str and any(char.isdigit() for char in valeur_str) and champ_db in ['tel_mobile', 'tel_domicile']:
             valeur_str = ''.join(filter(lambda x: x.isdigit() or x == '+', valeur_str))
-        
+
         return valeur_str
     
     def traduire_nom_champ(self, champ_db):

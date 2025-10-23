@@ -232,7 +232,6 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
         # Préparer les données des individus
         individus_data = []
         for individu in individus[:200]:  # Limiter à 200 pour la performance
-            # TODO: Récupérer l'école de l'individu selon votre modèle
             # Non utilisé pour l'instant
             
             individus_data.append({
@@ -271,7 +270,6 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
             # Convertir en integers
             selected_ids = [int(id) for id in selected_ids]
             
-            # TODO: Implémenter la logique de synchronisation en masse
             # Cette fonction sera développée ultérieurement
             success_count = self.synchroniser_individus_masse(selected_ids)
             
@@ -290,9 +288,7 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
             return redirect(request.path)
     
     def synchroniser_individus_masse(self, individu_ids):
-        """
-        TODO: Fonction à développer pour la synchronisation en masse
-        
+        """        
         Args:
             individu_ids: Liste des IDs des individus à synchroniser
             
