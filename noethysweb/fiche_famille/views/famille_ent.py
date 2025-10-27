@@ -675,7 +675,7 @@ class FamillesSynchroView(CustomView, TemplateView):
                 return str(valeur)
 
             # Si c'est déjà une chaîne (valeur API)
-            if isinstance(valeur, str):
+            if isinstance(valeur, str):         
                 # Normaliser les variations courantes
                 valeur_norm = valeur.strip()
                 mapping_api_to_abrege = {

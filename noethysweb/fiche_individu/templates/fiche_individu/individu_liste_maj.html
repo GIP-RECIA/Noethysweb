@@ -25,25 +25,38 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            <form method="get" id="filterForm" class="form-inline">
-                                <div class="form-group mr-3 mb-2">
-                                    <label for="search" class="mr-2">Recherche :</label>
-                                    <input type="text" 
-                                           name="search" 
-                                           id="search" 
-                                           class="form-control" 
-                                           placeholder="Nom, prénom, ENT ID, email..."
-                                           value="{{ search_query }}"
-                                           style="min-width: 350px;">
-                                </div>
-                                
-                                <div class="form-group mb-2">
-                                    <button type="submit" class="btn btn-primary mr-2">
-                                        <i class="fas fa-search"></i> Rechercher
-                                    </button>
-                                    <a href="{% url 'mettre_a_jour_liste_individu_ent' %}" class="btn btn-secondary">
-                                        <i class="fas fa-undo"></i> Réinitialiser
-                                    </a>
+                            <form method="get" id="filterForm">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="search" class="font-weight-bold">Recherche textuelle</label>
+                                        <input type="text"
+                                               name="search"
+                                               id="search"
+                                               class="form-control"
+                                               placeholder="Nom, prénom, ENT ID..."
+                                               value="{{ search_query }}">
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <label for="type" class="font-weight-bold">Type d'individu</label>
+                                        <select name="type" id="type" class="form-control">
+                                            <option value="">-- Tous les types --</option>
+                                            <option value="1" {% if type_filtre == "1" %}selected{% endif %}>Représentant</option>
+                                            <option value="2" {% if type_filtre == "2" %}selected{% endif %}>Enfant</option>
+                                            <option value="3" {% if type_filtre == "3" %}selected{% endif %}>Contact</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-2 mb-3 d-flex align-items-end">
+                                        <div>
+                                            <button type="submit" class="btn btn-primary btn-block mb-2">
+                                                <i class="fas fa-search"></i> Rechercher
+                                            </button>
+                                            <a href="{% url 'mettre_a_jour_liste_individu_ent' %}" class="btn btn-secondary btn-block">
+                                                <i class="fas fa-undo"></i> Réinitialiser
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                             </form>
                         </div>
@@ -102,9 +115,11 @@
                                         <th>Civilité</th>
                                         <th>Nom</th>
                                         <th>Prénom</th>
+                                        <th>Type</th>
+                                        <th>École</th>
+                                        <th>Classe</th>
                                         <th>Email</th>
                                         <th>Téléphone</th>
-                                        <th style="width: 80px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -112,9 +127,9 @@
                                         {% for individu in individus %}
                                             <tr class="individu-row">
                                                 <td class="text-center">
-                                                    <input type="checkbox" 
-                                                           name="selected_individus" 
-                                                           value="{{ individu.id }}" 
+                                                    <input type="checkbox"
+                                                           name="selected_individus"
+                                                           value="{{ individu.id }}"
                                                            class="individu-checkbox">
                                                 </td>
                                                 <td>
@@ -124,18 +139,44 @@
                                                 <td><strong>{{ individu.nom }}</strong></td>
                                                 <td>{{ individu.prenom }}</td>
                                                 <td>
+                                                    {% if "Enfant" in individu.type %}
+                                                        <span class="badge badge-success">Enfant</span>
+                                                    {% endif %}
+                                                    {% if "Représentant" in individu.type %}
+                                                        <span class="badge badge-primary">Représentant</span>
+                                                    {% endif %}
+                                                    {% if "Contact" in individu.type %}
+                                                        <span class="badge badge-warning">Contact</span>
+                                                    {% endif %}
+                                                    {% if individu.type == "-" %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if "Enfant" in individu.type and individu.ecole != "-" %}
+                                                        <small>{{ individu.ecole }}</small>
+                                                    {% else %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if "Enfant" in individu.type and individu.classe != "-" %}
+                                                        <small>{{ individu.classe }}</small>
+                                                    {% else %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
                                                     <small>{{ individu.mail }}</small>
                                                 </td>
                                                 <td>
                                                     <small>{{ individu.tel_mobile }}</small>
                                                 </td>
-                                                <td class="text-center">
-                                                </td>
                                             </tr>
                                         {% endfor %}
                                     {% else %}
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted py-4">
+                                            <td colspan="10" class="text-center text-muted py-4">
                                                 <i class="fas fa-inbox fa-3x mb-3"></i>
                                                 <p>Aucun individu trouvé avec les critères sélectionnés.</p>
                                             </td>
