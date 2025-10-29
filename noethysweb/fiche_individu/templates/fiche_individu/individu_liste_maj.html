@@ -17,6 +17,22 @@
                 <div class="card-body">
                     <p class="text-muted">{{ box_introduction }}</p>
 
+                    <!-- Informations de synchronisation -->
+                    {% if sync_en_cours %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-sync-alt fa-spin"></i>
+                            <strong>Synchronisation en cours</strong> depuis {{ sync_date_debut|date:"H:i:s" }}
+                            pour {{ sync_nb_individus }} individu(s)...
+                        </div>
+                    {% elif sync_date_derniere_fin %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Dernière synchronisation :</strong>
+                            {{ sync_date_derniere_fin|date:"d/m/Y à H:i:s" }}
+                            ({{ sync_nb_succes_dernier }} individu(s) synchronisé(s) avec succès)
+                        </div>
+                    {% endif %}
+
                     <!-- Filtres -->
                     <div class="card mb-3">
                         <div class="card-header bg-light">

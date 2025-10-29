@@ -4797,3 +4797,24 @@ class CommandeVersion(models.Model):
 
     def __str__(self):
         return "IDversion %d" % self.idversion if self.idversion else "Nouvelle version"
+
+
+class SynchronisationLock(models.Model):
+    """Verrou global pour empêcher les synchronisations ENT simultanées"""
+    idlock = models.AutoField(verbose_name="ID", db_column="IDlock", primary_key=True)
+    type_sync = models.CharField(verbose_name="Type de synchronisation", max_length=50, unique=True, db_index=True)
+    est_verrouille = models.BooleanField(verbose_name="Est verrouillé", default=False)
+    utilisateur = models.ForeignKey('Utilisateur', verbose_name="Utilisateur", on_delete=models.SET_NULL, null=True, blank=True)
+    date_debut = models.DateTimeField(verbose_name="Date de début", null=True, blank=True)
+    date_derniere_fin = models.DateTimeField(verbose_name="Date de dernière fin", null=True, blank=True)
+    nb_individus = models.IntegerField(verbose_name="Nombre d'individus", default=0)
+    nb_succes_dernier = models.IntegerField(verbose_name="Nombre de succès (dernier)", default=0)
+    dernier_utilisateur = models.ForeignKey('Utilisateur', verbose_name="Dernier utilisateur", on_delete=models.SET_NULL, null=True, blank=True, related_name='dernieres_syncs')
+
+    class Meta:
+        db_table = "synchronisation_locks"
+        verbose_name = "verrou de synchronisation"
+        verbose_name_plural = "verrous de synchronisation"
+
+    def __str__(self):
+        return f"Lock {self.type_sync} - {'Verrouillé' if self.est_verrouille else 'Libre'}"

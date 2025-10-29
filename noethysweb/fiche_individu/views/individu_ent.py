@@ -1,4 +1,4 @@
-from core.models import Scolarite, Individu, Classe, NiveauScolaire, Ecole
+from core.models import Scolarite, Individu, Classe, NiveauScolaire, Ecole, SynchronisationLock
 from fiche_individu.views.individu import Onglet
 from django.views.generic import TemplateView
 from core.views.base import CustomView
@@ -7,9 +7,14 @@ from core.utils.utils_ent import get_ent_user_info_by_ent_id
 from django.shortcuts import redirect
 from django.db.models import Q
 from django.db import transaction
+from django.utils import timezone
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
+
+# Type de verrou pour la synchronisation en masse
+SYNC_TYPE_MASSE = 'synchronisation_masse_ent'
 
 class UpdateIndividu(Onglet, TemplateView):
     menu_code = "individu_synchroniser"
@@ -300,6 +305,20 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
         context['box_titre'] = "Synchronisation en masse depuis l'ENT"
         context['box_introduction'] = "Visualisez tous les individus avec un ENT ID et sélectionnez ceux à synchroniser avec les données de l'ENT."
 
+        # Récupérer les informations de la dernière synchronisation
+        try:
+            lock = SynchronisationLock.objects.get(type_sync=SYNC_TYPE_MASSE)
+            context['sync_en_cours'] = lock.est_verrouille
+            context['sync_date_derniere_fin'] = lock.date_derniere_fin
+            context['sync_nb_succes_dernier'] = lock.nb_succes_dernier
+            context['sync_dernier_utilisateur'] = lock.dernier_utilisateur
+            if lock.est_verrouille:
+                context['sync_date_debut'] = lock.date_debut
+                context['sync_utilisateur_actuel'] = lock.utilisateur
+                context['sync_nb_individus'] = lock.nb_individus
+        except SynchronisationLock.DoesNotExist:
+            context['sync_en_cours'] = False
+
         return context
     
     def post(self, request, *args, **kwargs):
@@ -307,30 +326,85 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
         try:
             # Récupérer les IDs des individus sélectionnés
             selected_ids = request.POST.getlist('selected_individus')
-            
+
             if not selected_ids:
                 messages.warning(request, "Aucun individu sélectionné pour la synchronisation.")
                 return redirect(request.path)
-            
+
             # Convertir en integers
             selected_ids = [int(id) for id in selected_ids]
-            
-            # Cette fonction sera développée ultérieurement
-            success_count = self.synchroniser_individus_masse(selected_ids)
-            
-            if success_count > 0:
-                messages.success(
-                    request,
-                    f"Synchronisation lancée avec succès pour {success_count} individu(s)."
+
+            # Vérifier si une synchronisation est déjà en cours
+            with transaction.atomic():
+                lock, created = SynchronisationLock.objects.select_for_update().get_or_create(
+                    type_sync=SYNC_TYPE_MASSE,
+                    defaults={'est_verrouille': False}
                 )
-            else:
-                messages.info(request, "Aucune synchronisation effectuée.")
-            
+
+                if lock.est_verrouille:
+                    # Une synchronisation est déjà en cours
+                    messages.warning(
+                        request,
+                        f"Une synchronisation est déjà en cours depuis {lock.date_debut.strftime('%H:%M:%S')} "
+                        f"({lock.nb_individus} individu(s)). "
+                        f"Veuillez attendre qu'elle se termine avant d'en lancer une nouvelle."
+                    )
+                    return redirect(request.path + f"?{request.GET.urlencode()}")
+
+                # Verrouiller pour cette synchronisation
+                lock.est_verrouille = True
+                lock.utilisateur = request.user
+                lock.date_debut = timezone.now()
+                lock.nb_individus = len(selected_ids)
+                lock.save()
+
+            # Lancer la synchronisation en arrière-plan dans un thread
+            thread = threading.Thread(
+                target=self.synchroniser_individus_masse_background,
+                args=(selected_ids, request.user.pk)
+            )
+            thread.daemon = True
+            thread.start()
+
+            # Afficher un message immédiat à l'utilisateur
+            messages.info(
+                request,
+                f"Synchronisation de {len(selected_ids)} individu(s) lancée en arrière-plan. "
+                "Cette opération peut prendre quelques minutes. "
+                "Vous pouvez continuer à travailler pendant ce temps."
+            )
+
             return redirect(request.path + f"?{request.GET.urlencode()}")
-            
+
         except Exception as e:
-            messages.error(request, f"Erreur lors de la synchronisation : {str(e)}")
+            messages.error(request, f"Erreur lors du lancement de la synchronisation : {str(e)}")
             return redirect(request.path)
+
+    def synchroniser_individus_masse_background(self, individu_ids, utilisateur_id):
+        """
+        Méthode wrapper pour exécuter la synchronisation en arrière-plan
+        et logger les résultats. Déverrouille automatiquement à la fin.
+        """
+        logger.info(f"=== DÉBUT Synchronisation en arrière-plan de {len(individu_ids)} individu(s) ===")
+        success_count = 0
+        try:
+            success_count = self.synchroniser_individus_masse(individu_ids)
+            logger.info(f"=== FIN Synchronisation terminée: {success_count}/{len(individu_ids)} individu(s) synchronisé(s) avec succès ===")
+        except Exception as e:
+            logger.exception(f"=== ERREUR Synchronisation en arrière-plan échouée: {str(e)} ===")
+        finally:
+            # Toujours déverrouiller et enregistrer les stats, même en cas d'erreur
+            try:
+                from core.models import Utilisateur
+                lock = SynchronisationLock.objects.get(type_sync=SYNC_TYPE_MASSE)
+                lock.est_verrouille = False
+                lock.date_derniere_fin = timezone.now()
+                lock.nb_succes_dernier = success_count
+                lock.dernier_utilisateur = Utilisateur.objects.get(pk=utilisateur_id)
+                lock.save()
+                logger.info(f"=== Verrou de synchronisation libéré - {success_count} succès ===")
+            except SynchronisationLock.DoesNotExist:
+                logger.warning("=== Verrou de synchronisation introuvable lors de la libération ===")
     
     def synchroniser_individus_masse(self, individu_ids):
         """
@@ -344,7 +418,8 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
         """
         success_count = 0
         errors = []
-
+        import time
+        time.sleep(20)
         # Mapping des champs à synchroniser
         champs_mapping = {
             'nom': 'nom',
@@ -369,7 +444,6 @@ class SynchronisationMasseIndividus(CustomView, TemplateView):
                         continue
 
                     # Récupérer les données depuis l'ENT par ent_id
-                    from core.utils.utils_ent import get_ent_user_info_by_ent_id
                     donnees_ent = get_ent_user_info_by_ent_id(individu.ent_id)
 
                     if not donnees_ent:
