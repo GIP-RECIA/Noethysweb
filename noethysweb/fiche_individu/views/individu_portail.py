@@ -11,20 +11,23 @@ from core.models import Individu, Utilisateur
 from fiche_individu.forms.individu_portail import Formulaire
 from fiche_individu.views.individu import Onglet
 from fiche_famille.utils import utils_internet
+from django.utils.dateparse import parse_date
 
 
 def Envoyer_codes(request):
     # Récupération des données du formulaire
     internet_identifiant = request.POST.get("internet_identifiant")
     internet_mdp = request.POST.get("internet_mdp")
+    date_expiration_mdp = request.POST.get("date_expiration_mdp")
     idindividu = int(request.POST.get("idindividu"))
 
     # Récupération des valeurs de fusion
     individu = Individu.objects.get(pk=idindividu)
     champs = {
-        "{NOM_INDIVIDU": individu.nom,
+        "{NOM_INDIVIDU}": individu.nom,
         "{IDENTIFIANT_INTERNET}": internet_identifiant,
         "{MOTDEPASSE_INTERNET}": internet_mdp,
+        "{DATE_EXPIRATION_MOTDEPASSE}": parse_date(date_expiration_mdp[:10]).strftime("%d/%m/%Y") if date_expiration_mdp and date_expiration_mdp != "None" else "",
     }
     return JsonResponse({"categorie": "portail", "champs": champs, "idindividu": idindividu})
 

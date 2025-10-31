@@ -4,12 +4,17 @@
 #  Distribué sous licence GNU GPL.
 
 from django.http import JsonResponse
-from core.models import ModeleEmail, Mail, PieceJointe, Destinataire, Famille, Individu, Contact, AdresseMail, DocumentJoint
+from django.db.models import Q
+from core.models import ModeleEmail, Mail, PieceJointe, Destinataire, Famille, Individu, Contact, AdresseMail, DocumentJoint, SignatureEmail, Organisateur
 from outils.utils import utils_email
 from outils.forms.editeur_emails_express import Formulaire
 from django.shortcuts import render
 import json, re
 from email.utils import parseaddr
+from django.core.cache import cache
+from django.urls import reverse_lazy, reverse
+from django.conf import settings
+
 
 
 def Envoyer_email(request):
@@ -81,6 +86,23 @@ def Get_view_editeur_email(request):
     donnees = json.loads(request.POST.get("donnees"))
     # Création du mail
     modele_email = ModeleEmail.objects.filter(categorie=donnees["categorie"], defaut=True).first()
+    # Récupération de l'URL du portail
+    try:
+        url_portail = request.build_absolute_uri(reverse("portail_accueil")) if request else settings.ALLOWED_HOSTS[1]
+    except:
+        url_portail = ""
+    # Récupération de l'organisateur
+    organisateur = cache.get('organisateur', None)
+    if not organisateur:
+        organisateur = cache.get_or_set('organisateur', Organisateur.objects.filter(pk=1).first())
+    valeurs_defaut = {"{ORGANISATEUR_NOM}": organisateur.nom,
+                      "{URL_PORTAIL}": url_portail,}
+    valeurs = donnees.get("champs", {})
+    valeurs.update(valeurs_defaut)
+    for motcle, valeur in valeurs.items():
+        if isinstance(valeur, float) or isinstance(valeur, int):
+            valeur = str(valeur)
+        modele_email.html = modele_email.html.replace(motcle, valeur or "")
     mail = Mail.objects.create(
         categorie=donnees["categorie"],
         objet=modele_email.objet if modele_email else "",
@@ -116,5 +138,8 @@ def Get_view_editeur_email(request):
         "page_titre": "Editeur d'emails",
         "form": Formulaire(instance=mail, request=request),
         "modeles": ModeleEmail.objects.filter(categorie=request.POST.get("categorie", donnees["categorie"])),
+        "signatures": SignatureEmail.objects.filter(
+            Q(structure__in=request.user.structures.all()) | Q(structure__isnull=True)
+        ),
     }
     return render(request, 'outils/editeur_emails_express.html', context)

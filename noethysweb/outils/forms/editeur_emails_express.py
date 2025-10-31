@@ -62,6 +62,19 @@ class Formulaire(FormulaireBase, ModelForm):
                                 selection_defaut = dest
                             liste_dest.append(dest)
 
+            if destinataire.individu:
+                for mail in (destinataire.individu.mail, destinataire.individu.travail_mail):
+                    if mail:
+                        dest = "%s <%s>" % (destinataire.individu.Get_nom(), mail)
+                        liste_dest.append(dest)
+                        if mail == destinataire.adresse:
+                            selection_defaut = dest
+                # Si l'adresse du destinataire est définie mais pas dans les emails de l'individu
+                if destinataire.adresse and not selection_defaut:
+                    dest = "%s <%s>" % (destinataire.individu.Get_nom(), destinataire.adresse)
+                    liste_dest.append(dest)
+                    selection_defaut = dest
+
             if destinataire.collaborateur:
                 for mail in (destinataire.collaborateur.mail, destinataire.collaborateur.travail_mail):
                     if mail:
