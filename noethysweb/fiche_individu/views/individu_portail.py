@@ -3,15 +3,16 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-from django.urls import reverse_lazy
-from django.http import JsonResponse, HttpResponseRedirect
 from django.contrib import messages
-from core.views import crud
+from django.http import HttpResponseRedirect, JsonResponse
+from django.urls import reverse_lazy
+from django.utils.dateparse import parse_date
+
 from core.models import Individu, Utilisateur
+from core.views import crud
+from fiche_famille.utils import utils_internet
 from fiche_individu.forms.individu_portail import Formulaire
 from fiche_individu.views.individu import Onglet
-from fiche_famille.utils import utils_internet
-from django.utils.dateparse import parse_date
 
 
 def Envoyer_codes(request):
@@ -27,9 +28,14 @@ def Envoyer_codes(request):
         "{NOM_INDIVIDU}": individu.nom,
         "{IDENTIFIANT_INTERNET}": internet_identifiant,
         "{MOTDEPASSE_INTERNET}": internet_mdp,
-        "{DATE_EXPIRATION_MOTDEPASSE}": parse_date(date_expiration_mdp[:10]).strftime("%d/%m/%Y") if date_expiration_mdp and date_expiration_mdp != "None" else "",
+        "{DATE_EXPIRATION_MOTDEPASSE}": (
+            parse_date(date_expiration_mdp[:10]).strftime("%d/%m/%Y")
+            if date_expiration_mdp and date_expiration_mdp != "None"
+            else ""
+        ),
     }
     return JsonResponse({"categorie": "portail", "champs": champs, "idindividu": idindividu})
+
 
 def Regenerer_identifiant(request):
     IDindividu = int(request.POST.get("idindividu"))
@@ -50,15 +56,15 @@ class Consulter(Onglet, crud.Modifier):
     def get_context_data(self, **kwargs):
         self.object = self.get_object()
         context = super(Consulter, self).get_context_data(**kwargs)
-        context['box_titre'] = "Portail"
-        context['box_introduction'] = "Cliquez sur le bouton Modifier pour modifier une des informations ci-dessous."
+        context["box_titre"] = "Portail"
+        context["box_introduction"] = "Cliquez sur le bouton Modifier pour modifier une des informations ci-dessous."
         if not self.request.user.has_perm("core.individu_portail_modifier"):
-            context['box_introduction'] = "Vous n'avez pas l'autorisation de modifier les informations de cette page."
-        context['onglet_actif'] = "portail"
+            context["box_introduction"] = "Vous n'avez pas l'autorisation de modifier les informations de cette page."
+        context["onglet_actif"] = "portail"
         return context
 
     def get_object(self):
-        return Individu.objects.get(pk=self.kwargs['idindividu'])
+        return Individu.objects.get(pk=self.kwargs["idindividu"])
 
     def get_form_kwargs(self, **kwargs):
         form_kwargs = super(Consulter, self).get_form_kwargs(**kwargs)
@@ -72,17 +78,17 @@ class Modifier(Consulter):
     def get_context_data(self, **kwargs):
         self.object = self.get_object()
         context = super(Modifier, self).get_context_data(**kwargs)
-        context['box_introduction'] = "Vous pouvez modifier ici les paramètres du compte internet de l'individu."
+        context["box_introduction"] = "Vous pouvez modifier ici les paramètres du compte internet de l'individu."
         return context
 
     def test_func_page(self):
         return self.request.user.has_perm("core.individu_portail_modifier")
 
     def get_success_url(self):
-        return reverse_lazy("individu_portail", kwargs={'idindividu': self.kwargs.get('idindividu', None)})
+        return reverse_lazy("individu_portail", kwargs={"idindividu": self.kwargs.get("idindividu", None)})
 
     def post(self, request, **kwargs):
-        form = Formulaire(request.POST, idindividu=self.kwargs['idindividu'], request=self.request, mode=self.mode)
+        form = Formulaire(request.POST, idindividu=self.kwargs["idindividu"], request=self.request, mode=self.mode)
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
 
@@ -108,7 +114,9 @@ class Modifier(Consulter):
         # Si changement de l'identifiant
         if internet_identifiant != individu.internet_identifiant:
             if Utilisateur.objects.filter(username__iexact=internet_identifiant).exists():
-                messages.add_message(request, messages.ERROR, "Cet identifiant a déjà été attribué à une autre individu !")
+                messages.add_message(
+                    request, messages.ERROR, "Cet identifiant a déjà été attribué à une autre individu !"
+                )
                 return self.render_to_response(self.get_context_data(form=form))
             individu.internet_identifiant = internet_identifiant
             utilisateur.username = internet_identifiant
@@ -133,4 +141,12 @@ class Modifier(Consulter):
         # Enregistrement des individus masqués
         individu.individus_masques.set(individus_masques)
 
-        return HttpResponseRedirect(reverse_lazy("individu_portail", args=(self.kwargs['idfamille'],self.kwargs['idindividu'],)))
+        return HttpResponseRedirect(
+            reverse_lazy(
+                "individu_portail",
+                args=(
+                    self.kwargs["idfamille"],
+                    self.kwargs["idindividu"],
+                ),
+            )
+        )
