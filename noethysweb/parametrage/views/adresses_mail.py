@@ -10,7 +10,10 @@ from core.views.mydatatableview import MyDatatable, columns
 from core.views import crud
 from core.models import AdresseMail
 from parametrage.forms.adresses_mail import Formulaire
+from parametrage.forms.adresse_mail_expedition import FormulaireEmailExpedition
 from outils.utils import utils_email
+import django.contrib.messages
+from django.http import HttpResponseRedirect
 
 
 def Envoyer_mail_test(request):
@@ -92,3 +95,46 @@ class Modifier(Page, crud.Modifier):
 
 class Supprimer(Page, crud.Supprimer):
     pass
+
+class parametre_expedition_mail():
+    emplate_name = "core/crud/edit.html"
+    compatible_demo = False
+
+    def get_context_data(self, **kwargs):
+        context = super(Modifier, self).get_context_data(**kwargs)
+        context['page_titre'] = "Paramètres Expedition d'emails"
+        context['box_titre'] = "Paramètres"
+        context['box_introduction'] = "Ajustez les paramètres d'expédition des emails pour parametrer les adresses d'expedition."
+        context['form'] = FormulaireEmailExpedition()
+        return context
+
+    def post(self, request, **kwargs):
+        form = Formulaire(request.POST, request=self.request)
+        if not form.is_valid():
+            django.contrib.messages.error(request, 'Aucun paramétre coché!')
+            return self.render_to_response(self.get_context_data(form=form))
+
+        # Enregistrement
+        # dict_parametres = {parametre.code: parametre for parametre in PortailParametre.objects.all()}
+        # liste_modifications = []
+        # for code, valeur in form.cleaned_data.items():
+        #     if code in dict_parametres:
+        #         dict_parametres[code].valeur = str(valeur)
+        #         liste_modifications.append(dict_parametres[code])
+        #     else:
+        #         PortailParametre.objects.create(code=code, valeur=str(valeur))
+        # if liste_modifications:
+        #     PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
+
+        # # Stocker les états des cases à cocher dans la session
+        # request.session['compte_individu_active'] = form.cleaned_data.get("compte_individu", False)
+        # request.session['compte_famille_active'] = form.cleaned_data.get("compte_famille", False)
+        # cache.delete("parametres_portail")
+
+        django.contrib.messages.success(request, 'Paramètres enregistrés')
+        return HttpResponseRedirect(reverse_lazy("parametres_mail_expedition"))
+        """
+        Traite les erreurs du formulaire
+        """
+        messages.error(self.request, 'Veuillez corriger les erreurs ci-dessous.')
+        return super().form_invalid(form)
