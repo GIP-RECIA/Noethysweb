@@ -1,22 +1,22 @@
-from django import forms
-from core.forms.base import FormulaireBase
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, HTML, Div
-from crispy_forms.bootstrap import Field
-from core.utils.utils_commandes import Commandes
+from crispy_forms.layout import HTML, Div, Layout
+from django import forms
 from django.core.cache import cache
+
+from core.forms.base import FormulaireBase
 from core.models import Organisateur
+from core.utils.utils_commandes import Commandes
 
 
 class FormulaireEmailExpedition(FormulaireBase, forms.Form):
     def __init__(self, *args, **kwargs):
         super(FormulaireEmailExpedition, self).__init__(*args, **kwargs)
         self.helper = FormHelper()
-        self.helper.form_id = 'compte_parametres_form'
-        self.helper.form_method = 'post'
-        self.helper.form_class = 'form-horizontal'
-        self.helper.label_class = 'col-md-2'
-        self.helper.field_class = 'col-md-10'
+        self.helper.form_id = "compte_parametres_form"
+        self.helper.form_method = "post"
+        self.helper.form_class = "form-horizontal"
+        self.helper.label_class = "col-md-2"
+        self.helper.field_class = "col-md-10"
 
         # Initialisation du layout
         self.helper.layout = Layout()
@@ -24,20 +24,16 @@ class FormulaireEmailExpedition(FormulaireBase, forms.Form):
         organisateur = Organisateur.objects.filter(pk=1).first()
         # === Création des fields ===
         self.fields["sans_expedition"] = forms.BooleanField(
-            label="Sans expedition d'emails",
-            required=False,
-            widget=forms.CheckboxInput(attrs={'class': 'text-start'})
+            label="Sans expedition d'emails", required=False, widget=forms.CheckboxInput(attrs={"class": "text-start"})
         )
         self.fields["sans_expedition"].initial = False
 
         self.fields["activer_expedition"] = forms.BooleanField(
-            label="Expédition d'emailss", 
-            required=False,
-            widget=forms.CheckboxInput(attrs={'class': 'text-start'})
+            label="Expédition d'emails", required=False, widget=forms.CheckboxInput(attrs={"class": "text-start"})
         )
         self.fields["activer_expedition"].initial = True
-        self.fields["activer_expedition"].initial = organisateur.expedition_mail_active
-        self.fields["sans_expedition"].initial = not organisateur.expedition_mail_active
+        self.fields["activer_expedition"].initial = organisateur.expedition_active
+        self.fields["sans_expedition"].initial = not organisateur.expedition_active
         # === CSS personnalisé pour les checkboxes ===
         custom_css = """
         <style>
@@ -78,29 +74,27 @@ class FormulaireEmailExpedition(FormulaireBase, forms.Form):
 
         # === Placement Sans Expédition en premier ===
         self.helper.layout.append(
-            Div(
-                Div("sans_expedition", css_class="custom-checkbox"),
-                css_class="checkbox-container"
-            )
+            Div(Div("sans_expedition", css_class="custom-checkbox"), css_class="checkbox-container")
         )
         self.helper.layout.append(
             Div(
-                HTML('<div class="custom-help-text">Cochez cette case pour Désactiver l\'intégration avec l\'Espace Numérique de Travail</div>'),
-                css_class="text-start"
+                HTML(
+                    "<div class=\"custom-help-text\">Cochez cette case pour Désactiver l'ajout des adresses d'expedition des mails</div>"
+                ),
+                css_class="text-start",
             )
         )
 
         # === Ensuite Expédition ===
         self.helper.layout.append(
-            Div(
-                Div("activer_expedition", css_class="custom-checkbox"),
-                css_class="checkbox-container"
-            )
+            Div(Div("activer_expedition", css_class="custom-checkbox"), css_class="checkbox-container")
         )
         self.helper.layout.append(
             Div(
-                HTML('<div class="custom-help-text">Cochez cette case pour activer l\'intégration avec l\'Espace Numérique de Travail</div>'),
-                css_class="text-start"
+                HTML(
+                    "<div class=\"custom-help-text\">Cochez cette case pour activer l'ajout des adresses d'expedition des mails</div>"
+                ),
+                css_class="text-start",
             )
         )
 
@@ -109,21 +103,21 @@ class FormulaireEmailExpedition(FormulaireBase, forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        activer_expedition = cleaned_data.get('activer_expedition')
-        sans_expedition = cleaned_data.get('sans_expedition')
-        organisateur = cache.get('organisateur', None)
+        activer_expedition = cleaned_data.get("activer_expedition")
+        sans_expedition = cleaned_data.get("sans_expedition")
+        organisateur = cache.get("organisateur", None)
         if not organisateur:
-            organisateur = cache.get_or_set('organisateur', Organisateur.objects.filter(pk=1).first())
-        organisateur.expedition_mail_active = activer_expedition
+            organisateur = cache.get_or_set("organisateur", Organisateur.objects.filter(pk=1).first())
+        organisateur.expedition_active = activer_expedition
         organisateur.save()
+        cache.set("organisateur", organisateur)
         print("*/*/*/*/")
         print(activer_expedition)
         if not activer_expedition and not sans_expedition:
-            raise forms.ValidationError(
-                "Vous devez cocher au moins une option : Expedition ou Sans Expedition."
-            )
+            raise forms.ValidationError("Vous devez cocher au moins une option : Expedition ou Sans Expedition.")
         return cleaned_data
-    
+
+
 # Mise à jour du EXTRA_SCRIPT pour gérer les 2 checkboxes
 EXTRA_SCRIPT = """
 <script>

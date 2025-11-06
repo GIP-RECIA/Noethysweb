@@ -46,6 +46,8 @@ urlpatterns = [
     path('parametrage/structures/ajouter', structures.Ajouter.as_view(), name='structures_ajouter'),
     path('parametrage/structures/modifier/<int:pk>', structures.Modifier.as_view(), name='structures_modifier'),
     path('parametrage/structures/supprimer/<int:pk>', structures.Supprimer.as_view(), name='structures_supprimer'),
+    path('parametrage/parametres_mail_expedition/', adresses_mail.parametre_expedition_mail.as_view(), name='parametres_mail_expedition'),
+
 
     # Groupes d'activités
     path('parametrage/types_groupes_activites/liste', types_groupes_activites.Liste.as_view(), name='types_groupes_activites_liste'),

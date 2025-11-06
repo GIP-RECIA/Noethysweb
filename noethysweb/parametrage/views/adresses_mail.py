@@ -4,16 +4,20 @@
 #  Distribué sous licence GNU GPL.
 
 import json
-from django.urls import reverse_lazy
-from django.http import JsonResponse
-from core.views.mydatatableview import MyDatatable, columns
-from core.views import crud
-from core.models import AdresseMail
-from parametrage.forms.adresses_mail import Formulaire
-from parametrage.forms.adresse_mail_expedition import FormulaireEmailExpedition
-from outils.utils import utils_email
+
 import django.contrib.messages
-from django.http import HttpResponseRedirect
+from django.contrib.auth.mixins import UserPassesTestMixin
+from django.http import HttpResponseRedirect, JsonResponse
+from django.urls import reverse_lazy
+from django.views.generic import TemplateView
+
+from core.models import AdresseMail
+from core.views import crud
+from core.views.base import CustomView
+from core.views.mydatatableview import MyDatatable, columns
+from outils.utils import utils_email
+from parametrage.forms.adresse_mail_expedition import FormulaireEmailExpedition
+from parametrage.forms.adresses_mail import Formulaire
 
 
 def Envoyer_mail_test(request):
@@ -90,18 +94,30 @@ class Liste(Page, crud.Liste):
 class Ajouter(Page, crud.Ajouter):
     form_class = Formulaire
 
+
 class Modifier(Page, crud.Modifier):
     form_class = Formulaire
+
 
 class Supprimer(Page, crud.Supprimer):
     pass
 
-class parametre_expedition_mail():
-    emplate_name = "core/crud/edit.html"
+
+class parametre_expedition_mail(CustomView, UserPassesTestMixin, TemplateView):
+    template_name = "core/crud/edit.html"
     compatible_demo = False
 
+    def test_func(self):
+        # Permet l'accès uniquement aux superusers
+        return self.request.user.is_superuser
+
+    def handle_no_permission(self):
+        # Message personnalisé si l'utilisateur n'est pas autorisé
+        django.contrib.messages.error(self.request, "Accès réservé aux administrateurs.")
+        return HttpResponseRedirect(reverse_lazy("parametrage_toc"))
+
     def get_context_data(self, **kwargs):
-        context = super(Modifier, self).get_context_data(**kwargs)
+        context = super(parametre_expedition_mail, self).get_context_data(**kwargs)
         context['page_titre'] = "Paramètres Expedition d'emails"
         context['box_titre'] = "Paramètres"
         context['box_introduction'] = "Ajustez les paramètres d'expédition des emails pour parametrer les adresses d'expedition."
@@ -109,32 +125,11 @@ class parametre_expedition_mail():
         return context
 
     def post(self, request, **kwargs):
-        form = Formulaire(request.POST, request=self.request)
+        form = FormulaireEmailExpedition(request.POST)
         if not form.is_valid():
             django.contrib.messages.error(request, 'Aucun paramétre coché!')
             return self.render_to_response(self.get_context_data(form=form))
 
-        # Enregistrement
-        # dict_parametres = {parametre.code: parametre for parametre in PortailParametre.objects.all()}
-        # liste_modifications = []
-        # for code, valeur in form.cleaned_data.items():
-        #     if code in dict_parametres:
-        #         dict_parametres[code].valeur = str(valeur)
-        #         liste_modifications.append(dict_parametres[code])
-        #     else:
-        #         PortailParametre.objects.create(code=code, valeur=str(valeur))
-        # if liste_modifications:
-        #     PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
-
-        # # Stocker les états des cases à cocher dans la session
-        # request.session['compte_individu_active'] = form.cleaned_data.get("compte_individu", False)
-        # request.session['compte_famille_active'] = form.cleaned_data.get("compte_famille", False)
-        # cache.delete("parametres_portail")
-
+        # Les données sont déjà enregistrées dans la méthode clean() du formulaire
         django.contrib.messages.success(request, 'Paramètres enregistrés')
         return HttpResponseRedirect(reverse_lazy("parametres_mail_expedition"))
-        """
-        Traite les erreurs du formulaire
-        """
-        messages.error(self.request, 'Veuillez corriger les erreurs ci-dessous.')
-        return super().form_invalid(form)

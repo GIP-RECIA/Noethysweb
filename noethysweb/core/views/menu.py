@@ -3,9 +3,11 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import copy, importlib
-from django.urls import reverse_lazy
+import copy
+import importlib
+
 from django.conf import settings
+from django.urls import reverse_lazy
 from django.utils.translation import gettext as _
 
 
@@ -27,6 +29,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
         menu_structure.Add(code="organisateur_ajouter", titre="Organisateur", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="structures_liste", titre="Structures", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="parametres_generaux", titre="Paramètres généraux ", icone="file-text-o")
+    menu_structure.Add(code="parametres_mail_expedition", titre="Paramètres d’expédition des e-mails", icone="file-text-o")
 
     # Activités
     menu_activites = menu_parametrage.Add(titre="Activités")
@@ -121,7 +124,17 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
 
     # Emails
     menu_emails = menu_parametrage.Add(titre="Emails")
-    menu_emails.Add(code="adresses_mail_liste", titre="Adresses d'expédition d'emails", icone="file-text-o", compatible_demo=False)
+    if (
+        (user and user.is_superuser)
+        or not organisateur
+        or (organisateur and organisateur.expedition_active)
+    ):
+        menu_emails.Add(
+            code="adresses_mail_liste",
+            titre="Adresses d'expédition d'emails",
+            icone="file-text-o",
+            compatible_demo=False,
+        )
     menu_emails.Add(code="signatures_emails_liste", titre="Signatures d'emails", icone="file-text-o")
     menu_emails.Add(code="listes_diffusion_liste", titre="Listes de diffusion", icone="file-text-o")
     menu_emails.Add(code="outils_parametres_generaux", titre="Paramètres généraux Emails", icone="file-text-o")
@@ -229,7 +242,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
 
 
     # ------------------------------------ Individus ------------------------------------
-    menu_individus = menu.Add(code="individus_toc", titre="Individus", icone="user", toujours_afficher=True )
+    menu_individus = menu.Add(code="individus_toc", titre="Individus", icone="user", toujours_afficher=True)
 
     # Liste des individus
     menu_gestion_individus = menu_individus.Add(titre="Gestion des individus")
@@ -625,7 +638,7 @@ class Menu():
                 if child.code == code:
                     return child
                 resultat = boucle(child.GetChildren())
-                if resultat != None :
+                if resultat != None:
                     return resultat
         return boucle(self.GetChildren())
 
