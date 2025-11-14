@@ -54,10 +54,10 @@ class EntListeIndividus(CustomView, TemplateView):
             # idfamille est utilisé pour vérifier s'il s'agit dun ajout d'un individu à une famille existante deja
             if idfamille:
                 new_famille = Famille.objects.get(pk=idfamille)
-
             else:
                 new_famille = self.creation_famille()
             self.creation_nouvel_individu(search_info, new_famille)
+            new_famille.Maj_infos()
             url_success = reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk})
 
         # Nouvelle action pour ajouter uniquement un représentant

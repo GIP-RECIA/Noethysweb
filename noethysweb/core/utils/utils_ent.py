@@ -217,7 +217,7 @@ def get_ent_user_info(nom, prenom):
                 "prenom": "Test10",
                 "nom": "Test10",
                 "email": "jean.dupont@mail.fr",
-                "telephone": "0601020304",
+                "telephone_mobile": "0601020304",
             },
             {
                 "ent_id": "user124",
@@ -225,7 +225,7 @@ def get_ent_user_info(nom, prenom):
                 "prenom": "Marie",
                 "nom": "DUPONT",
                 "email": "marie.dupont@mail.fr",
-                "telephone": "0605060708",
+                "telephone_mobile": "0605060708",
             },
             # Enfant DUPONT
             {
@@ -269,7 +269,7 @@ def get_ent_user_info(nom, prenom):
                 "prenom": "Test10",
                 "nom": "Test10",
                 "email": "Testent.Testent@mail.fr",
-                "telephone": "0610101010",
+                "telephone_mobile": "0610101010",
             },
             # Enfant MARTIN
             {
