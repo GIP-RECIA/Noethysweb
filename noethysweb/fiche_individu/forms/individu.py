@@ -142,7 +142,8 @@ class Formulaire(FormulaireBase, ModelForm):
                     # Import dynamique pour éviter les problèmes de dépendances
                     
                     ent_result = get_ent_users(nom, prenom)
-                    
+                    print("*/*/*/*/")
+                    print(ent_result)
                     # Si get_ent_users retourne une liste non vide, on stocke l'information pour redirection
                     if isinstance(ent_result, list) and len(ent_result) > 0:
                         self.redirect_to_ent_liste = True

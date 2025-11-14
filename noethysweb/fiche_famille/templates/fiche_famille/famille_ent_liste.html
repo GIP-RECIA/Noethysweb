@@ -94,8 +94,31 @@
         
         .enfant {
             border-left: 4px solid #4299e1;
+            cursor: pointer;
+            position: relative;
         }
-        
+
+        .enfant:hover {
+            background: #f0f4ff;
+            border-color: #3182ce;
+        }
+
+        .enfant::after {
+            content: "Cliquer pour voir la famille";
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: #4299e1;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .enfant:hover::after {
+            opacity: 1;
+        }
+
         .info-line {
             font-size: 14px;
             margin: 4px 0;
@@ -169,52 +192,46 @@
     {% for famille in rattachements %}
         <div class="card family-card">
             <div class="family-header">
-                <span>{{ famille.nom_famille }}</span>
+                <span>{{ famille.representant.civilite }} {{ famille.representant.prenom }} {{ famille.representant.nom }}</span>
                 <form method="post">
                     {% csrf_token %}
-                    <input type="hidden" name="famille_index" value="{{ forloop.counter0 }}">
-                    <button type="submit" class="btn btn-sm btn-add">
-                        <i class="fa fa-plus"></i> Ajouter
+                    <input type="hidden" name="action" value="ajouter_representant">
+                    <input type="hidden" name="individu_id" value="{{ famille.representant.id_ent }}">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fa fa-user-plus"></i> Ajouter ce représentant
                     </button>
                 </form>
             </div>
             <div class="card-body">
-
-                <!-- Représentants -->
-                <div class="section-title">
-                    <i class="fa fa-users"></i> Représentants
-                </div>
-                {% for rep in famille.representants %}
-                    <div class="representant">
-                        <div class="info-line">
-                            <strong>{{ rep.civilite }} {{ rep.prenom }} {{ rep.nom }}</strong>
-                        </div>
-                        <div class="info-line">
-                            <span class="emoji">📧</span> {{ rep.email }}
-                        </div>
-                        <div class="info-line">
-                            <span class="emoji">📞</span> {{ rep.telephone }}
-                        </div>
+                <!-- Informations du représentant -->
+                <div class="representant">
+                    <div class="info-line">
+                        <span class="emoji">📧</span> <strong>Email:</strong> {{ famille.representant.email|default:"Non renseigné" }}
                     </div>
-                {% empty %}
-                    <div class="text-muted">Aucun représentant</div>
-                {% endfor %}
+                    <div class="info-line">
+                        <span class="emoji">📞</span> <strong>Téléphone:</strong> {{ famille.representant.telephone|default:"Non renseigné" }}
+                    </div>
+                </div>
 
-                <!-- Enfants -->
+                <!-- Enfants du représentant -->
                 <div class="section-title">
                     <i class="fa fa-graduation-cap"></i> Enfants
                 </div>
                 {% for enfant in famille.enfants %}
-                    <div class="enfant">
+                    <div class="enfant" data-enfant-id="{{ enfant.id_ent }}" data-has-famille="{% if idfamille %}true{% else %}false{% endif %}" data-famille-id="{% if idfamille %}{{ idfamille }}{% endif %}">
                         <div class="info-line">
                             <strong>{{ enfant.civilite }} {{ enfant.prenom }} {{ enfant.nom }}</strong>
                         </div>
+                        {% if enfant.scolarite.ecole %}
                         <div class="info-line">
-                            <span class="emoji">🏫</span> {{ enfant.ecole.nom }}
+                            <span class="emoji">🏫</span> {{ enfant.scolarite.ecole.nom }}
                         </div>
+                        {% endif %}
+                        {% if enfant.scolarite.classe %}
                         <div class="info-line">
-                            <span class="emoji">📘</span> Classe: {{ enfant.classe.nom }}
+                            <span class="emoji">📘</span> Classe: {{ enfant.scolarite.classe.nom }}
                         </div>
+                        {% endif %}
                     </div>
                 {% empty %}
                     <div class="text-muted">Aucun enfant</div>
@@ -228,4 +245,47 @@
         <p>Aucun résultat pour cette recherche.</p>
     </div>
 {% endif %}
+
+<div class="card family-card">
+    <div class="family-header">
+        <span>Pas trouvé le bon individu ?</span>
+    </div>
+    <div class="card-body">
+        <div class="text-center">
+            <p class="mb-3 text-gray-700">
+                Aucun des individus listés ne correspond à celui que vous souhaitez ajouter ?
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="ajouter_nouvel_individu">
+                <button type="submit" class="btn btn-lg btn-success">
+                    <i class="fa fa-user-plus"></i> Ajouter un nouvel individu
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gérer le clic sur les enfants pour voir leur famille
+    const enfants = document.querySelectorAll('.enfant[data-enfant-id]');
+
+    enfants.forEach(function(enfant) {
+        enfant.addEventListener('click', function() {
+            const enfantId = this.getAttribute('data-enfant-id');
+            const hasFamille = this.getAttribute('data-has-famille') === 'true';
+            const familleId = this.getAttribute('data-famille-id');
+
+            // Construire l'URL en utilisant le bon format
+            const baseUrl = '{{ request.scheme }}://{{ request.get_host }}';
+            if (hasFamille && familleId) {
+                window.location.href = baseUrl + "{% url 'famille_enfant_ent_avec_famille' enfant_ent_id='ENFANT_ID' idfamille=0 %}".replace('ENFANT_ID', enfantId).replace('/0/', '/' + familleId + '/');
+            } else {
+                window.location.href = baseUrl + "{% url 'famille_enfant_ent' enfant_ent_id='ENFANT_ID' %}".replace('ENFANT_ID', enfantId);
+            }
+        });
+    });
+});
+</script>
 {% endblock contenu_page %}

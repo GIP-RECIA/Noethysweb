@@ -14,32 +14,54 @@ def get_ent_users(nom, prenom):
     try:
         exemple_users = [
                             {
-                                "famille_id": 1,
-                                "nom_famille": "Famille DUPONT",
-                                "representants": [
-                                    {
-                                        "id_ent": "user179",
-                                        "civilite": "Monsieur",
-                                        "prenom": "Test10",
-                                        "nom": "Test10",
-                                        "email": "jean.dupont@mail.fr",
-                                        "telephone": "0601020304",
-                                    },
-                                    {
-                                        "id_ent": "user124",
-                                        "civilite": "Madame",
-                                        "prenom": "Marie",
-                                        "nom": "DUPONT",
-                                        "email": "marie.dupont@mail.fr",
-                                        "telephone": "0605060708",
-                                    },
-                                ],
+                                "representant": {
+                                    "id_ent": "user179",
+                                    "civilite": "Monsieur",
+                                    "prenom": "Test10",
+                                    "nom": "Test10",
+                                    "email": "jean.dupont@mail.fr",
+                                    "telephone": "0601020304",
+                                },
                                 "enfants": [
                                     {
                                         "id_ent": "user131",
                                         "civilite": "Monsieur",
                                         "prenom": "Lucas",
-                                        "nom": "DUPONT",
+                                        "nom": "Dupont",
+                                        "scolarite": {
+                                            "date_debut": "2024-09-01",
+                                            "date_fin": "2025-06-30",
+                                            "ecole": {
+                                                "id": 10,
+                                                "nom": "Collège Victor Hugo",
+                                                "rue": "12 rue de la République",
+                                                "cp": "75001",
+                                                "ville": "Paris",
+                                                "tel": "0140203040",
+                                                "fax": "0140203041",
+                                                "mail": "contact@victorhugo.fr",
+                                                "uai": "0751234A",
+                                                },
+                                            "classe": {
+                                                "id": 101,
+                                                "nom": "6ème A",
+                                                "date_debut": "2024-09-01",
+                                                "date_fin": "2025-06-30",
+                                                "ecole_id": 10,
+                                            },
+                                            "niveau": {
+                                                "id": 6,
+                                                "ordre": 6,
+                                                "nom": "Sixième",
+                                                "abrege": "6ème",
+                                            },
+                                        },
+                                    },
+                                    {
+                                        "id_ent": "user132",
+                                        "civilite": "Madame",
+                                        "prenom": "Emma",
+                                        "nom": "Dupont",
                                         "scolarite": {
                                             "date_debut": "2024-09-01",
                                             "date_fin": "2025-06-30",
@@ -55,41 +77,37 @@ def get_ent_users(nom, prenom):
                                                 "uai": "0751234A",
                                             },
                                             "classe": {
-                                                "id": 101,
-                                                "nom": "6ème A",
+                                                "id": 102,
+                                                "nom": "5ème B",
                                                 "date_debut": "2024-09-01",
                                                 "date_fin": "2025-06-30",
                                                 "ecole_id": 10,
                                             },
                                             "niveau": {
-                                                "id": 6,
-                                                "ordre": 6,
-                                                "nom": "Sixième",
-                                                "abrege": "6ème",
+                                                "id": 5,
+                                                "ordre": 5,
+                                                "nom": "Cinquième",
+                                                "abrege": "5ème",
                                             },
                                         },
-                                    }
+                                    },
                                 ],
                             },
                             {
-                                "famille_id": 2,
-                                "nom_famille": "Famille MARTIN",
-                                "representants": [
-                                    {
-                                        "id_ent": "user2087",
-                                        "civilite": "Monsieur",
-                                        "prenom": "Test10",
-                                        "nom": "Test10",
-                                        "email": "Testent.Testent@mail.fr",
-                                        "telephone": "0610101010",
-                                    }
-                                ],
+                                "representant": {
+                                    "id_ent": "user2087",
+                                    "civilite": "Monsieur",
+                                    "prenom": "Test10",
+                                    "nom": "Test10",
+                                    "email": "paul.martin@mail.fr",
+                                    "telephone": "0610101010",
+                                },
                                 "enfants": [
                                     {
-                                        "id_ent": "user2087",
+                                        "id_ent": "user3001",
                                         "civilite": "Madame",
-                                        "prenom": "TestEnfant10",
-                                        "nom": "TestEnfant10",
+                                        "prenom": "Clara",
+                                        "nom": "Martin",
                                         "scolarite": {
                                             "date_debut": "2024-09-01",
                                             "date_fin": "2025-06-30",
@@ -118,7 +136,41 @@ def get_ent_users(nom, prenom):
                                                 "abrege": "CE2",
                                             },
                                         },
-                                    }
+                                    },
+                                    {
+                                        "id_ent": "user3002",
+                                        "civilite": "Monsieur",
+                                        "prenom": "Tom",
+                                        "nom": "Martin",
+                                        "scolarite": {
+                                            "date_debut": "2024-09-01",
+                                            "date_fin": "2025-06-30",
+                                            "ecole": {
+                                                "id": 21,
+                                                "nom": "École élémentaire Jean Moulin",
+                                                "rue": "25 avenue des Écoles",
+                                                "cp": "69001",
+                                                "ville": "Lyon",
+                                                "tel": "0472101112",
+                                                "fax": "0472101113",
+                                                "mail": "contact@jeanmoulin.fr",
+                                                "uai": "0695678B",
+                                            },
+                                            "classe": {
+                                                "id": 202,
+                                                "nom": "CM1",
+                                                "date_debut": "2024-09-01",
+                                                "date_fin": "2025-06-30",
+                                                "ecole_id": 21,
+                                            },
+                                            "niveau": {
+                                                "id": 4,
+                                                "ordre": 4,
+                                                "nom": "Cours Moyen 1",
+                                                "abrege": "CM1",
+                                            },
+                                        },
+                                    },
                                 ],
                             },
                         ]
@@ -127,16 +179,17 @@ def get_ent_users(nom, prenom):
         organisateur = Organisateur.objects.filter(pk=1).first()
         if organisateur.ent_active:
             for famille in exemple_users:
-                match_reps = [
-                    rep for rep in famille["representants"]
-                    if rep["nom"].lower() == nom.lower() and rep["prenom"].lower() == prenom.lower()
-                ]
+                rep = famille["representant"]
+                match_rep = (
+                rep["nom"].lower() == nom.lower()
+                and rep["prenom"].lower() == prenom.lower()
+            )
                 match_enfants = [
                     enf for enf in famille["enfants"]
                     if enf["nom"].lower() == nom.lower() and enf["prenom"].lower() == prenom.lower()
                 ]
 
-                if match_reps or match_enfants:
+                if match_rep or match_enfants:
                     # On garde toute la famille, même si un seul correspond
                     result.append(famille)
 
@@ -579,6 +632,209 @@ def get_collaborateur_by_ent_id(ent_id):
     except Exception as e:
         print(f"Erreur lors de la recherche ENT: {e}")
         return []
+
+def get_enfant_famille(ent_id):
+    """
+    Récupère la famille d'un enfant à partir de son ent_id
+
+    Args:
+        ent_id (str): L'identifiant ENT de l'enfant
+
+    Returns:
+        dict: Un dictionnaire contenant:
+            - representants: liste des représentants de la famille
+            - enfant: l'objet enfant
+        None si l'enfant n'est pas trouvé
+    """
+    try:
+        # Données d'exemple des familles ENT
+        exemple_familles = [
+            {
+                "representants": [
+                    {
+                        "id_ent": "user179",
+                        "civilite": "Monsieur",
+                        "prenom": "Test10",
+                        "nom": "Test10",
+                        "email": "jean.dupont@mail.fr",
+                        "telephone": "0601020304",
+                    }
+                ],
+                "enfants": [
+                    {
+                        "id_ent": "user131",
+                        "civilite": "Monsieur",
+                        "prenom": "Lucas",
+                        "nom": "Dupont",
+                        "scolarite": {
+                            "date_debut": "2024-09-01",
+                            "date_fin": "2025-06-30",
+                            "ecole": {
+                                "id": 10,
+                                "nom": "Collège Victor Hugo",
+                                "rue": "12 rue de la République",
+                                "cp": "75001",
+                                "ville": "Paris",
+                                "tel": "0140203040",
+                                "fax": "0140203041",
+                                "mail": "contact@victorhugo.fr",
+                                "uai": "0751234A",
+                            },
+                            "classe": {
+                                "id": 101,
+                                "nom": "6ème A",
+                                "date_debut": "2024-09-01",
+                                "date_fin": "2025-06-30",
+                                "ecole_id": 10,
+                            },
+                            "niveau": {
+                                "id": 6,
+                                "ordre": 6,
+                                "nom": "Sixième",
+                                "abrege": "6ème",
+                            },
+                        },
+                    },
+                    {
+                        "id_ent": "user132",
+                        "civilite": "Madame",
+                        "prenom": "Emma",
+                        "nom": "Dupont",
+                        "scolarite": {
+                            "date_debut": "2024-09-01",
+                            "date_fin": "2025-06-30",
+                            "ecole": {
+                                "id": 10,
+                                "nom": "Collège Victor Hugo",
+                                "rue": "12 rue de la République",
+                                "cp": "75001",
+                                "ville": "Paris",
+                                "tel": "0140203040",
+                                "fax": "0140203041",
+                                "mail": "contact@victorhugo.fr",
+                                "uai": "0751234A",
+                            },
+                            "classe": {
+                                "id": 102,
+                                "nom": "5ème B",
+                                "date_debut": "2024-09-01",
+                                "date_fin": "2025-06-30",
+                                "ecole_id": 10,
+                            },
+                            "niveau": {
+                                "id": 5,
+                                "ordre": 5,
+                                "nom": "Cinquième",
+                                "abrege": "5ème",
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                "representants": [
+                    {
+                        "id_ent": "user2087",
+                        "civilite": "Monsieur",
+                        "prenom": "Test10",
+                        "nom": "Test10",
+                        "email": "paul.martin@mail.fr",
+                        "telephone": "0610101010",
+                    }
+                ],
+                "enfants": [
+                    {
+                        "id_ent": "user3001",
+                        "civilite": "Madame",
+                        "prenom": "Clara",
+                        "nom": "Martin",
+                        "scolarite": {
+                            "date_debut": "2024-09-01",
+                            "date_fin": "2025-06-30",
+                            "ecole": {
+                                "id": 20,
+                                "nom": "École élémentaire Jean Moulin",
+                                "rue": "25 avenue des Écoles",
+                                "cp": "69001",
+                                "ville": "Lyon",
+                                "tel": "0472101112",
+                                "fax": "0472101113",
+                                "mail": "contact@jeanmoulin.fr",
+                                "uai": "0695678B",
+                            },
+                            "classe": {
+                                "id": 201,
+                                "nom": "CE2",
+                                "date_debut": "2024-09-01",
+                                "date_fin": "2025-06-30",
+                                "ecole_id": 20,
+                            },
+                            "niveau": {
+                                "id": 3,
+                                "ordre": 3,
+                                "nom": "Cours Élémentaire 2",
+                                "abrege": "CE2",
+                            },
+                        },
+                    },
+                    {
+                        "id_ent": "user3002",
+                        "civilite": "Monsieur",
+                        "prenom": "Tom",
+                        "nom": "Martin",
+                        "scolarite": {
+                            "date_debut": "2024-09-01",
+                            "date_fin": "2025-06-30",
+                            "ecole": {
+                                "id": 21,
+                                "nom": "École élémentaire Jean Moulin",
+                                "rue": "25 avenue des Écoles",
+                                "cp": "69001",
+                                "ville": "Lyon",
+                                "tel": "0472101112",
+                                "fax": "0472101113",
+                                "mail": "contact@jeanmoulin.fr",
+                                "uai": "0695678B",
+                            },
+                            "classe": {
+                                "id": 202,
+                                "nom": "CM1",
+                                "date_debut": "2024-09-01",
+                                "date_fin": "2025-06-30",
+                                "ecole_id": 21,
+                            },
+                            "niveau": {
+                                "id": 4,
+                                "ordre": 4,
+                                "nom": "Cours Moyen 1",
+                                "abrege": "CM1",
+                            },
+                        },
+                    },
+                ],
+            },
+        ]
+
+        organisateur = Organisateur.objects.filter(pk=1).first()
+        if not organisateur or not organisateur.ent_active:
+            return None
+
+        # Chercher l'enfant dans toutes les familles
+        for famille in exemple_familles:
+            for enfant in famille.get("enfants", []):
+                if enfant.get("id_ent") == ent_id:
+                    # Retourner les représentants et l'enfant trouvé
+                    return {
+                        "representants": famille.get("representants", []),
+                        "enfant": enfant
+                    }
+
+        return None
+
+    except Exception as e:
+        print(f"Erreur lors de la recherche de la famille de l'enfant: {e}")
+        return None
+
 
 def get_ent_ecole(uai):
     """

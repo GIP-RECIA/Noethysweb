@@ -27,6 +27,8 @@ urlpatterns = [
     path('individus/familles/supprimer/<int:idfamille>', famille.Supprimer_famille.as_view(), name='famille_supprimer'),
     path('individus/familles/resume/<int:idfamille>', famille.Resume.as_view(), name='famille_resume'),
     path('individus/familles/ent/synchroniser', famille_ent.FamillesSynchroView.as_view(), name='synchroniser_familles'),
+    path('individus/familles/ent/enfant/<str:enfant_ent_id>/', famille_ent.FamilleEnfantEntView.as_view(), name='famille_enfant_ent'),
+    path('individus/familles/ent/enfant/<str:enfant_ent_id>/famille/<int:idfamille>/', famille_ent.FamilleEnfantEntView.as_view(), name='famille_enfant_ent_avec_famille'),
 
     path('individus/familles/questionnaire/<int:idfamille>', famille_questionnaire.Consulter.as_view(), name='famille_questionnaire'),
     path('individus/familles/questionnaire/modifier/<int:idfamille>', famille_questionnaire.Modifier.as_view(), name='famille_questionnaire_modifier'),

@@ -9,7 +9,7 @@ from django.urls import reverse_lazy
 import logging
 from django.contrib import messages
 from django.http import JsonResponse
-from core.utils.utils_ent import get_ent_user_info
+from core.utils.utils_ent import get_ent_user_info, get_enfant_famille
 from core.data import data_civilites
 import time
 import json
@@ -39,7 +39,6 @@ class EntListeIndividus(CustomView, TemplateView):
             context["idfamille"] = int(idfamille)
         else:
             context["mode"] = "familles"
-
         return context
     
     @transaction.atomic
@@ -47,18 +46,57 @@ class EntListeIndividus(CustomView, TemplateView):
         action = request.POST.get("action", "")
         idfamille = kwargs.get("idfamille", None)
         search_info = self.request.session.get('search_info', {})
-        # Ce parametre est utilisé pour identifier s'il s'agit d'un ajout de toute une famille ou juste un individu à une famille
+        # Ce parametre est utilisé pour identifier s'il s'agit d'importer toute une famille de l'ent ou juste un individu à une famille
         individu_id = request.POST.get("individu_id")
 
+        # L'action est utilisée pour savoir si l'on veut simplement ajouter un nouvel individu indépendamment des données de l'ENT
         if action == "ajouter_nouvel_individu":
-            # L’action est utilisée pour savoir si l’on veut simplement ajouter un nouvel individu indépendamment des données de l’ENT
+            # idfamille est utilisé pour vérifier s'il s'agit dun ajout d'un individu à une famille existante deja
             if idfamille:
                 new_famille = Famille.objects.get(pk=idfamille)
-                
+
             else:
                 new_famille = self.creation_famille()
             self.creation_nouvel_individu(search_info, new_famille)
             url_success = reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk})
+
+        # Nouvelle action pour ajouter uniquement un représentant
+        elif action == "ajouter_representant":
+            familles = request.session.get("ent_users_data", [])
+
+            if not individu_id:
+                messages.add_message(self.request, messages.ERROR, "Identifiant du représentant manquant")
+                return HttpResponseRedirect(reverse_lazy("ent_liste_familles"))
+
+            # Trouver le représentant dans les données de session
+            individu_trouve = self.trouver_individu_par_ent_id(individu_id, familles)
+
+            if not individu_trouve:
+                messages.add_message(self.request, messages.ERROR, "Représentant introuvable")
+                return HttpResponseRedirect(reverse_lazy("ent_liste_familles"))
+
+            # Vérifier si on ajoute à une famille existante ou si on crée une nouvelle famille
+            if idfamille:
+                new_famille = Famille.objects.get(pk=idfamille)
+            else:
+                # Vérifier si ce représentant existe déjà dans une famille
+                existing_individu = Individu.objects.filter(ent_id=individu_id).first()
+                if existing_individu:
+                    existing_rattachement = Rattachement.objects.filter(individu=existing_individu, categorie__in=[1, 3]).first()
+                    if existing_rattachement:
+                        messages.add_message(self.request, messages.ERROR, "Ce représentant existe déjà dans une famille")
+                        return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={'idfamille': existing_rattachement.famille.pk}))
+
+                # Créer une nouvelle famille
+                new_famille = self.creation_famille()
+
+            # Ajouter le représentant (catégorie 1)
+            self.creation_individu_ent(individu_trouve, new_famille, 1)
+            new_famille.Maj_infos()
+
+            messages.add_message(self.request, messages.SUCCESS, "Représentant ajouté avec succès")
+            url_success = reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk})
+
         else:
             familles = request.session.get("ent_users_data", [])
             if idfamille:
@@ -69,12 +107,12 @@ class EntListeIndividus(CustomView, TemplateView):
             else:
                 index = int(request.POST.get("famille_index"))
                 famille = familles[index]
-                # Avant de créer la famille, on vérifie si l’un des enfants appartient déjà à une famille dans la base (dans ce cas, cette famille existe déjà).
-                # Si une telle famille existe, on redirige alors l’utilisateur vers la fiche de cette famille.
+                # Avant de créer la famille, on vérifie si l'un des enfants appartient déjà à une famille dans la base (dans ce cas, cette famille existe déjà).
+                # Si une telle famille existe, on redirige alors l'utilisateur vers la fiche de cette famille.
                 new_famille = self.chercher_famille_avec_ent_id(famille)
                 if new_famille:
                      messages.add_message(self.request, messages.ERROR, "Famille existe déjà")
-                else:     
+                else:
                     new_famille = self.creation_famille()
                     for indiv in famille["representants"]:
                         self.creation_individu_ent(indiv, new_famille, 1)
@@ -90,12 +128,11 @@ class EntListeIndividus(CustomView, TemplateView):
     def trouver_individu_par_ent_id(self, individu_id, familles):
         """
         Trouve un individu dans les données de session par son id_ent
-        """        
+        """
         for famille in familles:
             # Chercher dans les représentants
-            for rep in famille.get("representants", []):
-                if str(rep.get("id_ent")) == str(individu_id):
-                    return rep
+            if str(famille.get("representant", None).get("id_ent")) == str(individu_id):
+                return famille.get("representant", None)
             
             # Chercher dans les enfants
             for enfant in famille.get("enfants", []):
@@ -724,3 +761,85 @@ class FamillesSynchroView(CustomView, TemplateView):
         }
         
         return traductions.get(champ_db, champ_db)
+
+
+class FamilleEnfantEntView(CustomView, TemplateView):
+    """Vue pour afficher la famille d'un enfant spécifique depuis l'ENT"""
+    menu_code = "famille_enfant_ent"
+    template_name = "fiche_famille/famille_enfant_ent.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        enfant_ent_id = kwargs.get("enfant_ent_id", None)
+        idfamille = kwargs.get("idfamille", None)
+
+        if enfant_ent_id:
+            famille_data = get_enfant_famille(enfant_ent_id)
+            if famille_data:
+                context['representants'] = famille_data.get('representants', [])
+                context['enfant'] = famille_data.get('enfant')
+                context['enfant_ent_id'] = enfant_ent_id
+            else:
+                context['representants'] = []
+                context['enfant'] = None
+                messages.add_message(self.request, messages.ERROR, "Famille de l'enfant introuvable dans l'ENT")
+
+        if idfamille:
+            context["idfamille"] = int(idfamille)
+
+        context['page_titre'] = "Famille de l'enfant - ENT"
+        return context
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        """Ajouter toute la famille (représentants + enfant)"""
+        enfant_ent_id = kwargs.get("enfant_ent_id", None)
+        idfamille = kwargs.get("idfamille", None)
+
+        if not enfant_ent_id:
+            messages.add_message(request, messages.ERROR, "Identifiant de l'enfant manquant")
+            return HttpResponseRedirect(reverse_lazy("ent_liste_familles"))
+
+        # Récupérer la famille de l'enfant
+        famille_data = get_enfant_famille(enfant_ent_id)
+
+        if not famille_data:
+            messages.add_message(request, messages.ERROR, "Famille introuvable dans l'ENT")
+            return HttpResponseRedirect(reverse_lazy("ent_liste_familles"))
+
+        # Vérifier si on ajoute à une famille existante ou si on crée une nouvelle famille
+        if idfamille:
+            new_famille = Famille.objects.get(pk=idfamille)
+        else:
+            # Vérifier si la famille existe déjà en base
+            enfant_obj = famille_data.get('enfant')
+            existing_rattachement = Rattachement.objects.filter(
+                individu__ent_id=enfant_obj.get('id_ent')
+            ).first()
+
+            if existing_rattachement:
+                messages.add_message(request, messages.ERROR, "Cette famille existe déjà")
+                return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={'idfamille': existing_rattachement.famille.pk}))
+
+            # Créer une nouvelle famille
+            view_instance = EntListeIndividus()
+            view_instance.request = request
+            new_famille = view_instance.creation_famille()
+
+        # Ajouter les représentants
+        for representant in famille_data.get('representants', []):
+            view_instance = EntListeIndividus()
+            view_instance.request = request
+            view_instance.creation_individu_ent(representant, new_famille, 1)
+
+        # Ajouter l'enfant
+        enfant_obj = famille_data.get('enfant')
+        view_instance = EntListeIndividus()
+        view_instance.request = request
+        view_instance.creation_individu_ent(enfant_obj, new_famille, 2)
+
+        # Mettre à jour les infos de la famille
+        new_famille.Maj_infos()
+
+        messages.add_message(request, messages.SUCCESS, "Famille ajoutée avec succès")
+        return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={'idfamille': new_famille.pk}))
