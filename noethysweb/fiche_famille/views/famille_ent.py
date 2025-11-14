@@ -253,9 +253,20 @@ class EntListeIndividus(CustomView, TemplateView):
             ecole= Ecole.objects.filter(
                 uai=scolarite.get("ecole", {}).get("uai")).first()
 
-            # Création / récupération classe
-            classe= Classe.objects.get_or_create(
-                nom=scolarite.get("classe", {}).get("nom"),ecole=ecole).first()
+            # Récupérer les données de la classe depuis l'ENT
+            classe_data = scolarite.get("classe", {})
+            date_debut = scolarite.get("date_debut") or classe_data.get("date_debut")
+            date_fin = scolarite.get("date_fin") or classe_data.get("date_fin")
+
+            # Création / récupération classe avec les dates requises
+            classe, created = Classe.objects.get_or_create(
+                nom=classe_data.get("nom"),
+                ecole=ecole,
+                defaults={
+                    'date_debut': date_debut,
+                    'date_fin': date_fin
+                }
+            )
 
             # Création / récupération niveau
             niveau= NiveauScolaire.objects.filter(nom=scolarite.get("niveau", {}).get("nom")).first()
@@ -263,8 +274,8 @@ class EntListeIndividus(CustomView, TemplateView):
             # Création scolarité
             scolarite_obj = Scolarite.objects.create(
                 individu=new_indiv,
-                date_debut=scolarite.get("date_debut"),
-                date_fin=scolarite.get("date_fin"),
+                date_debut=date_debut,
+                date_fin=date_fin,
                 ecole=ecole,
                 classe=classe,
                 niveau=niveau
