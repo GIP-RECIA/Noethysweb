@@ -80,11 +80,37 @@ class MyPasswordResetForm(PasswordResetForm):
         email = self.cleaned_data["email"]
         logger.debug("Demande de reset du password : %s %s." % (identifiant, email))
 
-        # Recherche l'utilisateur
-        utilisateur = Utilisateur.objects.filter(username__iexact=identifiant, is_active=True, categorie="famille").first()
-        if not utilisateur or not utilisateur.famille.mail or utilisateur.famille.mail != email:
-            logger.debug("Erreur : Pas de compte actif existant.")
-            return _("Il n'existe pas de compte actif correspondant à cet identifiant et cette adresse Email.")
+        # Récupération des paramètres généraux
+        from core.utils.utils_parametres_generaux import Get_dict_parametres
+        parametres = Get_dict_parametres()
+        
+        # Vérification des types de comptes autorisés
+        comptes_autorises = []
+        if parametres.get("compte_famille"):
+            comptes_autorises.append("famille")
+        if parametres.get("compte_individu"):
+            comptes_autorises.append("individu")
+            
+        if not comptes_autorises:
+            logger.debug("Erreur : Aucun type de compte n'est autorisé dans les paramètres généraux.")
+            return _("Aucun type de compte n'est actuellement autorisé. Veuillez contacter l'administrateur.")
+        
+        # Recherche de l'utilisateur
+        utilisateur = Utilisateur.objects.filter(username__iexact=identifiant, is_active=True).first()
+        
+        # Vérification du type de compte et de l'email
+        if not utilisateur or utilisateur.categorie not in comptes_autorises:
+            logger.debug(f"Erreur : Type de compte non autorisé ou compte inactif. Types autorisés: {', '.join(comptes_autorises)}")
+            return _("Type de compte non autorisé ou compte inactif.")
+            
+        if utilisateur.categorie == "famille":
+            if not hasattr(utilisateur, 'famille') or not utilisateur.famille or not utilisateur.famille.mail or utilisateur.famille.mail.lower() != email.lower():
+                logger.debug("Erreur : Aucun compte famille actif trouvé avec cet identifiant et cet email.")
+                return _("Il n'existe pas de compte actif correspondant à cet identifiant et cette adresse Email.")
+        elif utilisateur.categorie == "individu":
+            if not hasattr(utilisateur, 'individu') or not utilisateur.individu or not utilisateur.individu.mail or utilisateur.individu.mail.lower() != email.lower():
+                logger.debug("Erreur : Aucun compte individu actif trouvé avec cet identifiant et cet email.")
+                return _("Il n'existe pas de compte actif correspondant à cet identifiant et cette adresse Email.")
 
         if not domain_override:
             current_site = get_current_site(request)
