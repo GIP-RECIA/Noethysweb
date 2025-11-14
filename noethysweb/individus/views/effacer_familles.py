@@ -130,7 +130,7 @@ class Liste(Page, crud.Liste):
     model = Famille
 
     def get_queryset(self):
-        return Famille.objects.filter(self.Get_filtres("Q")).annotate(derniere_action=Max("historique__horodatage"), derniere_prestation=Max("prestation__date"))
+        return Famille.objects.filter(self.Get_filtres("Q")).annotate(derniere_action=Max("historique__horodatage"), derniere_prestation=Max("prestation__date")).exclude(nom="Famille effacée")
 
     def get_context_data(self, **kwargs):
         context = super(Liste, self).get_context_data(**kwargs)

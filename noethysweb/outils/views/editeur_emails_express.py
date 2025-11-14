@@ -3,17 +3,32 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-from django.http import JsonResponse
-from core.models import ModeleEmail, Mail, PieceJointe, Destinataire, Famille, Individu, Contact, AdresseMail, DocumentJoint
-from outils.utils import utils_email
-from outils.forms.editeur_emails_express import Formulaire
-from django.shortcuts import render
-import json, re
+import json
 from email.utils import parseaddr
+
+from django.conf import settings
+from django.core.cache import cache
+from django.db.models import Q
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.urls import reverse
+
+from core.models import (
+    Destinataire,
+    DocumentJoint,
+    Famille,
+    Individu,
+    Mail,
+    ModeleEmail,
+    Organisateur,
+    SignatureEmail,
+)
+from outils.forms.editeur_emails_express import Formulaire
+from outils.utils import utils_email
 
 
 def Envoyer_email(request):
-    """ Envoi d'email sur appel ajax """
+    """Envoi d'email sur appel ajax"""
     # Récupération des variables
     idmail = int(request.POST.get("idmail"))
     objet = request.POST.get("objet")
@@ -22,9 +37,12 @@ def Envoyer_email(request):
     destinataires = request.POST.getlist("dest")
 
     # Validations
-    if not objet: return JsonResponse({"message": "Vous devez saisir un objet"}, status=401)
-    if not html: return JsonResponse({"message": "Vous devez saisir un texte"}, status=401)
-    if not adresse_exp: return JsonResponse({"message": "Vous devez sélectionner une adresse d'expédition"}, status=401)
+    if not objet:
+        return JsonResponse({"message": "Vous devez saisir un objet"}, status=401)
+    if not html:
+        return JsonResponse({"message": "Vous devez saisir un texte"}, status=401)
+    if not adresse_exp:
+        return JsonResponse({"message": "Vous devez sélectionner une adresse d'expédition"}, status=401)
 
     # Enregistrement des éventuelles modifications dans le mail
     mail = Mail.objects.get(pk=idmail)
@@ -43,7 +61,9 @@ def Envoyer_email(request):
         else:
             liste_anomalies.append(adresse)
     if liste_anomalies:
-        return JsonResponse({"message": "Les adresses suivantes ne sont pas valides : %s" % ", ".join(liste_anomalies)}, status=401)
+        return JsonResponse(
+            {"message": "Les adresses suivantes ne sont pas valides : %s" % ", ".join(liste_anomalies)}, status=401
+        )
     if not liste_adresses:
         return JsonResponse({"message": "Vous devez sélectionner ou saisir au moins une adresse valide"}, status=401)
 
@@ -52,7 +72,9 @@ def Envoyer_email(request):
     destinataire_defaut_found = False
     for adresse in liste_adresses:
         if destinataire_defaut and adresse != destinataire_defaut.adresse:
-            destinataire = Destinataire.objects.create(categorie="saisie_libre", adresse=adresse, valeurs=destinataire_defaut.valeurs)
+            destinataire = Destinataire.objects.create(
+                categorie="saisie_libre", adresse=adresse, valeurs=destinataire_defaut.valeurs
+            )
             for document in destinataire_defaut.documents.all():
                 document_joint = DocumentJoint.objects.create(nom=document.nom, fichier=document.fichier)
                 destinataire.documents.add(document_joint)
@@ -63,7 +85,7 @@ def Envoyer_email(request):
         destinataire_defaut.delete()
 
     liste_envois_succes = utils_email.Envoyer_model_mail(idmail=mail.pk, request=request)
-    if liste_envois_succes == False:
+    if liste_envois_succes is False:
         return JsonResponse({"message": "L'email n'a pas pu être envoyé"}, status=401)
     liste_reussis = [destinataire.adresse for destinataire in liste_envois_succes]
     liste_echecs = [adresse for adresse in liste_adresses if adresse not in liste_reussis]
@@ -71,16 +93,40 @@ def Envoyer_email(request):
         return JsonResponse({"message": "Le mail a été envoyé avec succès à %d destinataire(s)" % len(liste_adresses)})
     if len(liste_reussis) == 0:
         return JsonResponse({"message": "L'email n'a pas pu être envoyé"}, status=401)
-    return JsonResponse({"message": "Le mail a été envoyé avec succès à %s mais n'a pas pu être envoyé à %s" % (", ".join(liste_reussis), ", ".join(liste_echecs))}, status=401)
-
+    return JsonResponse(
+        {
+            "message": "Le mail a été envoyé avec succès à %s mais n'a pas pu être envoyé à %s"
+            % (", ".join(liste_reussis), ", ".join(liste_echecs))
+        },
+        status=401,
+    )
 
 
 def Get_view_editeur_email(request):
-    """ Renvoie l'éditeur d'emails dans un modal """
+    """Renvoie l'éditeur d'emails dans un modal"""
     # Récupère d'éventuelles données
     donnees = json.loads(request.POST.get("donnees"))
     # Création du mail
     modele_email = ModeleEmail.objects.filter(categorie=donnees["categorie"], defaut=True).first()
+    # Récupération de l'URL du portail
+    try:
+        url_portail = request.build_absolute_uri(reverse("portail_accueil")) if request else settings.ALLOWED_HOSTS[1]
+    except Exception:
+        url_portail = ""
+    # Récupération de l'organisateur
+    organisateur = cache.get("organisateur", None)
+    if not organisateur:
+        organisateur = cache.get_or_set("organisateur", Organisateur.objects.filter(pk=1).first())
+    valeurs_defaut = {
+        "{ORGANISATEUR_NOM}": organisateur.nom,
+        "{URL_PORTAIL}": url_portail,
+    }
+    valeurs = donnees.get("champs", {})
+    valeurs.update(valeurs_defaut)
+    for motcle, valeur in valeurs.items():
+        if isinstance(valeur, float) or isinstance(valeur, int):
+            valeur = str(valeur)
+        modele_email.html = modele_email.html.replace(motcle, valeur or "")
     mail = Mail.objects.create(
         categorie=donnees["categorie"],
         objet=modele_email.objet if modele_email else "",
@@ -91,21 +137,25 @@ def Get_view_editeur_email(request):
         utilisateur=request.user,
     )
 
-    if 'idfamille' in donnees:
+    if "idfamille" in donnees:
 
         # Importation de la famille
         famille = Famille.objects.get(pk=donnees["idfamille"])
         # Création du destinataire et du document joint
-        destinataire = Destinataire.objects.create(categorie="famille", famille=famille, adresse=famille.mail, valeurs=json.dumps(donnees["champs"]))
+        destinataire = Destinataire.objects.create(
+            categorie="famille", famille=famille, adresse=famille.mail, valeurs=json.dumps(donnees["champs"])
+        )
         if "nom_fichier" in donnees:
             document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
             destinataire.documents.add(document_joint)
         mail.destinataires.add(destinataire)
 
-    else : #individu
+    else:  # individu
         # Importation de l'individu
         individu = Individu.objects.get(pk=donnees["idindividu"])
-        destinataire = Destinataire.objects.create(categorie="individu", individu=individu, adresse=individu.mail, valeurs=json.dumps(donnees["champs"]))
+        destinataire = Destinataire.objects.create(
+            categorie="individu", individu=individu, adresse=individu.mail, valeurs=json.dumps(donnees["champs"])
+        )
         if "nom_fichier" in donnees:
             document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
             destinataire.documents.add(document_joint)
@@ -116,5 +166,8 @@ def Get_view_editeur_email(request):
         "page_titre": "Editeur d'emails",
         "form": Formulaire(instance=mail, request=request),
         "modeles": ModeleEmail.objects.filter(categorie=request.POST.get("categorie", donnees["categorie"])),
+        "signatures": SignatureEmail.objects.filter(
+            Q(structure__in=request.user.structures.all()) | Q(structure__isnull=True)
+        ),
     }
-    return render(request, 'outils/editeur_emails_express.html', context)
+    return render(request, "outils/editeur_emails_express.html", context)

@@ -611,6 +611,7 @@ class Organisateur(models.Model):
     logo = ResizedImageField(verbose_name="Logo", upload_to=get_uuid_path, blank=True, null=True)
     gps = models.CharField(verbose_name="GPS", max_length=200, blank=True, null=True)
     logo_update = models.DateTimeField(verbose_name="Date MAJ Logo", max_length=200, blank=True, null=True)
+    expedition_active = models.BooleanField(verbose_name="Expedition active", default=False)
 
     class Meta:
         db_table = 'organisateur'
