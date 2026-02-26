@@ -42,7 +42,7 @@ class Modifier(CustomView, TemplateView):
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
         # Stocker le type de compte dans la session
-        request.session['type_compte'] = form.cleaned_data.get("type_compte", "individu")
+        request.session['type_compte'] = form.cleaned_data.get("type_compte", "famille")
         cache.delete("parametres_portail")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')

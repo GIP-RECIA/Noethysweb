@@ -37,7 +37,7 @@ class Parametre():
 LISTE_PARAMETRES = [
 
     # Compte utilisateurs
-    Parametre(code="type_compte", label="Type de compte", valeur="individu", type="choice", 
+    Parametre(code="type_compte", label="Type de compte", valeur="famille", type="choice", 
               choix=[("individu", "Compte Individu"), ("famille", "Compte Famille")],
               help_text="Sélectionnez 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle, ou 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres."),
 
