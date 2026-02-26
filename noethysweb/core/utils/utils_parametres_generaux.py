@@ -38,8 +38,8 @@ LISTE_PARAMETRES = [
 
     # Compte utilisateurs
     Parametre(code="type_compte", label="Type de compte", valeur="famille", type="choice", 
-              choix=[("individu", "Compte Individu"), ("famille", "Compte Famille")],
-              help_text="Sélectionnez 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle, ou 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres."),
+              choix=[("famille", "Compte Famille"), ("individu", "Compte Individu")],
+              help_text="Sélectionnez 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres ou 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle."),
 
     # Fiche Individu
     Parametre(code="questionnaire_afficher_page_individu", label="Afficher la page Questionnaire", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Questionnaire sur la fiche Individu."),
