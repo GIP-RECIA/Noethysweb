@@ -23,6 +23,10 @@ class Parametre():
     def Get_ctrl(self):
         if self.type == "boolean":
             return forms.BooleanField(label=self.label, required=self.required, help_text=self.help_text)
+        elif self.type == "choice":
+            return forms.ChoiceField(label=self.label, required=self.required, 
+                                   choices=self.choix, widget=forms.RadioSelect, 
+                                   help_text=self.help_text)
 
     def From_db(self, valeur=""):
         if self.type == "boolean":
@@ -33,8 +37,9 @@ class Parametre():
 LISTE_PARAMETRES = [
 
     # Compte utilisateurs
-    Parametre(code="compte_famille", label="Compte Famille", valeur=False, type="boolean", help_text="Cochez cette case pour se connecter sur le portail en tant que Famille."),
-    Parametre(code="compte_individu", label="Compte Individu",  valeur=True, type="boolean", help_text="Cochez cette case pour se connecter sur le portail en tant que Individu."),
+    Parametre(code="type_compte", label="Type de compte", valeur="individu", type="choice", 
+              choix=[("individu", "Compte Individu"), ("famille", "Compte Famille")],
+              help_text="Sélectionnez 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle, ou 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres."),
 
     # Fiche Individu
     Parametre(code="questionnaire_afficher_page_individu", label="Afficher la page Questionnaire", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Questionnaire sur la fiche Individu."),

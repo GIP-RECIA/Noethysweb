@@ -13,7 +13,7 @@ from core.utils.utils_parametres_generaux import LISTE_PARAMETRES
 
 
 LISTE_RUBRIQUES = [
-    ("Compte Utilisateurs", ["compte_famille", "compte_individu"]),
+    ("Compte Utilisateurs", ["type_compte"]),
 
     ("Fiche Individu", ["questionnaire_afficher_page_individu" , "liens_afficher_page_individu", "regimes_alimentaires_afficher_page_individu",
              "maladies_afficher_page_individu" ,"medical_afficher_page_individu" , "assurances_afficher_page_individu" , "contacts_afficher_page_individu" ,
@@ -62,44 +62,4 @@ class Formulaire(FormulaireBase, forms.Form):
 
         self.helper.layout.append(HTML("<br>"))
 
-        self.helper.layout.append(HTML(EXTRA_SCRIPT))
 
-    def clean(self):
-        cleaned_data = super().clean()
-        compte_individu = cleaned_data.get("compte_individu")
-        compte_famille = cleaned_data.get("compte_famille")
-        # Validation pour s'assurer qu'un seul champ est sélectionné
-        if compte_individu and compte_famille:
-            raise forms.ValidationError("Vous ne pouvez sélectionner qu'un seul compte à la fois.")
-        return cleaned_data
-
-
-EXTRA_SCRIPT = """
-<script>
-window.onload = function() {
-    const checkboxIndividu = document.getElementById("id_compte_individu"); 
-    const checkboxFamille = document.getElementById("id_compte_famille");  
-
-    console.log("Checkboxes trouvées avec succès"); // Vérifie si les cases à cocher sont trouvées
-
-    checkboxIndividu.addEventListener('change', function() {
-            if (this.checked) {
-                checkboxFamille.checked = false;
-                checkboxFamille.disabled = true;
-            } else {
-                checkboxFamille.disabled = false;
-            }
-        });
-
-    checkboxFamille.addEventListener('change', function() {
-            if (this.checked) {
-                checkboxIndividu.checked = false;
-                checkboxIndividu.disabled = true;
-            } else {
-                checkboxIndividu.disabled = false;
-            }
-        });
-};
-</script>
-<br>
-"""

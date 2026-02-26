@@ -41,9 +41,8 @@ class Modifier(CustomView, TemplateView):
         if liste_modifications:
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
-        # Stocker les états des cases à cocher dans la session
-        request.session['compte_individu_active'] = form.cleaned_data.get("compte_individu", False)
-        request.session['compte_famille_active'] = form.cleaned_data.get("compte_famille", False)
+        # Stocker le type de compte dans la session
+        request.session['type_compte'] = form.cleaned_data.get("type_compte", "individu")
         cache.delete("parametres_portail")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')
