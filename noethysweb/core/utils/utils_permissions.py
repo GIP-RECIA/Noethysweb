@@ -13,7 +13,8 @@ def GetPermissionsPossibles(parametres_generaux=None, organisateur=None, categor
     liste_permissions = []
 
     # Commandes de menu
-    menu_principal = GetMenuPrincipal(parametres_generaux=parametres_generaux, organisateur=organisateur)
+    menu_principal = GetMenuPrincipal(parametres_generaux=parametres_generaux, 
+                                    organisateur=organisateur, force_permissions=True)
 
     for menu in menu_principal.GetChildren():
         for sous_menu in menu.GetChildren():

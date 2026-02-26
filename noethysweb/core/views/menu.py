@@ -8,10 +8,10 @@ from django.urls import reverse_lazy
 from django.conf import settings
 
 
-def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
+def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None, force_permissions=False):
     parametres_generaux = parametres_generaux or {}  # Fallback to an empty dictionary
 
-    menu = Menu(titre="Menu principal",  user=user)
+    menu = Menu(titre="Menu principal",  user=user, force_permissions=force_permissions)
 
     # ------------------------------------ Accueil ------------------------------------
     menu.Add(code="accueil", titre="Accueil", icone="home", toujours_afficher=True)
@@ -566,7 +566,9 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None):
 
 
 class Menu():
-    def __init__(self, parent=None, code="", titre="", icone=None, url=None, user=None, toujours_afficher=False, compatible_demo=True, masquer=False, args=None):
+    def __init__(self, parent=None, code="", titre="", icone=None, url=None, user=None, 
+                 toujours_afficher=False, compatible_demo=True, masquer=False, args=None, 
+                 force_permissions=False):
         self.parent = parent
         self.code = code
         self.titre = titre
@@ -578,6 +580,7 @@ class Menu():
         self.toujours_afficher = toujours_afficher
         self.compatible_demo = compatible_demo
         self.masquer = masquer
+        self.force_permissions = force_permissions
 
     def __repr__(self):
         return "<Menu '%s'>" % self.titre
@@ -585,17 +588,26 @@ class Menu():
     def GetParent(self):
         return self.parent
 
-    def Add(self, code="", titre="", icone="", url=None, toujours_afficher=False, compatible_demo=True, args=None, superutilisateur_only=False, masquer=False):
+    def Add(self, code="", titre="", icone="", url=None, toujours_afficher=False, 
+            compatible_demo=True, args=None, superutilisateur_only=False, masquer=False):
         # Créer l'objet menu
-        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user,
-                    compatible_demo=compatible_demo, toujours_afficher=toujours_afficher)
+        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, 
+                   user=self.user, compatible_demo=compatible_demo, 
+                   toujours_afficher=toujours_afficher, force_permissions=self.force_permissions)
+        
         # Déterminer si ce menu doit être affiché
-        should_display = (
+        if self.force_permissions:
+            # Forcer l'affichage pour créer toutes les permissions
+            should_display = True
+        else:
+            # Logique normale d'affichage
+            should_display = (
                 toujours_afficher or  # Toujours afficher si marqué comme tel
                 (code and self.user and self.user.has_perm(
                     f"core.{code}")) or  # Afficher si l'utilisateur a la permission
                 self.toujours_afficher  # Si le parent est marqué comme toujours visible
-        )
+            )
+        
         # Ajouter le menu uniquement s'il doit être affiché
         if should_display:
             self.children.append(menu)
