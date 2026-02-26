@@ -178,14 +178,14 @@ class Onglet(CustomView):
         # Récupérer les paramètres généraux pour filtrer les onglets
         parametres = Get_dict_parametres()
 
-        # Vérifier si le compte famille est actif depuis la session
-        compte_famille_active = self.request.session.get('compte_famille_active', False)
+        # Vérifier le type de compte depuis la session
+        type_compte = self.request.session.get('type_compte', 'famille')
 
         # Appliquer les permissions et les paramètres pour afficher les onglets
         context['liste_onglets'] = [
             dict_onglet for dict_onglet in self.liste_onglets
             if self.request.user.has_perm("core.famille_%s" % dict_onglet["code"])
-            and (dict_onglet["code"] != "portail" or compte_famille_active)
+            and (dict_onglet["code"] != "portail" or type_compte == 'famille')
             and parametres.get(f"{dict_onglet['code']}_afficher_page_famille", True)  # Filtrage dynamique
         ]
 
