@@ -5,8 +5,8 @@
 from django import forms
 from core.forms.base import FormulaireBase
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Hidden, Submit, HTML, Fieldset, Div, ButtonHolder
-from crispy_forms.bootstrap import Field, InlineRadios
+from crispy_forms.layout import Layout, HTML, Fieldset
+from crispy_forms.bootstrap import Field
 from core.utils.utils_commandes import Commandes
 from core.models import PortailParametre
 from core.utils.utils_parametres_generaux import LISTE_PARAMETRES

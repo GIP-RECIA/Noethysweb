@@ -10,6 +10,7 @@ from core.views.base import CustomView
 from parametrage.forms.parametres_generaux import Formulaire
 import django.contrib.messages
 from core.models import PortailParametre
+from core.constants import TYPE_COMPTE_FAMILLE
 
 
 class Modifier(CustomView, TemplateView):
@@ -42,7 +43,7 @@ class Modifier(CustomView, TemplateView):
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
         # Stocker le type de compte dans la session
-        request.session['type_compte'] = form.cleaned_data.get("type_compte", "famille")
+        request.session['type_compte'] = form.cleaned_data.get("type_compte", TYPE_COMPTE_FAMILLE)
         cache.delete("parametres_portail")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')

@@ -3,10 +3,8 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import decimal
 from django import forms
-from django_summernote.widgets import SummernoteInplaceWidget
-from django.template.loader import render_to_string
+from core.constants import TYPE_COMPTE_FAMILLE, TYPE_COMPTE_INDIVIDU
 from core.models import PortailParametre
 
 
@@ -34,12 +32,13 @@ class Parametre():
         else:
             self.valeur = valeur
 
+
 LISTE_PARAMETRES = [
 
     # Compte utilisateurs
-    Parametre(code="type_compte", label="Type de compte", valeur="famille", type="choice", 
-              choix=[("famille", "Compte Famille"), ("individu", "Compte Individu")],
-              help_text="Sélectionnez 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres ou 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle."),
+    Parametre(code="type_compte", label="Type de compte", valeur=TYPE_COMPTE_FAMILLE, type="choice",
+               choix=[(TYPE_COMPTE_FAMILLE, "Compte Famille"), (TYPE_COMPTE_INDIVIDU, "Compte Individu")],
+               help_text="Sélectionnez 'Compte Famille' pour permettre aux familles de se connecter et gérer leurs membres ou 'Compte Individu' pour permettre aux utilisateurs de se connecter en tant que personne individuelle."),
 
     # Fiche Individu
     Parametre(code="questionnaire_afficher_page_individu", label="Afficher la page Questionnaire", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Questionnaire sur la fiche Individu."),
@@ -88,6 +87,7 @@ LISTE_PARAMETRES = [
 
 ]
 
+
 def Get_dict_parametres():
     """ Renvoi un dict code: valeur des paramètres """
     dict_parametres = {parametre.code: parametre for parametre in LISTE_PARAMETRES}
@@ -97,6 +97,7 @@ def Get_dict_parametres():
             dict_parametres[parametre_db.code].From_db(parametre_db.valeur)
 
     return {code: parametre.valeur for code, parametre in dict_parametres.items()}
+
 
 def Get_parametre(code=""):
     parametres = Get_dict_parametres()

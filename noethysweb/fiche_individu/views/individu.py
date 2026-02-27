@@ -12,7 +12,8 @@ from core.views import crud
 from core.views.base import CustomView
 from core.models import Individu, Famille, Note, Rattachement, Inscription
 from core.utils import utils_texte, utils_dates
-from fiche_individu.utils.utils_individu import LISTE_ONGLETS , Get_filtered_onglets
+from fiche_individu.utils.utils_individu import LISTE_ONGLETS
+from core.constants import TYPE_COMPTE_FAMILLE, TYPE_COMPTE_INDIVIDU
 from core.utils.utils_parametres_generaux import Get_dict_parametres
 
 
@@ -129,14 +130,14 @@ class Onglet(CustomView):
 
         # Récupération des droits utilisateur et paramètres spécifiques
         titulaire_rattachement = self.get_titulaire_rattachement()
-        type_compte = self.request.session.get('type_compte', 'famille')
+        type_compte = self.request.session.get('type_compte', TYPE_COMPTE_FAMILLE)
 
         # Filtrage des onglets en fonction des permissions et paramètres
         context['liste_onglets'] = [
             dict_onglet for dict_onglet in self.liste_onglets
             if self.request.user.has_perm("core.individu_%s" % dict_onglet["code"])  # Vérifie les permissions
                and parametres.get(f"{dict_onglet['code']}_afficher_page_individu", True)  # Filtre selon les paramètres
-               and (dict_onglet["code"] != "portail" or (type_compte == 'individu' and titulaire_rattachement == 1))
+               and (dict_onglet["code"] != "portail" or (type_compte == TYPE_COMPTE_INDIVIDU and titulaire_rattachement == 1))
             # Logique spécifique au portail
         ]
 

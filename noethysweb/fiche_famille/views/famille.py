@@ -18,6 +18,7 @@ from core.models import Famille, Note, Rattachement, CATEGORIES_RATTACHEMENT, Pr
 from individus.utils import utils_pieces_manquantes, utils_informations_manquantes
 from fiche_individu.forms.individu import Formulaire
 from fiche_famille.utils.utils_famille import LISTE_ONGLETS
+from core.constants import TYPE_COMPTE_FAMILLE
 from cotisations.utils import utils_cotisations_manquantes
 from core.utils.utils_parametres_generaux import Get_dict_parametres
 
@@ -28,7 +29,7 @@ def Definir_titulaire(request):
     rattachement = Rattachement.objects.get(pk=idrattachement)
 
     # Vérifie qu'il reste au moins un titulaire dans la famille
-    if rattachement.titulaire == True:
+    if rattachement.titulaire is True:
         titulaires = Rattachement.objects.filter(famille=rattachement.famille, titulaire=True)
         if len(titulaires) <= 1:
             messages.add_message(request, messages.ERROR, "Changement de titulaire impossible : Vous devez conserver au moins un titulaire dans la famille !")
@@ -179,13 +180,11 @@ class Onglet(CustomView):
         parametres = Get_dict_parametres()
 
         # Vérifier le type de compte depuis la session
-        type_compte = self.request.session.get('type_compte', 'famille')
-
-        # Appliquer les permissions et les paramètres pour afficher les onglets
+        type_compte = self.request.session.get('type_compte', TYPE_COMPTE_FAMILLE)
         context['liste_onglets'] = [
             dict_onglet for dict_onglet in self.liste_onglets
             if self.request.user.has_perm("core.famille_%s" % dict_onglet["code"])
-            and (dict_onglet["code"] != "portail" or type_compte == 'famille')
+            and (dict_onglet["code"] != "portail" or type_compte == TYPE_COMPTE_FAMILLE)
             and parametres.get(f"{dict_onglet['code']}_afficher_page_famille", True)  # Filtrage dynamique
         ]
 
