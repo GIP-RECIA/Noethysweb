@@ -595,23 +595,17 @@ class Menu():
                    user=self.user, compatible_demo=compatible_demo, 
                    toujours_afficher=toujours_afficher, force_permissions=self.force_permissions)
         
-        # Déterminer si ce menu doit être affiché
-        if self.force_permissions:
-            # Forcer l'affichage pour créer toutes les permissions
-            should_display = True
-        else:
-            # Logique normale d'affichage
-            should_display = (
-                toujours_afficher or  # Toujours afficher si marqué comme tel
-                (code and self.user and self.user.has_perm(
-                    f"core.{code}")) or  # Afficher si l'utilisateur a la permission
-                self.toujours_afficher  # Si le parent est marqué comme toujours visible
-            )
-        
+        afficher = not code or not self.user or toujours_afficher or code.endswith("_toc") or self.user.has_perm("core.%s" % code)
+        if masquer or (self.user and superutilisateur_only and not self.user.is_superuser):
+            afficher = False
+
         # Ajouter le menu uniquement s'il doit être affiché
-        if should_display:
+        #  ou pour la création des permissions
+        if afficher or self.force_permissions:
             self.children.append(menu)
-        return menu  # Retourne toujours le menu, même s'il n'est pas affiché
+
+        # Retourne toujours le menu, même s'il n'est pas affiché
+        return menu
 
     def GetUrl(self):
         if self.args:
