@@ -47,4 +47,4 @@ class Modifier(CustomView, TemplateView):
         cache.delete("parametres_portail")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')
-        return HttpResponseRedirect(reverse_lazy("parametres_generaux"))
+        return HttpResponseRedirect(reverse_lazy("parametrage_toc"))

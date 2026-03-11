@@ -44,7 +44,7 @@ class Formulaire(FormulaireBase, forms.Form):
 
         # Initialisation du layout
         self.helper.layout = Layout()
-        self.helper.layout.append(Commandes(annuler_url="{% url 'parametres_generaux' %}", ajouter=False))
+        self.helper.layout.append(Commandes(annuler_url="{% url 'parametrage_toc' %}", ajouter=False))
 
         dict_parametres = {parametre.code: parametre for parametre in LISTE_PARAMETRES}
         for parametre_db in PortailParametre.objects.all():
