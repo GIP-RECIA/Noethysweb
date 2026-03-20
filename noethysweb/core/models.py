@@ -3369,6 +3369,7 @@ class PesModele(models.Model):
     code_etab = models.CharField(verbose_name="Code établissement", max_length=200, blank=True, null=True)
     service1 = models.CharField(verbose_name="Service axe 1", max_length=15, blank=True, null=True, help_text="Premier axe analytique.")
     service2 = models.CharField(verbose_name="Service axe 2", max_length=10, blank=True, null=True, help_text="Second axe analytique.")
+    objet_dette = models.CharField(verbose_name="Objet dette par défaut", max_length=450, blank=True, null=True)
     operation = models.CharField(verbose_name="Opération comptable", max_length=10, blank=True, null=True)
     fonction = models.CharField(verbose_name="Fonction comptable", max_length=10, blank=True, null=True)
     prelevement_libelle = models.CharField(verbose_name="Libellé du prélèvement", max_length=450, default="{NOM_ORGANISATEUR} - Facture {NUM_FACTURE}", help_text="Saisissez le libellé du prélèvement qui apparaîtra sur le relevé de compte de la famille. Vous pouvez personnaliser ce libellé grâce aux mots-clés suivants : {NOM_ORGANISATEUR}, {NUM_FACTURE}, {MOIS}, {MOIS_LETTRES}, {ANNEE}, {DATE_DEBUT_MOIS}, {DATE_FIN_MOIS}, {PRESTATION_DATE_MIN}, {PRESTATION_DATE_MAX}, {PRESTATION_DEBUT_MOIS}, {PRESTATION_FIN_MOIS}, {PRESTATION_MOIS}, {PRESTATION_ANNEE}.")
