@@ -1,3 +1,9 @@
+Version 1.3.2.8 (22/03/2026) :
+
+- Ajout de l'objet de la dette dans l'export PES
+- Ajout du numéro de facture dans la procédure export_journal_ventes
+- Correction de la colonne facture dans la liste des prestations
+
 Version 1.3.2.7 (15/03/2026) :
 
 - Ajout d'une alerte QF manquant dans la fiche famille
