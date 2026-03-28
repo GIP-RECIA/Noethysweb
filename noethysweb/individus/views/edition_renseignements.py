@@ -13,7 +13,7 @@ from core.utils import utils_parametres
 from individus.forms.edition_renseignements import Formulaire
 
 
-def Generer_pdf(request):
+def Check_options(request):
     time.sleep(1)
 
     # Récupération des options
@@ -33,13 +33,26 @@ def Generer_pdf(request):
     utils_parametres.Set_categorie(categorie="edition_renseignements", utilisateur=request.user, parametres={
         "bonus_titre": form.cleaned_data["bonus_titre"], "bonus_texte": form.cleaned_data["bonus_texte"]})
 
-    # Création du PDF
     from individus.utils import utils_impression_renseignements
     impression = utils_impression_renseignements.Impression(titre="Renseignements", dict_donnees=options)
     if impression.erreurs:
         return JsonResponse({"erreur": impression.erreurs[0]}, status=401)
-    nom_fichier = impression.Get_nom_fichier()
-    return JsonResponse({"nom_fichier": nom_fichier})
+    return impression
+
+
+def Generer_pdf(request):
+    impression = Check_options(request)
+    if type(impression) == JsonResponse:
+        return impression
+    return JsonResponse({"nom_fichier": impression.Get_nom_fichier()})
+
+
+def Exporter_xlsx(request):
+    """ Générer le fichier d'export """
+    impression = Check_options(request)
+    if type(impression) == JsonResponse:
+        return impression
+    return JsonResponse({"nom_fichier": impression.Exporter_xlsx()})
 
 
 class Page(crud.Page):
@@ -59,7 +72,7 @@ class Liste(Page, crud.Liste):
         context = super(Liste, self).get_context_data(**kwargs)
         context["page_titre"] = "Edition des fiches de renseignements"
         context["box_titre"] = "Edition des fiches de renseignements"
-        context["box_introduction"] = "Cochez les individus souhaités, précisez si besoin les options et cliquez sur le bouton Générer le PDF. Utilisez le bouton Filtrer pour affiner la liste d'individus."
+        context["box_introduction"] = "Cochez les individus souhaités, précisez si besoin les options et cliquez sur le bouton Générer le PDF. Utilisez le bouton Filtrer pour affiner la liste d'individus. Il est également possible d'exporter le contenu vers Excel (une ligne par individu) afin de créer par exemple des fiches de renseignements personnalisées par publipostage avec un traitement de texte."
         context["onglet_actif"] = "edition_renseignements"
         context["impression_introduction"] = ""
         context["impression_conclusion"] = ""

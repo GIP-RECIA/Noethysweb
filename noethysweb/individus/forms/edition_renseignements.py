@@ -42,9 +42,11 @@ class Formulaire(FormulaireBase, forms.Form):
         # Affichage
         self.helper.layout = Layout(
             Commandes(annuler_url="{% url 'individus_toc' %}", enregistrer=False, ajouter=False,
-                      commandes_principales=[HTML(
-                          """<a type='button' class="btn btn-primary margin-r-5" onclick="generer_pdf()" title="Génération du PDF"><i class='fa fa-file-pdf-o margin-r-5'></i>Générer le PDF</a>"""),
-                      ]),
+                commandes_principales=[
+                    HTML("""<a type='button' class="btn btn-primary margin-r-5" onclick="generer_pdf()" title="Génération du PDF"><i class='fa fa-file-pdf-o margin-r-5'></i>Générer le PDF</a>"""),
+                ],
+                    autres_commandes=[HTML("""<a type='button' class="btn btn-default" onclick="exporter_excel()" title="Exporter vers Excel"><i class='fa fa-file-excel-o margin-r-5'></i> Exporter vers Excel</a> """)],
+                ),
             Fieldset("Paramètres",
                 Field("tri"),
                 Field("afficher_signature"),

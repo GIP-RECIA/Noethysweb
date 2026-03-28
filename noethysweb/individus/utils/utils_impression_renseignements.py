@@ -3,7 +3,7 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import logging, datetime
+import logging, datetime, os, uuid
 logger = logging.getLogger(__name__)
 logging.getLogger('PIL').setLevel(logging.WARNING)
 from django.conf import settings
@@ -25,6 +25,62 @@ class Impression(utils_impression.Impression):
         utils_impression.Impression.__init__(self, *args, **kwds)
 
     def Draw(self):
+        colonnes_export = [
+            {"code": "IDrattachement", "titre": "IDrattachement"},
+            {"code": "IDindividu", "titre": "IDindividu"},
+            {"code": "IDfamille", "titre": "IDfamille"},
+            {"code": "nom", "titre": "Nom"},
+            {"code": "prenom", "titre": "Prénom"},
+            {"code": "sexe", "titre": "Sexe"},
+            {"code": "date_naiss", "titre": "Date de naissance", "format": "date"},
+            {"code": "ville_naiss", "titre": "Ville de naissance"},
+            {"code": "rue_resid", "titre": "Rue"},
+            {"code": "cp_resid", "titre": "CP"},
+            {"code": "ville_resid", "titre": "Ville"},
+            {"code": "scolarite_niveau", "titre": "Niveau"},
+            {"code": "scolarite_classe", "titre": "Classe"},
+            {"code": "scolarite_ecole", "titre": "Ecole"},
+            {"code": "situation_parentale", "titre": "Situation parentale"},
+            {"code": "type_garde", "titre": "Type de garde"},
+            {"code": "info_garde", "titre": "Info garde"},
+            {"code": "representant_1_id", "titre": "Représentant 1 - ID"},
+            {"code": "representant_1_nom", "titre": "Représentant 1 - Nom"},
+            {"code": "representant_1_prenom", "titre": "Représentant 1 - Prénom"},
+            {"code": "representant_1_sexe", "titre": "Représentant 1 - Sexe"},
+            {"code": "representant_1_lien", "titre": "Représentant 1 - Lien"},
+            {"code": "representant_1_tel_domi", "titre": "Représentant 1 - Tél domicile"},
+            {"code": "representant_1_tel_mobile", "titre": "Représentant 1 - Tél portable"},
+            {"code": "representant_1_tel_travail", "titre": "Représentant 1 - Tél pro"},
+            {"code": "representant_1_mail", "titre": "Représentant 1 - Mail"},
+            {"code": "representant_2_id", "titre": "Représentant 2 - ID"},
+            {"code": "representant_2_nom", "titre": "Représentant 2 - Nom"},
+            {"code": "representant_2_prenom", "titre": "Représentant 2 - Prénom"},
+            {"code": "representant_2_sexe", "titre": "Représentant 2 - Sexe"},
+            {"code": "representant_2_lien", "titre": "Représentant 2 - Lien"},
+            {"code": "representant_2_tel_domi", "titre": "Représentant 2 - Tél domicile"},
+            {"code": "representant_2_tel_mobile", "titre": "Représentant 2 - Tél portable"},
+            {"code": "representant_2_tel_travail", "titre": "Représentant 2 - Tél pro"},
+            {"code": "representant_2_mail", "titre": "Représentant 2 - Mail"},
+            {"code": "representant_3_id", "titre": "Représentant 3 - ID"},
+            {"code": "representant_3_nom", "titre": "Représentant 3 - Nom"},
+            {"code": "representant_3_prenom", "titre": "Représentant 3 - Prénom"},
+            {"code": "representant_3_sexe", "titre": "Représentant 3 - Sexe"},
+            {"code": "representant_3_lien", "titre": "Représentant 3 - Lien"},
+            {"code": "representant_3_tel_domi", "titre": "Représentant 3 - Tél domicile"},
+            {"code": "representant_3_tel_mobile", "titre": "Représentant 3 - Tél portable"},
+            {"code": "representant_3_tel_travail", "titre": "Représentant 3 - Tél pro"},
+            {"code": "representant_3_mail", "titre": "Représentant 3 - Mail"},
+            {"code": "contacts_famille", "titre": "Contacts de la famille"},
+            {"code": "contacts_individu", "titre": "Contacts de l'individu"},
+            {"code": "assurance", "titre": "Assurance"},
+            {"code": "medecin", "titre": "Médecin"},
+            {"code": "maladies", "titre": "Maladies"},
+            {"code": "informations", "titre": "Informations"},
+            {"code": "vaccinations_obligatoires", "titre": "Vaccinations obligatoires"},
+            {"code": "autres_vaccinations", "titre": "Autres vaccinations"},
+        ]
+        self.export_xlsx = {"lignes": [], "colonnes": colonnes_export}
+
         # Importation des rattachements
         conditions = Q(pk__in=self.dict_donnees["rattachements"])
         rattachements = Rattachement.objects.select_related("individu", "famille", "individu__medecin").prefetch_related("individu__regimes_alimentaires", "individu__maladies").filter(conditions).distinct().order_by("individu__nom", "individu__prenom")
@@ -77,6 +133,9 @@ class Impression(utils_impression.Impression):
         # Importation des questionnaires
         questionnaires_individus = utils_questionnaires.ChampsEtReponses(categorie="individu", filtre_reponses=Q(individu__in=[r.individu for r in rattachements]))
         questionnaires_familles = utils_questionnaires.ChampsEtReponses(categorie="famille", filtre_reponses=Q(famille__in=[r.famille for r in rattachements]))
+        for module in (questionnaires_individus, questionnaires_familles):
+            for dict_question in module.listeQuestions:
+                self.export_xlsx["colonnes"].append({"code": "question_%s" % dict_question["IDquestion"], "titre": dict_question["label"]})
 
         # Préparation des polices
         style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
@@ -122,6 +181,16 @@ class Impression(utils_impression.Impression):
 
         # Remplissage du tableau
         for rattachement in rattachements:
+            ligne_export = {}
+
+            def Ajouter_lignes_export(liste_lignes=[]):
+                for l in liste_lignes:
+                    if type(l["valeur"]) == str:
+                        for balise in ["<b>", "</b>", "<br/>", "&nbsp;"]:
+                            l["valeur"] = l["valeur"].replace(balise, "")
+                        l["valeur"] = l["valeur"].replace(Img("sortie.png"), "[SORTIE]")
+                        l["valeur"] = l["valeur"].replace(Img("appel.png"), "[APPEL]")
+                    ligne_export[l["code"]] = l["valeur"]
 
             # Importation de l'organisateur
             organisateur = cache.get('organisateur', None)
@@ -142,12 +211,25 @@ class Impression(utils_impression.Impression):
             # Nom de l'individu
             detail_individu.append(Paragraph(rattachement.individu.Get_nom(), style_identite))
 
+            Ajouter_lignes_export([
+                {"code": "IDrattachement", "valeur": rattachement.pk},
+                {"code": "IDindividu", "valeur": rattachement.individu_id},
+                {"code": "IDfamille", "valeur": rattachement.famille_id},
+                {"code": "nom", "valeur": rattachement.individu.nom},
+                {"code": "prenom", "valeur": rattachement.individu.prenom},
+                {"code": "sexe", "valeur": "F" if rattachement.individu.civilite in (2, 3, 5) else "M"},
+            ])
+
             # Date de naissance
             if rattachement.individu.date_naiss:
                 texte_date_naiss = "Né%s le %s" % ("e" if rattachement.individu.civilite in (2, 3, 5) else "", utils_dates.ConvertDateToFR(rattachement.individu.date_naiss))
                 if rattachement.individu.ville_naiss:
                     texte_date_naiss += " à %s" % rattachement.individu.ville_naiss
                 texte_date_naiss += ", %s ans." % rattachement.individu.Get_age()
+                Ajouter_lignes_export([
+                    {"code": "date_naiss", "valeur": utils_dates.ConvertDateToFR(rattachement.individu.date_naiss)},
+                    {"code": "ville_naiss", "valeur": rattachement.individu.ville_naiss},
+                ])
             else:
                 texte_date_naiss = "Date de naissance inconnue."
             detail_individu.append(Paragraph(texte_date_naiss, style_defaut))
@@ -158,6 +240,12 @@ class Impression(utils_impression.Impression):
                 if getattr(rattachement.individu, code):
                     texte_adresse += "&nbsp;&nbsp; %s : %s" % (label, getattr(rattachement.individu, code))
             detail_individu.append(Paragraph(texte_adresse, style_defaut))
+
+            Ajouter_lignes_export([
+                {"code": "rue_resid", "valeur": rattachement.individu.rue_resid},
+                {"code": "cp_resid", "valeur": rattachement.individu.cp_resid},
+                {"code": "ville_resid", "valeur": rattachement.individu.ville_resid},
+            ])
 
             # Scolarité
             scolarite = dict_scolarites.get(rattachement.individu_id, None)
@@ -170,6 +258,12 @@ class Impression(utils_impression.Impression):
                     scolarite.ecole.nom if scolarite.ecole else "",
                 )
                 detail_individu.append(Paragraph(texte_scolarite, style_defaut))
+
+                Ajouter_lignes_export([
+                    {"code": "scolarite_niveau", "valeur": scolarite.niveau.abrege if scolarite.niveau else ""},
+                    {"code": "scolarite_classe", "valeur": scolarite.classe.nom if scolarite.classe else ""},
+                    {"code": "scolarite_ecole", "valeur": scolarite.ecole.nom if scolarite.ecole else ""},
+                ])
 
             # Cadre identité de l'individu
             dataTableau = [(photo_individu, detail_individu, "%s\nEdité le %s" % (organisateur.nom, utils_dates.ConvertDateToFR(str(datetime.date.today()))))]
@@ -198,9 +292,15 @@ class Impression(utils_impression.Impression):
             contenu_tableau.append([Paragraph("<br/>".join(detail), style_defaut)])
             self.story.append(Tableau(titre="Famille".upper(), contenu=contenu_tableau))
 
+            Ajouter_lignes_export([
+                {"code": "situation_parentale", "valeur": rattachement.individu.get_situation_familiale_display()},
+                {"code": "type_garde", "valeur": rattachement.individu.get_type_garde_display()},
+                {"code": "info_garde", "valeur": rattachement.individu.info_garde},
+            ])
+
             # Représentants
             contenu_tableau = []
-            for representant in dict_representants.get(rattachement.famille_id):
+            for index_representant, representant in enumerate(dict_representants.get(rattachement.famille_id), 1):
 
                 # Lien du représentant avec l'individu
                 texte_lien = []
@@ -221,10 +321,24 @@ class Impression(utils_impression.Impression):
                         texte += "&nbsp;&nbsp; %s : %s" % (label, getattr(representant.individu, code))
 
                 contenu_tableau.append(Paragraph(texte, style_defaut))
+
+                Ajouter_lignes_export([
+                    {"code": "representant_%d_id" % index_representant, "valeur": representant.individu.pk},
+                    {"code": "representant_%d_nom" % index_representant, "valeur": representant.individu.nom},
+                    {"code": "representant_%d_prenom" % index_representant, "valeur": representant.individu.prenom},
+                    {"code": "representant_%d_sexe" % index_representant, "valeur": "F" if representant.individu.civilite in (2, 3, 5) else "M"},
+                    {"code": "representant_%d_lien" % index_representant, "valeur": " ".join(texte_lien)},
+                    {"code": "representant_%d_tel_domi" % index_representant, "valeur": representant.individu.tel_domicile},
+                    {"code": "representant_%d_tel_mobile" % index_representant, "valeur": representant.individu.tel_mobile},
+                    {"code": "representant_%d_tel_travail" % index_representant, "valeur": representant.individu.travail_tel},
+                    {"code": "representant_%d_mail" % index_representant, "valeur": representant.individu.mail},
+                ])
+
             self.story.append(Tableau(titre="Représentants".upper(), contenu=contenu_tableau))
 
             # Contacts de la famille
             contenu_tableau = []
+            textes_temp = []
             for contact in dict_contacts_famille.get(rattachement.famille_id, []):
 
                 # Lien du représentant avec l'individu
@@ -244,11 +358,16 @@ class Impression(utils_impression.Impression):
                         texte += "&nbsp;&nbsp; %s : %s" % (label, getattr(contact.individu, code))
 
                 contenu_tableau.append(Paragraph(texte, style_defaut))
+                textes_temp.append(texte)
+
             if contenu_tableau:
                 self.story.append(Tableau(titre="Contacts de la famille".upper(), contenu=contenu_tableau))
 
+            Ajouter_lignes_export([{"code": "contacts_famille", "valeur": "|".join(textes_temp)}])
+
             # Contacts de l'individu
             contenu_tableau = []
+            textes_temp = []
             for contact in dict_contacts.get((rattachement.individu_id, rattachement.famille_id), []):
 
                 # Autorisations du contact
@@ -266,6 +385,9 @@ class Impression(utils_impression.Impression):
                         texte += "&nbsp;&nbsp; %s : %s" % (label, getattr(contact, code))
 
                 contenu_tableau.append(Paragraph(texte, style_defaut))
+                textes_temp.append(texte)
+
+            Ajouter_lignes_export([{"code": "contacts_individu", "valeur": "|".join(textes_temp)}])
 
             if not self.dict_donnees["mode_condense"]:
                 contenu_tableau.append(Paragraph("<br/><br/><br/>", style_defaut))
@@ -280,6 +402,7 @@ class Impression(utils_impression.Impression):
             if not self.dict_donnees["mode_condense"]:
                 texte_assurance += "<br/><br/>"
             self.story.append(Tableau(titre="Assurance".upper(), aide="Préciser l'assureur et ses coordonnées puis le numéro et les dates de validité du contrat", contenu=[Paragraph(texte_assurance, style_defaut)]))
+            Ajouter_lignes_export([{"code": "assurance", "valeur": texte_assurance}])
 
             # Médecin
             if rattachement.individu.medecin:
@@ -292,34 +415,41 @@ class Impression(utils_impression.Impression):
             if not self.dict_donnees["mode_condense"]:
                 texte_medecin += "<br/><br/>"
             self.story.append(Tableau(titre="Médecin traitant".upper(), aide="Renseigner le nom et les coordonnées du médecin traitant", contenu=[Paragraph(texte_medecin, style_defaut)]))
+            Ajouter_lignes_export([{"code": "medecin", "valeur": texte_medecin}])
 
             # Régimes alimentaires
             texte_regimes = ", ".join([regime.nom for regime in rattachement.individu.regimes_alimentaires.all()])
             if not self.dict_donnees["mode_condense"]:
                 texte_regimes += "<br/><br/>"
             self.story.append(Tableau(titre="Régimes alimentaires".upper(), aide="Lister les régimes alimentaires", contenu=[Paragraph(texte_regimes, style_defaut)]))
+            Ajouter_lignes_export([{"code": "regimes_alimentaires", "valeur": texte_regimes}])
 
             # Maladies
             texte_maladies = ", ".join([maladie.nom for maladie in rattachement.individu.maladies.all()])
             if not self.dict_donnees["mode_condense"]:
                 texte_maladies += "<br/><br/>"
             self.story.append(Tableau(titre="Maladies contractées".upper(), aide="Lister les maladies contractées", contenu=[Paragraph(texte_maladies, style_defaut)]))
+            Ajouter_lignes_export([{"code": "maladies", "valeur": texte_maladies}])
 
             # Informations
             contenu_tableau = []
+            textes_temp = []
             for information in dict_informations.get(rattachement.individu_id, []):
                 texte = "<b>%s</b>" % information.intitule
                 if information.description:
                     texte += " : %s" % information.description
                 contenu_tableau.append(Paragraph(texte, style_defaut))
+                textes_temp.append(texte)
             if not self.dict_donnees["mode_condense"]:
                 contenu_tableau.append(Paragraph("<br/><br/><br/>", style_defaut))
             self.story.append(Tableau(titre="Informations et recommandations".upper(), aide="Préciser les informations particulières et recommandations", contenu=contenu_tableau))
+            Ajouter_lignes_export([{"code": "informations", "valeur": "|".join(textes_temp)}])
 
             # Vaccinations obligatoires
             liste_vaccinations_obligatoires = [vaccination for vaccination in dict_vaccinations.get(rattachement.individu, []) if vaccination["obligatoire"]]
             contenu_tableau = []
             ligne = []
+            textes_temp = []
             for index, vaccination in enumerate(liste_vaccinations_obligatoires):
                 label_vaccin = vaccination["label"]
                 label_vaccin = label_vaccin.replace("influenzae", "infl.")
@@ -328,6 +458,7 @@ class Impression(utils_impression.Impression):
                 if len(ligne) == 6 or index == len(liste_vaccinations_obligatoires)-1:
                     contenu_tableau.append(ligne)
                     ligne = []
+                    textes_temp.append("%s : %s" % (label_vaccin, utils_dates.ConvertDateToFR(vaccination["dernier_rappel"]) if vaccination["dernier_rappel"] else "__/__/____"))
 
             if contenu_tableau:
                 tableau = Table(contenu_tableau, [largeur_contenu/6] * 6)
@@ -338,6 +469,7 @@ class Impression(utils_impression.Impression):
             else:
                 tableau = [Paragraph("Aucune vaccination obligatoire", style_defaut)]
             self.story.append(Tableau(titre="Vaccinations obligatoires".upper(), aide="Indiquer la date du dernier rappel pour chaque vaccin", contenu=[tableau]))
+            Ajouter_lignes_export([{"code": "vaccinations_obligatoires", "valeur": "|".join(textes_temp)}])
 
             # Autres vaccinations
             texte_vaccinations = []
@@ -347,17 +479,22 @@ class Impression(utils_impression.Impression):
             if not self.dict_donnees["mode_condense"]:
                 texte_vaccinations.append("<br/><br/><br/>")
             self.story.append(Tableau(titre="Autres vaccinations".upper(), aide="Indiquer les autres vaccinations en précisant la date de rappel", contenu=[Paragraph(", ".join(texte_vaccinations), style_defaut)]))
+            Ajouter_lignes_export([{"code": "autres_vaccinations", "valeur": "|".join(texte_vaccinations)}])
 
             # Questionnaires
             questions_famille = questionnaires_familles.GetDonnees(rattachement.famille_id)
             if questions_famille:
                 contenu_tableau = [Paragraph("%s : <b>%s</b>" % (question["label"], question["reponse"]), style_defaut) for question in questions_famille if question["visible_fiche_renseignement"]]
                 self.story.append(Tableau(titre="Questionnaire familial".upper(), aide="", contenu=contenu_tableau))
+                for question in questions_famille:
+                    Ajouter_lignes_export([{"code": "question_%d" % question["IDquestion"], "valeur": question["reponse"]}])
 
             questions_individu = questionnaires_individus.GetDonnees(rattachement.individu_id)
             if questions_individu:
                 contenu_tableau = [Paragraph("%s : <b>%s</b>" % (question["label"], question["reponse"]), style_defaut) for question in questions_individu if question["visible_fiche_renseignement"]]
                 self.story.append(Tableau(titre="Questionnaire individuel".upper(), aide="", contenu=contenu_tableau))
+                for question in questions_individu:
+                    Ajouter_lignes_export([{"code": "question_%d" % question["IDquestion"], "valeur": question["reponse"]}])
 
             # Certification
             if rattachement.certification_date:
@@ -381,3 +518,34 @@ class Impression(utils_impression.Impression):
 
             # Saut de page
             self.story.append(PageBreak())
+
+            # Export xlsx
+            self.export_xlsx["lignes"].append(ligne_export)
+
+    def Exporter_xlsx(self):
+        # Création du répertoire
+        rep_base = os.path.join("temp", str(uuid.uuid4()))
+        rep_destination = os.path.join(settings.MEDIA_ROOT, rep_base, "export_renseignements")
+        os.makedirs(rep_destination)
+
+        # Création du fichier
+        import xlsxwriter
+        nom_fichier = "export_renseignements.xlsx"
+        classeur = xlsxwriter.Workbook(os.path.join(settings.MEDIA_ROOT, rep_base, nom_fichier))
+        feuille = classeur.add_worksheet("Page 1")
+        dict_format = {
+            "date": classeur.add_format({"num_format": "dd/mm/yyyy"})
+        }
+
+        # Insertion des entêtes de colonnes
+        for index_colonne, colonne in enumerate(self.export_xlsx["colonnes"]):
+            feuille.write(0, index_colonne, colonne["titre"])
+            feuille.set_column(index_colonne, index_colonne, colonne.get("largeur", 16))
+
+        # Insertion des lignes
+        for index_ligne, ligne in enumerate(self.export_xlsx["lignes"], 1):
+            for index_colonne, colonne in enumerate(self.export_xlsx["colonnes"], 0):
+                feuille.write(index_ligne, index_colonne, ligne.get(colonne["code"], ""), dict_format.get(colonne.get("format")))
+
+        classeur.close()
+        return os.path.join(settings.MEDIA_URL, rep_base, nom_fichier)
