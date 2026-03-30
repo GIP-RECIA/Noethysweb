@@ -512,25 +512,46 @@ class View(CustomView, TemplateView):
 
                 # ---------------------------- FAMILLES : Composition -------------------------------
 
-                if rubrique == "familles_composition" and inscriptions:
+                if rubrique == "familles_composition":
                     data.append(Titre(texte="Composition des familles"))
 
-                    familles = Individu.objects.filter(pk__in=[inscription.individu_id for inscription in inscriptions]).values_list("inscription__famille").annotate(nbre=Count("idindividu", distinct=True)).order_by("nbre")
+                    # Composition des familles des membres qui fréquentent les activités sélectionnées
+                    nbre_membres_familles = {item["famille_id"]: item["nbre_membres"] for item in Rattachement.objects.values("famille_id") \
+                                            .filter(categorie__in=(1, 2), famille_id__in=liste_idfamille).annotate(nbre_membres=Count("pk"))}
                     dict_familles = {}
-                    for item in familles:
-                        dict_familles.setdefault(item[1], 0)
-                        dict_familles[item[1]] += 1
+                    for nbre_membres in nbre_membres_familles.values():
+                        dict_familles.setdefault(nbre_membres, 0)
+                        dict_familles[nbre_membres] += 1
                     familles = [(key, valeur) for key, valeur in dict_familles.items()]
 
                     # Tableau : Composition des familles
                     data.append(Tableau(titre="Composition des familles",
-                        colonnes=["Nombre de membres", "Nombre de familles"],
+                        colonnes=["Nombre total de membres", "Nombre de familles"],
                         lignes=[(item[0], item[1]) for item in familles]))
 
                     # Camembert : Composition des familles
                     data.append(Camembert(titre="Composition des familles",
                         labels=[item[0] for item in familles],
                         valeurs=[item[1] for item in familles], ))
+
+                    # Membres de la famille qui fréquentent les activités sélectionnées
+                    if inscriptions:
+                        familles = Individu.objects.filter(pk__in=[inscription.individu_id for inscription in inscriptions]).values_list("inscription__famille").annotate(nbre=Count("idindividu", distinct=True)).order_by("nbre")
+                        dict_familles = {}
+                        for item in familles:
+                            dict_familles.setdefault(item[1], 0)
+                            dict_familles[item[1]] += 1
+                        familles = [(key, valeur) for key, valeur in dict_familles.items()]
+
+                        # Tableau : Membres de la famille qui fréquentent les activités sélectionnées
+                        data.append(Tableau(titre="Membres de la famille qui fréquentent les activités sélectionnées",
+                            colonnes=["Nombre de membres", "Nombre de familles"],
+                            lignes=[(item[0], item[1]) for item in familles]))
+
+                        # Camembert : Membres de la famille qui fréquentent les activités sélectionnées
+                        data.append(Camembert(titre="Membres de la famille qui fréquentent les activités sélectionnées",
+                            labels=[item[0] for item in familles],
+                            valeurs=[item[1] for item in familles], ))
 
                 # ---------------------------- FAMILLES : QF -------------------------------
 
