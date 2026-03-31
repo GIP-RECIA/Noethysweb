@@ -115,7 +115,7 @@ def Maj_tarifs_fratries(activite=None, prestations=[], liste_IDprestation_exista
                     condition = Q(famille_id=famille_id, tarif_id=tarif_id, date=date)
                 else:
                     # Recherche s'il existe des prestations de la même activité sur la même date
-                    condition = Q(famille_id=famille_id, activite=activite, date=date)
+                    condition = Q(famille_id=famille_id, activite=activite, date=date, tarif__methode__contains="nbre_ind")
                 liste_prestations_fratrie = Prestation.objects.select_related("tarif", "tarif_ligne", "individu").filter(condition).order_by("individu_id")
                 liste_prestations_fratrie = sorted(list(liste_prestations_fratrie), key=lambda prestation: (prestation.individu.date_naiss or datetime.date(1950, 1, 1), prestation.individu.pk), reverse=not settings.ATTRIBUTION_TARIF_FRATERIE_AINES)
                 for index, prestation in enumerate(liste_prestations_fratrie):
