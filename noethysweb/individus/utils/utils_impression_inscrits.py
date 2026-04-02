@@ -102,7 +102,7 @@ class Impression(utils_impression.Impression):
 
         # Préparation des polices
         style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_activite = ParagraphStyle(name="centre", fontName="Helvetica-bold", alignment=1, fontSize=8, spaceBefore=0, spaceAfter=20, leading=0)
+        style_activite = ParagraphStyle(name="centre", fontName="Helvetica-Bold", alignment=1, fontSize=8, spaceBefore=0, spaceAfter=20, leading=0)
         style_infos = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceBefore=10, spaceAfter=0, leading=0)
 
         # Création du titre du document

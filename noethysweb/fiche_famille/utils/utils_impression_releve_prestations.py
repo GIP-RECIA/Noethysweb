@@ -45,7 +45,7 @@ class Impression(utils_impression.Impression):
             consommations[conso.prestation_id].append(conso)
 
         # Nom de la famille
-        self.story.append(Paragraph("<para align='center'>%s</para>" % famille.nom, ParagraphStyle(name="standard", fontName="Helvetica-bold", fontSize=10, leading=10, spaceAfter=0)))
+        self.story.append(Paragraph("<para align='center'>%s</para>" % famille.nom, ParagraphStyle(name="standard", fontName="Helvetica-Bold", fontSize=10, leading=10, spaceAfter=0)))
         self.story.append(Spacer(0,20))
 
         # Création des périodes

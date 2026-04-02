@@ -58,7 +58,7 @@ class Impression(utils_impression.Impression):
         # Préparation des polices
         style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
         style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
-        style_titre = ParagraphStyle(name="titre", fontName="Helvetica-bold", alignment=1, fontSize=11, spaceAfter=0, leading=11)
+        style_titre = ParagraphStyle(name="titre", fontName="Helvetica-Bold", alignment=1, fontSize=11, spaceAfter=0, leading=11)
 
         # Création du titre du document
         self.Insert_header()
