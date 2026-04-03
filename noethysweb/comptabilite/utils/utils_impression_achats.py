@@ -12,7 +12,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from core.models import AchatArticle
-from core.utils import utils_dates, utils_impression
+from core.utils import utils_dates, utils_impression, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -33,7 +33,7 @@ class Impression(utils_impression.Impression):
             self.erreurs.append("Aucun article n'a été trouvé avec les paramètres donnés")
 
         # Préparation des polices
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
 
         # Création du titre du document
         self.Insert_header()
@@ -56,7 +56,7 @@ class Impression(utils_impression.Impression):
 
             # Nom du fournisseur
             Insert_barre_titre(label=fournisseur.nom, styles=[
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), "Helvetica-Bold", 8),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_BOLD, 8),
                 ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('ALIGN', (0, 0), (-1, -1), "CENTRE"),
                 ('TEXTCOLOR', (0, 0), (-1, -1), (1, 1, 1)), ('BACKGROUND', (0, 0), (-1, -1), (0.5, 0.5, 0.5)),
             ])
@@ -68,7 +68,7 @@ class Impression(utils_impression.Impression):
             # Entêtes de colonnes
             tableau = Table([("Acheté", "Article", "Quantité", "Observations article", "Echéance", "Libellé demande", "Collaborateur", "Observations demande")], largeurs_colonnes)
             tableau.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), "Helvetica", 5),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 5),
                 ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('ALIGN', (0, 0), (-1, -1), 'CENTRE'), ]))
             self.story.append(tableau)
 
@@ -78,7 +78,7 @@ class Impression(utils_impression.Impression):
 
                 # Nom de la catégorie
                 Insert_barre_titre(label=categorie.nom, styles=[
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), "Helvetica-Bold", 7),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_BOLD, 7),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('ALIGN', (0, 0), (-1, -1), "LEFT"),
                     ('TEXTCOLOR', (0, 0), (-1, -1), (0, 0, 0)), ('BACKGROUND', (0, 0), (-1, -1), (0.8, 0.8, 0.8)),
                 ])
@@ -100,7 +100,7 @@ class Impression(utils_impression.Impression):
 
                 tableau = Table(dataTableau, largeurs_colonnes)
                 style = TableStyle([
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),])
                 tableau.setStyle(style)
                 self.story.append(tableau)

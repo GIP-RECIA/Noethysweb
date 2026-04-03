@@ -9,7 +9,7 @@ from django.db.models import Sum
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import colors
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 from core.models import Prestation, Ventilation, Facture, Famille, Consommation
 
 
@@ -45,7 +45,7 @@ class Impression(utils_impression.Impression):
             consommations[conso.prestation_id].append(conso)
 
         # Nom de la famille
-        self.story.append(Paragraph("<para align='center'>%s</para>" % famille.nom, ParagraphStyle(name="standard", fontName="Helvetica-Bold", fontSize=10, leading=10, spaceAfter=0)))
+        self.story.append(Paragraph("<para align='center'>%s</para>" % famille.nom, ParagraphStyle(name="standard", fontName=utils_polices.FONT_BOLD, fontSize=10, leading=10, spaceAfter=0)))
         self.story.append(Spacer(0,20))
 
         # Création des périodes
@@ -73,8 +73,8 @@ class Impression(utils_impression.Impression):
 
                 listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('FONT', (0, 0), (-1, -1), "Helvetica", 9),
-                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONT', (0, 1), (-1, -1), "Helvetica", 8),
+                    ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 9),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONT', (0, 1), (-1, -1), utils_polices.FONT_NORMAL, 8),
                     ('BACKGROUND', (-1, -1), (-1, -1), couleur_fond_titre),
                 ]
 
@@ -89,7 +89,7 @@ class Impression(utils_impression.Impression):
                 else:
                     largeursColonnes = [370, 50, 50, 50]
                     dataTableau.append([label_regroupement, "Total dû", "Réglé", "Reste dû"])
-                paraStyle = ParagraphStyle(name="standard", fontName="Helvetica", fontSize=8, leading=10, spaceAfter=0)
+                paraStyle = ParagraphStyle(name="standard", fontName=utils_polices.FONT_NORMAL, fontSize=8, leading=10, spaceAfter=0)
 
                 total_du = decimal.Decimal(0)
                 total_regle = decimal.Decimal(0)
@@ -209,8 +209,8 @@ class Impression(utils_impression.Impression):
 
                 listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
-                    ('FONT', (0, 0), (-1, 0), "Helvetica", 6), ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
-                    ('FONT', (0, 1), (-1, 1), "Helvetica", 8),
+                    ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 6), ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
+                    ('FONT', (0, 1), (-1, 1), utils_polices.FONT_NORMAL, 8),
                 ]
 
                 if dataTableau:
@@ -232,7 +232,7 @@ class Impression(utils_impression.Impression):
 
                     listeStyles = [
                         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('FONT', (0, 0), (-1, -1), "Helvetica", 8), ('GRID', (1, -1), (-1, -1), 0.25, colors.black),
+                        ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 8), ('GRID', (1, -1), (-1, -1), 0.25, colors.black),
                         ('ALIGN', (-1, -1), (-1, -1), 'CENTRE'),
                         ('BACKGROUND', (-1, 0), (-1, -1), couleur_fond_titre),
                     ]
@@ -255,8 +255,8 @@ class Impression(utils_impression.Impression):
 
                 listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('FONT', (0, 0), (-1, -1), "Helvetica", 9),
-                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONT', (0, 1), (-1, -1), "Helvetica", 8),
+                    ('GRID', (0, 0), (-1, -1), 0.25, colors.black), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 9),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONT', (0, 1), (-1, -1), utils_polices.FONT_NORMAL, 8),
                     ('BACKGROUND', (-1, -1), (-1, -1), couleur_fond_titre),
                 ]
 
@@ -268,7 +268,7 @@ class Impression(utils_impression.Impression):
                 largeursColonnes = [60, 110, 200, 50, 50, 50]
                 dataTableau.append(["Date d'édition", "Numéro", "Période", "Total dû", "Réglé", "Reste dû"])
 
-                paraStyle = ParagraphStyle(name="standard", fontName="Helvetica", fontSize=8, leading=10, spaceAfter=0)
+                paraStyle = ParagraphStyle(name="standard", fontName=utils_polices.FONT_NORMAL, fontSize=8, leading=10, spaceAfter=0)
 
                 total_du = decimal.Decimal(0)
                 total_regle = decimal.Decimal(0)
@@ -320,8 +320,8 @@ class Impression(utils_impression.Impression):
 
                 listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'TOP'), ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
-                    ('FONT', (0, 0), (-1, 0), "Helvetica", 6), ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
-                    ('FONT', (0, 1), (-1, 1), "Helvetica", 8),
+                    ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 6), ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
+                    ('FONT', (0, 1), (-1, 1), utils_polices.FONT_NORMAL, 8),
                 ]
 
                 if dataTableau:
@@ -341,7 +341,7 @@ class Impression(utils_impression.Impression):
 
                     listeStyles = [
                         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('FONT', (0, 0), (-1, -1), "Helvetica", 8), ('GRID', (1, -1), (-1, -1), 0.25, colors.black),
+                        ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 8), ('GRID', (1, -1), (-1, -1), 0.25, colors.black),
                         ('ALIGN', (-1, -1), (-1, -1), 'CENTRE'),
                         ('BACKGROUND', (-1, 0), (-1, -1), couleur_fond_titre),
                     ]
@@ -367,7 +367,7 @@ class Impression(utils_impression.Impression):
         self.dict_donnees["{DATE_EDITION_RELEVE}"] = utils_dates.ConvertDateToFR(datetime.date.today())
 
         listeStyles = [
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), "Helvetica", 8),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 8),
             ('GRID', (1, -1), (-1, -1), 0.25, colors.black), ('ALIGN', (-1, -1), (-1, -1), 'CENTRE'),
             ('BACKGROUND', (-1, 0), (-1, -1), couleur_fond_titre),
         ]

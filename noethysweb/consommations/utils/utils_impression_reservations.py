@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import colors
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 from core.models import Evenement
 
 
@@ -25,7 +25,7 @@ class Impression(utils_impression.Impression):
 
         # Texte si aucune réservation
         if len(self.dict_donnees["reservations"]) == 0:
-            paraStyle = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=11)
+            paraStyle = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=11)
             self.story.append(Paragraph("&nbsp;", paraStyle))
             self.story.append(Paragraph("&nbsp;", paraStyle))
             self.story.append(Paragraph("<para align='centre'><b>Aucune réservation</b></para>", paraStyle))
@@ -52,14 +52,14 @@ class Impression(utils_impression.Impression):
             totalFacturationIndividu = 0.0
 
             # Insertion du nom de l'individu
-            paraStyle = ParagraphStyle(name="individu", fontName="Helvetica", fontSize=9, spaceBefore=0, spaceafter=0)
+            paraStyle = ParagraphStyle(name="individu", fontName=utils_polices.FONT_NORMAL, fontSize=9, spaceBefore=0, spaceafter=0)
             texteIndividu = Paragraph(texteIndividu, paraStyle)
             dataTableau = []
             dataTableau.append([texteIndividu,])
             tableau = Table(dataTableau, [largeurContenu,])
             listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONT', (0, 0), (-1, -1), "Helvetica", 8),
+                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 8),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                     ('BACKGROUND', (0, 0), (-1, 0), couleurFond),
                     ]
@@ -79,7 +79,7 @@ class Impression(utils_impression.Impression):
                     tableau = Table(dataTableau, [largeurContenu,])
                     listeStyles = [
                         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('FONT', (0, 0), (-1, -1), "Helvetica", 6),
+                        ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 6),
                         ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                         ('BACKGROUND', (0, 0), (-1, 0), couleurFondActivite),
@@ -92,7 +92,7 @@ class Impression(utils_impression.Impression):
                 largeursColonnes = [55, 165, 80, 160, 60]
                 dataTableau.append(["Date", "Consommations", "Etat", "Prestations", "Total"])
 
-                paraStyle = ParagraphStyle(name="standard", fontName="Helvetica", fontSize=8, leading=10, spaceAfter=0)
+                paraStyle = ParagraphStyle(name="standard", fontName=utils_polices.FONT_NORMAL, fontSize=8, leading=10, spaceAfter=0)
 
                 # lignes DATES
                 listeDates = []
@@ -170,10 +170,10 @@ class Impression(utils_impression.Impression):
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('GRID', (0, 0), (-1,-1), 0.25, colors.black),
 
-                    ('FONT', (0, 0), (-1, 0), "Helvetica", 6),
+                    ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 6),
                     ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
 
-                    ('FONT', (0, 1), (-1, 1), "Helvetica", 8),
+                    ('FONT', (0, 1), (-1, 1), utils_polices.FONT_NORMAL, 8),
                     ]
                 tableau.setStyle(TableStyle(listeStyles))
                 self.story.append(tableau)
@@ -185,7 +185,7 @@ class Impression(utils_impression.Impression):
 
             listeStyles = [
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONT', (0, 0), (-1, -1), "Helvetica", 8),
+                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 8),
                     ('GRID', (-1, -1), (-1,-1), 0.25, colors.black),
                     ('ALIGN', (-1, -1), (-1, -1), 'CENTRE'),
                     ('BACKGROUND', (-1, -1), (-1, -1), couleurFond),

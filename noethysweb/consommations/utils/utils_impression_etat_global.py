@@ -10,7 +10,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from core.models import Evenement, Regime, Vacance, Activite, Quotient, TarifLigne, Consommation, Famille, Individu, LISTE_ETATS_CONSO, JOURS_COMPLETS_SEMAINE
-from core.utils import utils_dates, utils_impression, utils_infos_individus, utils_dictionnaires
+from core.utils import utils_dates, utils_impression, utils_infos_individus, utils_dictionnaires, utils_polices
 from core.utils.utils_dates import HeureStrEnDelta as HEURE # Ne pas supprimer : est utilisé pour la formule
 
 
@@ -495,7 +495,7 @@ class Impression(utils_impression.Impression):
         self.Insert_header(espace_apres=10)
 
         # Création de l'intro
-        style_intro = ParagraphStyle(name="intro", fontName="Helvetica", fontSize=6, leading=6, spaceBefore=0, spaceAfter=2)
+        style_intro = ParagraphStyle(name="intro", fontName=utils_polices.FONT_NORMAL, fontSize=6, leading=6, spaceBefore=0, spaceAfter=2)
         lignes_intro = [
             Paragraph(u"<b>Période :</b> Du %s au %s" % (utils_dates.ConvertDateToFR(date_debut), utils_dates.ConvertDateToFR(date_fin)), style_intro),
             Paragraph(u"<b>Activités :</b> %s" % ", ".join([activite.nom for activite in activites]), style_intro),
@@ -528,9 +528,9 @@ class Impression(utils_impression.Impression):
 
             dataTableau = []
 
-            listeStyles = [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, 0), "Helvetica-Bold", 7),
-                ('FONT', (0, -1), (-1, -1), "Helvetica", 7), ('GRID', (1, 0), (-1, -1), 0.25, colors.black),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTRE'), ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 7),
+            listeStyles = [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, 0), utils_polices.FONT_BOLD, 7),
+                ('FONT', (0, -1), (-1, -1), utils_polices.FONT_NORMAL, 7), ('GRID', (1, 0), (-1, -1), 0.25, colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTRE'), ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 7),
                 ('ALIGN', (0, 0), (0, 0), 'LEFT'), ]
 
             if dict_options["regroupement_principal"] != "aucun":
@@ -571,7 +571,7 @@ class Impression(utils_impression.Impression):
             tableau.setStyle(TableStyle(listeStyles))
             self.story.append(tableau)
 
-            paraStyle = ParagraphStyle(name="normal", fontName="Helvetica", fontSize=7, leading=7, spaceBefore=0, spaceAfter=0)
+            paraStyle = ParagraphStyle(name="normal", fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=7, spaceBefore=0, spaceAfter=0)
 
             # Création des lignes
             index = 1
@@ -677,19 +677,19 @@ class Impression(utils_impression.Impression):
 
                 listeStyles = [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
 
-                    ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
 
                     ('BACKGROUND', (0, -1), (-1, -1), couleurFondClair),
                     # ('BACKGROUND', (-1, 0), (-1, -1), couleurFondClair),
 
-                    ('FONT', (0, -1), (-1, -1), "Helvetica-Bold", 7),  # Gras pour totaux
+                    ('FONT', (0, -1), (-1, -1), utils_polices.FONT_BOLD, 7),  # Gras pour totaux
                 ]
 
                 if label_tranche_age != "":
                     listeStyles.extend([('ALIGN', (0, 0), (-1, 0), 'LEFT'), ('SPAN', (0, 0), (-1, 0)),
-                        ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 7),
+                        ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 7),
                         ('BACKGROUND', (0, 0), (-1, 0), couleurFondFonce), ])
 
                 # Création du tableau
@@ -700,9 +700,9 @@ class Impression(utils_impression.Impression):
             # ---------- TOTAL de L'ACTIVITE --------------
             dataTableau = []
 
-            listeStyles = [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, 0), "Helvetica-Bold", 7),
-                ('FONT', (0, -1), (-1, -1), "Helvetica", 7), ('GRID', (1, 0), (-1, -1), 0.25, colors.black),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTRE'), ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 7),
+            listeStyles = [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (-1, 0), utils_polices.FONT_BOLD, 7),
+                ('FONT', (0, -1), (-1, -1), utils_polices.FONT_NORMAL, 7), ('GRID', (1, 0), (-1, -1), 0.25, colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTRE'), ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 7),
                 ('ALIGN', (0, 0), (0, 0), 'LEFT'), ]
 
             ligne1 = ["", ]

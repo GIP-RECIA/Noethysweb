@@ -6,7 +6,7 @@
 import logging
 logger = logging.getLogger(__name__)
 import datetime
-from core.utils import utils_dates, utils_modeles_documents, utils_preferences, utils_fichiers
+from core.utils import utils_dates, utils_modeles_documents, utils_preferences, utils_fichiers, utils_polices
 from core.models import Organisateur
 from core.data import data_modeles_emails
 from django.core.cache import cache
@@ -95,9 +95,9 @@ class MyPageTemplate(PageTemplate):
             canvas.rect(x, y, largeur, hauteur, fill=0)
             # Textes
             canvas.rotate(90)
-            canvas.setFont("Helvetica", 8)
+            canvas.setFont(utils_polices.FONT_NORMAL, 8)
             canvas.drawString(y + 2 * mm, -x - 4 * mm, "Merci de joindre ce coupon à votre règlement")
-            canvas.setFont("Helvetica", 7)
+            canvas.setFont(utils_polices.FONT_NORMAL, 7)
             if "total" in dict_valeurs:
                 solde = dict_valeurs["total"] - dict_valeurs["ventilation"]
                 if doc.dict_options["integrer_impayes"] == True:
@@ -128,9 +128,9 @@ class MyPageTemplate(PageTemplate):
             canvas.setStrokeColorRGB(0, 0, 0)
             canvas.rect(x, y, largeur, hauteur, fill=0)
             # Textes
-            canvas.setFont("Helvetica", 8)
+            canvas.setFont(utils_polices.FONT_NORMAL, 8)
             canvas.drawString(x + 2 * mm, y + hauteur - 4 * mm, "Merci de joindre ce coupon à votre règlement")
-            canvas.setFont("Helvetica", 7)
+            canvas.setFont(utils_polices.FONT_NORMAL, 7)
             if "total" in dict_valeurs:
                 solde = dict_valeurs["total"] - dict_valeurs["ventilation"]
                 if doc.dict_options["integrer_impayes"] == True:
@@ -266,8 +266,8 @@ class Impression():
         dataTableau.append((titre or self.titre, details))
         style = TableStyle([
             ('BOX', (0, 0), (-1, -1), 0.25, colors.black), ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (0, 0), 'LEFT'), ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 16),
-            ('ALIGN', (1, 0), (1, 0), 'RIGHT'), ('FONT', (1, 0), (1, 0), "Helvetica", 6), ])
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'), ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 16),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'), ('FONT', (1, 0), (1, 0), utils_polices.FONT_NORMAL, 6), ])
         tableau = Table(dataTableau, largeursColonnes)
         tableau.setStyle(style)
         self.story.append(tableau)
@@ -280,7 +280,7 @@ class Impression():
         largeursColonnes = ((self.taille_page[0] - 75))
         style = TableStyle([
             ('LINEBEFORE', (0, 0), (-1, -1), 0.25, colors.black, None, (0.5, 2)), ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (0, 0), 'LEFT'), ('FONT', (1, 0), (1, 0), "Helvetica", 6), ])
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'), ('FONT', (1, 0), (1, 0), utils_polices.FONT_NORMAL, 6), ])
         tableau = Table(dataTableau, largeursColonnes)
         tableau.setStyle(style)
         self.story.append(tableau)

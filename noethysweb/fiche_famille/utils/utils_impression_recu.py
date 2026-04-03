@@ -5,7 +5,7 @@
 
 import logging
 logger = logging.getLogger(__name__)
-from core.utils import utils_dates, utils_impression, utils_preferences, utils_conversion
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_conversion, utils_polices
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
@@ -19,7 +19,7 @@ class Impression(utils_impression.Impression):
         styleSheet = getSampleStyleSheet()
         h3 = styleSheet['Heading3']
         styleTexte = styleSheet['BodyText']
-        styleTexte.fontName = "Helvetica"
+        styleTexte.fontName = utils_polices.FONT_NORMAL
         styleTexte.fontSize = 9
         styleTexte.borderPadding = 9
         styleTexte.leading = 12
@@ -29,8 +29,8 @@ class Impression(utils_impression.Impression):
         largeursColonnes = [self.taille_cadre[2], ]
         dataTableau.append(("Reçu de règlement",))
         dataTableau.append(("",))
-        style = TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 19),
-            ('FONT', (0, 1), (0, 1), "Helvetica", 8), ('LINEBELOW', (0, 0), (0, 0), 0.25, colors.black),
+        style = TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 19),
+            ('FONT', (0, 1), (0, 1), utils_polices.FONT_NORMAL, 8), ('LINEBELOW', (0, 0), (0, 0), 0.25, colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ])
         tableau = Table(dataTableau, largeursColonnes)
         tableau.setStyle(style)
@@ -38,7 +38,7 @@ class Impression(utils_impression.Impression):
         self.story.append(Spacer(0, 10))
 
         # TEXTE D'INTRODUCTION
-        paraStyleIntro = ParagraphStyle(name="intro", fontName="Helvetica", fontSize=11, leading=14, spaceBefore=0,
+        paraStyleIntro = ParagraphStyle(name="intro", fontName=utils_polices.FONT_NORMAL, fontSize=11, leading=14, spaceBefore=0,
                                         spaceafter=0, leftIndent=0, rightIndent=0, alignment=0, )
 
         if self.dict_donnees["intro"]:
@@ -53,7 +53,7 @@ class Impression(utils_impression.Impression):
         dataTableau = []
         largeursColonnes = [120, self.taille_cadre[2]-120]
 
-        paraStyle = ParagraphStyle(name="detail", fontName="Helvetica-Bold", fontSize=9)
+        paraStyle = ParagraphStyle(name="detail", fontName=utils_polices.FONT_BOLD, fontSize=9)
         dataTableau.append(("Caractéristiques du règlement", ""))
         monnaie = utils_preferences.Get_monnaie()
         montantEnLettres = utils_conversion.trad(self.dict_donnees["{MONTANT_REGLEMENT}"]).strip()
@@ -69,12 +69,12 @@ class Impression(utils_impression.Impression):
 
         style = TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONT', (0, 0), (0, -1), "Helvetica", 9),
-            ('FONT', (1, 0), (1, -1), "Helvetica-Bold", 9),
+            ('FONT', (0, 0), (0, -1), utils_polices.FONT_NORMAL, 9),
+            ('FONT', (1, 0), (1, -1), utils_polices.FONT_BOLD, 9),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
             ('ALIGN', (0, 1), (0, -1), 'RIGHT'),
             ('ALIGN', (1, 1), (1, -1), 'LEFT'),
-            ('FONT', (0, 0), (0, 0), "Helvetica", 7), ('SPAN', (0, 0), (-1, 0)),
+            ('FONT', (0, 0), (0, 0), utils_polices.FONT_NORMAL, 7), ('SPAN', (0, 0), (-1, 0)),
             ('BACKGROUND', (0, 0), (-1, 0), couleurFond),
         ])
         tableau = Table(dataTableau, largeursColonnes)
@@ -94,7 +94,7 @@ class Impression(utils_impression.Impression):
             largeur_temp = self.taille_cadre[2] - 50 - 50
             largeursColonnes = [50, largeur_temp/3+5, largeur_temp/3-10, largeur_temp/3+5, 50]
 
-            paraStyle = ParagraphStyle(name="detail", fontName="Helvetica", fontSize=7, leading=7, spaceBefore=0, spaceAfter=0, )
+            paraStyle = ParagraphStyle(name="detail", fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=7, spaceBefore=0, spaceAfter=0, )
 
             for prestation in prestations:
                 date = utils_dates.ConvertDateToFR(prestation["prestation__date"])
@@ -110,10 +110,10 @@ class Impression(utils_impression.Impression):
             style = TableStyle([
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
-                ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                 ('TOPPADDING', (0, 1), (-1, -1), 1),
                 ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
-                ('FONT', (0, 0), (-1, 0), "Helvetica", 7),
+                ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 7),
                 ('BACKGROUND', (0, 0), (-1, 0), couleurFond),
                 ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ])
