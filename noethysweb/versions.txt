@@ -1,3 +1,9 @@
+Version 1.3.2.9 (06/04/2026) :
+
+- Ajout de l'export Excel des fiches de renseignements
+- Amélioration de la page Composition de la famille dans les statistiques
+- Correction du tarif selon le nombre d'individus avec activité identique
+
 Version 1.3.2.8 (22/03/2026) :
 
 - Ajout de l'objet de la dette dans l'export PES
