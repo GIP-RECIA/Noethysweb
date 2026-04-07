@@ -1,0 +1,291 @@
+{% extends "core/page.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% load embed %}
+
+{% block styles %}
+    {{ block.super }}
+    <style>
+        .family-card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid #e1e5e9;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        .family-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .family-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .btn-add {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: 6px;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+        }
+        .btn-add:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            color: white;
+            transform: scale(1.05);
+        }
+        
+        .card-body {
+            padding: 20px;
+            background: #fafbfc;
+        }
+        
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .section-title:first-child {
+            margin-top: 0;
+        }
+        
+        .section-title i {
+            color: #667eea;
+            font-size: 16px;
+        }
+        
+        .representant, .enfant {
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            transition: all 0.15s ease;
+        }
+        
+        .representant:hover, .enfant:hover {
+            border-color: #cbd5e0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .representant {
+            border-left: 4px solid #48bb78;
+        }
+        
+        .enfant {
+            border-left: 4px solid #4299e1;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .enfant:hover {
+            background: #f0f4ff;
+            border-color: #3182ce;
+        }
+
+        .enfant::after {
+            content: "Cliquer pour voir la famille";
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: #4299e1;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .enfant:hover::after {
+            opacity: 1;
+        }
+
+        .info-line {
+            font-size: 14px;
+            margin: 4px 0;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .info-line strong {
+            color: #2d3748;
+            font-weight: 600;
+        }
+        
+        .info-line .emoji {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .text-muted {
+            color: #a0aec0 !important;
+            font-style: italic;
+            text-align: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e0;
+        }
+        
+        .btn-back {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            color: #4a5568;
+            padding: 10px 16px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-back:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            color: #2d3748;
+            text-decoration: none;
+            transform: translateX(-2px);
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+            background: #f7fafc;
+            border-radius: 10px;
+            border: 1px dashed #cbd5e0;
+        }
+    </style>
+{% endblock %}
+
+{% block contenu_page %}
+<div class="mb-4">
+    <a href="#" class="btn-back" onclick="history.back();">
+        <i class="fa fa-reply"></i> 
+        Revenir aux paramètres de recherche
+    </a>
+</div>
+
+{% if rattachements %}
+    {% for famille in rattachements %}
+        <div class="card family-card">
+            <div class="family-header">
+                <span>{{ famille.representant.civilite }} {{ famille.representant.prenom }} {{ famille.representant.nom }}</span>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="ajouter_representant">
+                    <input type="hidden" name="individu_id" value="{{ famille.representant.id_ent }}">
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fa fa-user-plus"></i> Ajouter ce représentant
+                    </button>
+                </form>
+            </div>
+            <div class="card-body">
+                <!-- Informations du représentant -->
+                <div class="representant">
+                    <div class="info-line">
+                        <span class="emoji">📧</span> <strong>Email:</strong> {{ famille.representant.email|default:"Non renseigné" }}
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">📞</span> <strong>Téléphone:</strong> {{ famille.representant.telephone|default:"Non renseigné" }}
+                    </div>
+                </div>
+
+                <!-- Enfants du représentant -->
+                <div class="section-title">
+                    <i class="fa fa-graduation-cap"></i> Enfants
+                </div>
+                {% for enfant in famille.enfants %}
+                    <div class="enfant" data-enfant-id="{{ enfant.id_ent }}" data-has-famille="{% if idfamille %}true{% else %}false{% endif %}" data-famille-id="{% if idfamille %}{{ idfamille }}{% endif %}">
+                        <div class="info-line">
+                            <strong>{{ enfant.civilite }} {{ enfant.prenom }} {{ enfant.nom }}</strong>
+                        </div>
+                        {% if enfant.scolarite.ecole %}
+                        <div class="info-line">
+                            <span class="emoji">🏫</span> {{ enfant.scolarite.ecole.nom }}
+                        </div>
+                        {% endif %}
+                        {% if enfant.scolarite.classe %}
+                        <div class="info-line">
+                            <span class="emoji">📘</span> Classe: {{ enfant.scolarite.classe.nom }}
+                        </div>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <div class="text-muted">Aucun enfant</div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="no-results">
+        <i class="fa fa-search" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i>
+        <p>Aucun résultat pour cette recherche.</p>
+    </div>
+{% endif %}
+
+<div class="card family-card">
+    <div class="family-header">
+        <span>Pas trouvé le bon individu ?</span>
+    </div>
+    <div class="card-body">
+        <div class="text-center">
+            <p class="mb-3 text-gray-700">
+                Aucun des individus listés ne correspond à celui que vous souhaitez ajouter ?
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="ajouter_nouvel_individu">
+                <button type="submit" class="btn btn-lg btn-success">
+                    <i class="fa fa-user-plus"></i> Ajouter un nouvel individu
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gérer le clic sur les enfants pour voir leur famille
+    const enfants = document.querySelectorAll('.enfant[data-enfant-id]');
+
+    enfants.forEach(function(enfant) {
+        enfant.addEventListener('click', function() {
+            const enfantId = this.getAttribute('data-enfant-id');
+            const hasFamille = this.getAttribute('data-has-famille') === 'true';
+            const familleId = this.getAttribute('data-famille-id');
+
+            // Construire l'URL en utilisant le bon format
+            const baseUrl = '{{ request.scheme }}://{{ request.get_host }}';
+            if (hasFamille && familleId) {
+                window.location.href = baseUrl + "{% url 'famille_enfant_ent_avec_famille' enfant_ent_id='ENFANT_ID' idfamille=0 %}".replace('ENFANT_ID', enfantId).replace('/0/', '/' + familleId + '/');
+            } else {
+                window.location.href = baseUrl + "{% url 'famille_enfant_ent' enfant_ent_id='ENFANT_ID' %}".replace('ENFANT_ID', enfantId);
+            }
+        });
+    });
+});
+</script>
+{% endblock contenu_page %}
