@@ -3,7 +3,7 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import logging, json
+import logging, json, decimal
 from operator import attrgetter
 logger = logging.getLogger(__name__)
 import dateutil.parser
@@ -18,7 +18,7 @@ from django.forms import Form
 from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatableView, MyMultipleDatatableView
 from core.utils import utils_texte, utils_historique, utils_dates
-from core.models import FiltreListe, Consommation, Inscription, Scolarite, Individu, LISTE_ETATS_CONSO
+from core.models import FiltreListe, Consommation, Inscription, Scolarite, Individu, LISTE_ETATS_CONSO, QuestionnaireReponse
 
 
 class Page(CustomView):
@@ -87,6 +87,15 @@ class Liste_commun():
                     for code, label in LISTE_ETATS_CONSO:
                         if label == criteres[0]:
                             criteres[0] = code
+
+                # Filtre spécial : Questionnaire individu ou famille
+                if filtre["champ"].startswith("iquestion") or filtre["champ"].startswith("fquestion"):
+                    type_champ, champ = champ.split(":")
+                    reponses = QuestionnaireReponse.objects.select_related("question").filter(question_id=int(type_champ[9:]))
+                    dict_reponses = {getattr(reponse, champ + "_id"): reponse.Get_reponse_for_ctrl() for reponse in reponses}
+                    resultats = [id for id, reponse in dict_reponses.items() if self.appliquer_condition(valeur=reponse, criteres=criteres, filtre=filtre)]
+                    conditions &= Q(**{champ + "__in": resultats})
+                    filtre["condition"] = ""
 
                 # Filtre générique : datetime
                 for index_critere, critere in enumerate(criteres):
@@ -211,7 +220,16 @@ class Liste_commun():
             return self.filtres_liste
 
     def appliquer_condition(self, valeur=None, criteres=[], filtre=None):
-        """ Sert au filtre spécial date de naissance et âge """
+        """ Sert aux filtres spéciaux date de naissance, âge et questionnaire """
+        # Convertit les critères au format de la valeur si besoin
+        for type_valeur in (int, float, decimal.Decimal):
+            if criteres and isinstance(valeur, type_valeur):
+                criteres = list(map(type_valeur, criteres))
+
+        # Convertit une liste en chaîne séparée par des virgules
+        if isinstance(valeur, list):
+            valeur = ",".join(valeur)
+
         if filtre["condition"] == "EGAL": return valeur == criteres[0]
         if filtre["condition"] == "DIFFERENT": return valeur != criteres[0]
         if filtre["condition"] == "CONTIENT": return criteres[0] in valeur
@@ -220,11 +238,13 @@ class Liste_commun():
         if filtre["condition"] == "EST_PAS_VIDE": return valeur not in (None, "")
         if filtre["condition"] == "EST_NUL": return valeur in (None, "")
         if filtre["condition"] == "EST_PAS_NUL": return valeur not in (None, "")
-        if filtre["condition"] == "SUPERIEUR": return valeur > criteres[0]
-        if filtre["condition"] == "SUPERIEUR_EGAL": return valeur >= criteres[0]
-        if filtre["condition"] == "INFERIEUR": return valeur < criteres[0]
-        if filtre["condition"] == "INFERIEUR_EGAL": return valeur <= criteres[0]
+        if filtre["condition"] == "SUPERIEUR" and valeur: return valeur > criteres[0]
+        if filtre["condition"] == "SUPERIEUR_EGAL" and valeur: return valeur >= criteres[0]
+        if filtre["condition"] == "INFERIEUR" and valeur: return valeur < criteres[0]
+        if filtre["condition"] == "INFERIEUR_EGAL" and valeur: return valeur <= criteres[0]
         if filtre["condition"] == "COMPRIS": return criteres[0] <= valeur <= criteres[1]
+        if filtre["condition"] == "VRAI": return valeur == True
+        if filtre["condition"] == "FAUX": return valeur == False
         return False
 
     def Get_selections_filtres(self, noms=[], filtres=[]):
