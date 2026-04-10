@@ -66,6 +66,7 @@ class Liste(Page, crud.Liste):
     class datatable_class(MyDatatable):
         filtres = ["fgenerique:famille", "igenerique:individu", "idpiece", "date_debut", "date_fin", "type_piece__nom", "titre"]
         check = columns.CheckBoxSelectColumn(label="")
+        type_piece = columns.TextColumn("Type de pièce", sources=["type_piece__nom"])
         actions = columns.TextColumn("Actions", sources=None, processor='Get_actions_speciales')
 
         class Meta:
