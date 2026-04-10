@@ -64,17 +64,18 @@ class Liste(Page, crud.Liste):
         return context
 
     class datatable_class(MyDatatable):
-        filtres = ["fgenerique:famille", "igenerique:individu", "idpiece", "date_debut", "date_fin", "type_piece__nom"]
+        filtres = ["fgenerique:famille", "igenerique:individu", "idpiece", "date_debut", "date_fin", "type_piece__nom", "titre"]
         check = columns.CheckBoxSelectColumn(label="")
         actions = columns.TextColumn("Actions", sources=None, processor='Get_actions_speciales')
 
         class Meta:
             structure_template = MyDatatable.structure_template
-            columns = ['check', "idpiece", "date_debut", "date_fin", "type_piece", "famille", "individu"]
+            columns = ['check', "idpiece", "date_debut", "date_fin", "type_piece", "titre", "famille", "individu", "observations"]
             processors = {
                 'date_debut': helpers.format_date('%d/%m/%Y'),
                 'date_fin': helpers.format_date('%d/%m/%Y'),
             }
+            hidden_columns = ["observations"]
             ordering = ["date_debut"]
 
         def Get_actions_speciales(self, instance, *args, **kwargs):
