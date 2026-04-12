@@ -1,0 +1,3 @@
+{% load i18n %}{% autoescape off %}
+{% blocktranslate %}Votre compte a bien été activé{% endblocktranslate %}
+{% endautoescape %}

@@ -1,0 +1,22 @@
+{% extends "portail/creer_compte/emails/base.html" %}
+{% load i18n %}
+
+{% block contenu_page %}
+    <h1>{% blocktrans %}Votre compte a bien été activé{% endblocktrans %}</h1>
+
+    <p>{% blocktrans %}Vous pouvez désormais vous connecter au portail famille. Pour y accéder, cliquez sur le bouton ci-dessous{% endblocktrans %} :</p>
+
+    <div style="text-align: center;">
+        <a href="{{ protocol }}://{{ domain }}" class="button">{% blocktrans %}Se connecter{% endblocktrans %}</a>
+    </div>
+
+    <p>{% blocktrans %}Et utilisez les codes d'accès suivants{% endblocktrans %} :
+        <ul>
+            <li>{% blocktrans %}Identifiant{% endblocktrans %} : <strong>{{ identifiant }}</strong></li>
+            <li>{% blocktrans %}Mot de passe{% endblocktrans %} : {% blocktrans %}Vous seul le connaissez{% endblocktrans %}</li>
+        </ul>
+    </p>
+
+    <p style="margin-top: 30px; font-size: 14px;">{% blocktrans %}Si le bouton ne fonctionne pas, vous pouvez copier et coller ce lien dans votre navigateur{% endblocktrans %} :<br>
+    <span style="color: #6366f1;">{{ protocol }}://{{ domain }}</span></p>
+{% endblock %}

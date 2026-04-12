@@ -3,32 +3,47 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-from django.contrib.auth import views as auth_views
+import logging
+logger = logging.getLogger(__name__)
 from django.urls import reverse_lazy
+from django.utils.translation import gettext as _
+from django.contrib.auth import views as auth_views
+from django.contrib.auth.tokens import default_token_generator
+from core.models import Utilisateur
 from portail.forms.reset_password import MyPasswordResetForm, MySetPasswordForm
 from portail.views.login import ClassCommuneLogin
-from portail.utils import utils_secquest
+from portail.utils import utils_secquest, utils_email
 
 
 class MyPasswordResetView(ClassCommuneLogin, auth_views.PasswordResetView):
-    email_template_name = "portail/password_reset_email.html"
+    email_template_name = "portail/password_reset/emails/confirmation_html.html"
     form_class = MyPasswordResetForm
-    subject_template_name = "portail/password_reset_subject.txt"
+    subject_template_name = "portail/password_reset/emails/confirmation_sujet.txt"
     success_url = reverse_lazy('password_reset_done')
     template_name = "portail/reset_password.html"
 
     def form_valid(self, form):
+        identifiant = form.cleaned_data["identifiant"]
+        email = form.cleaned_data["email"]
+        logger.debug("Demande de reset du password : %s %s." % (identifiant, email))
+
+        # Recherche l'utilisateur
+        utilisateur = Utilisateur.objects.filter(username__iexact=identifiant, is_active=True, categorie="famille").first()
+        if not utilisateur or not utilisateur.famille.mail or utilisateur.famille.mail != email:
+            logger.debug("Erreur : Pas de compte actif existant.")
+            return _("Il n'existe pas de compte actif correspondant à cet identifiant et cette adresse Email.")
+
         opts = {
-            'use_https': self.request.is_secure(),
-            'token_generator': self.token_generator,
-            'from_email': self.from_email,
-            'email_template_name': self.email_template_name,
-            'subject_template_name': self.subject_template_name,
-            'request': self.request,
-            'html_email_template_name': self.html_email_template_name,
-            'extra_email_context': self.extra_email_context,
+            "nom_template_sujet": "portail/password_reset/emails/confirmation_sujet.txt",
+            "nom_template_html": "portail/password_reset/emails/confirmation_html.html",
+            "nom_template_texte": "portail/password_reset/emails/confirmation_texte.html",
+            "utilisateur": utilisateur, "request": self.request,
+            "token": default_token_generator.make_token(utilisateur),
         }
-        resultat = form.save(**opts)
+        resultat = utils_email.Envoyer_email(**opts)
+
+        # Génération du secquest
+        utils_secquest.Generation_secquest(famille=utilisateur.famille)
 
         # Affiche l'erreur rencontrée dans le form
         if resultat != True:
@@ -39,11 +54,11 @@ class MyPasswordResetView(ClassCommuneLogin, auth_views.PasswordResetView):
 
 
 class MyPasswordResetDoneView(ClassCommuneLogin, auth_views.PasswordResetDoneView):
-    template_name = "portail/password_reset_done.html"
+    template_name = "portail/password_reset/done.html"
 
 
 class MyPasswordResetConfirmView(ClassCommuneLogin, auth_views.PasswordResetConfirmView):
-    template_name = "portail/password_reset_confirm.html"
+    template_name = "portail/password_reset/confirm.html"
     form_class = MySetPasswordForm
 
     def form_valid(self, form):
@@ -57,4 +72,4 @@ class MyPasswordResetConfirmView(ClassCommuneLogin, auth_views.PasswordResetConf
 
 
 class MyPasswordResetCompleteView(ClassCommuneLogin, auth_views.PasswordResetCompleteView):
-    template_name = "portail/password_reset_complete.html"
+    template_name = "portail/password_reset/complete.html"

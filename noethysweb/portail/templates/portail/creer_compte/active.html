@@ -1,0 +1,14 @@
+{% extends "core/base_login.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block titre_contenu %}
+    {% blocktrans %}Votre compte a bien été activé{% endblocktrans %}
+{% endblock titre_contenu %}
+
+{% block contenu_page %}
+
+    <p>{% blocktrans %}Un nouveau mail contenant vos informations de connexion vous a été envoyé.{% endblocktrans %}</p>
+    <p>{% blocktrans %}Si vous n'avez toujours pas reçu le mail dans quelques minutes, pensez à regarder dans vos indésirables.{% endblocktrans %}</p>
+
+{% endblock contenu_page %}

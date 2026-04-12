@@ -1,0 +1,17 @@
+{% extends "portail/creer_compte/emails/base.html" %}
+{% load i18n %}
+
+{% block contenu_page %}
+    <h1>{% blocktrans %}Confirmez votre adresse email{% endblocktrans %}</h1>
+
+    <p>{% blocktrans %}Bonjour{% endblocktrans %} <strong>{{ prenom }}</strong>,</p>
+
+    <p>{% blocktrans %}Afin de finaliser la création de votre compte sur le portail famille et accéder à toutes nos fonctionnalités, merci de confirmer votre adresse email en cliquant sur le bouton ci-dessous{% endblocktrans %} :</p>
+
+    <div style="text-align: center;">
+        <a href="{{ protocol }}://{{ domain }}{% url 'portail_creer_compte_activer' uidb64=uid token=token %}" class="button">{% blocktrans %}Confirmer mon compte{% endblocktrans %}</a>
+    </div>
+
+    <p style="margin-top: 30px; font-size: 14px;">{% blocktrans %}Si le bouton ne fonctionne pas, vous pouvez copier et coller ce lien dans votre navigateur{% endblocktrans %} :<br>
+    <span style="color: #6366f1;">{{ protocol }}://{{ domain }}{% url 'portail_creer_compte_activer' uidb64=uid token=token %}</span></p>
+{% endblock %}

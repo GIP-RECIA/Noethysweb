@@ -3,16 +3,16 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-from django.urls import include, path
-from portail.views import accueil, login
+from django.urls import path
 from django.contrib.auth import views as auth_views
+from core.decorators import secure_ajax_portail
 from consommations.views import grille
+from portail.views import accueil, login
 from portail.views import reset_password, change_password, reservations, planning, renseignements, individu_identite, individu_questionnaire, individu_contacts, \
                             individu_regimes_alimentaires, individu_coords, individu_medecin, individu_informations, individu_assurances, individu_vaccinations, \
                             famille_caisse, profil, profil_password_change, facturation, reglements, mentions, contact, messagerie, individu_maladies, album, documents, \
                             transmettre_piece, activites, inscrire_activite, attente_paiement, cotisations, sondage, famille_questionnaire, famille_parametres, pages_speciales, \
-                            famille_quotients
-from core.decorators import secure_ajax_portail
+                            creer_compte, creer_individu
 
 
 urlpatterns = [
@@ -34,6 +34,13 @@ urlpatterns = [
     path('reset/<uidb64>/<token>', reset_password.MyPasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('reset_password_complete/', reset_password.MyPasswordResetCompleteView.as_view(), name='password_reset_complete'),
 
+    # Créer un nouveau compte
+    path('creer_compte/', creer_compte.CreerCompteView.as_view(), name='portail_creer_compte'),
+    path('creer_compte/attente/', creer_compte.CreerCompteAttenteView.as_view(), name='portail_creer_compte_attente'),
+    path('creer_compte/active/', creer_compte.CreerCompteActiveView.as_view(), name='portail_creer_compte_active'),
+    path('creer_compte/probleme/', creer_compte.CreerCompteProblemeView.as_view(), name='portail_creer_compte_probleme'),
+    path('creer_compte/activer/<uidb64>/<token>', creer_compte.Activer, name='portail_creer_compte_activer'),
+
     # Profil
     path('profil', profil.View.as_view(), name='portail_profil'),
     path('profil_password_change', profil_password_change.View.as_view(), name='portail_profil_password_change'),
@@ -49,6 +56,8 @@ urlpatterns = [
 
     # Renseignements
     path('renseignements', renseignements.View.as_view(), name='portail_renseignements'),
+
+    path('renseignements/creer_individu', creer_individu.Ajouter.as_view(), name='portail_creer_individu'),
 
     path('renseignements/famille/caisse', famille_caisse.Consulter.as_view(), name='portail_famille_caisse'),
     path('renseignements/famille/caisse/modifier', famille_caisse.Modifier.as_view(), name='portail_famille_caisse_modifier'),

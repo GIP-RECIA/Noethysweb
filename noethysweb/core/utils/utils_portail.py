@@ -75,6 +75,7 @@ LISTE_PARAMETRES = [
     Parametre(code="connexion_image_fond", label="Image de fond", type="image_fond", valeur=None, help_text="Sélectionnez une image de fond dans la liste. Vous pouvez ajouter de nouvelles images depuis le menu Paramétrage > Images de fond."),
     Parametre(code="connexion_adresse_exp", label="Adresse d'expédition", type="adresse_exp", valeur=None, help_text="Cette adresse mail est utilisée pour envoyer des mails de réinitialisation de mots de passe. A défaut de sélection, la fonction mot de passe oublié sera désactivée."),
     Parametre(code="connexion_texte_pas_codes", label="Texte pour la boîte de dialogue 'Pas de codes d'accès ?'", type="html", valeur="Contactez directement l'organisme pour recevoir vos codes d'accès."),
+    Parametre(code="connexion_creation_compte", label="Autoriser la création autonome de comptes utilisateurs", type="boolean", valeur=False, help_text="En activant cette option, vous autorisez un usager à créer une fiche famille et les fiches individuelles directement sur le portail."),
     Parametre(code="connexion_question_perso", label="Activer la question personnelle de sécurité lors du changement de mot de passe", type="boolean", valeur=True, help_text="L'usager doit répondre à une question personnelle lors de la personnalisation de son mot de passe."),
     Parametre(code="connexion_afficher_nom_organisateur", label="Afficher le nom de l'organisateur", type="boolean", valeur=True, help_text="Décochez cette case si votre logo inclut déjà le nom de l'organisateur."),
 
@@ -86,6 +87,7 @@ LISTE_PARAMETRES = [
     # Renseignements
     Parametre(code="renseignements_afficher_page", label="Afficher la page", type="boolean", valeur=True),
     Parametre(code="renseignements_intro", label="Texte d'introduction", type="char_2lignes", valeur="Cliquez sur l'une des fiches listées ci-dessous pour consulter les renseignements et les corriger si besoin."),
+    Parametre(code="renseignements_creation_individu", label="Autoriser la création autonome de fiches individuelles", type="boolean", valeur=False, help_text="En activant cette option, vous autorisez un usager à créer des fiches individuelles directement sur le portail. Notez que cette option est systématiquement active si vous avez activé la création autonome des comptes utilisateurs."),
     Parametre(code="validation_auto:famille_caisse", label="Validation automatique de la page 'Caisse'", type="boolean", valeur=True),
     Parametre(code="validation_auto:individu_identite", label="Validation automatique de la page 'Identité'", type="boolean", valeur=True),
     Parametre(code="validation_auto:individu_coords", label="Validation automatique de la page 'Coordonnées'", type="boolean", valeur=True),

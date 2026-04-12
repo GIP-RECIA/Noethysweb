@@ -188,28 +188,30 @@
         <div class="container">
             <div class="card login-card">
                 <div class="row no-gutters">
-                    <div class="col-md-5">
-                        <img src="{{ url_image_fond }}"
-                         alt="login" class="login-card-img">
-                    </div>
-                    <div class="col-md-7">
-                        <div class="card-body">
-                            <div class="brand-wrapper">
-                                {% if organisateur and organisateur.logo %}
-                                    <img src="{{ organisateur.logo.url }}" alt="logo" class="logo">
-                                {% endif %}
-                            </div>
-                            {% if not parametres_portail or parametres_portail.connexion_afficher_nom_organisateur %}
-                                <p class="login-card-description">{{ organisateur.nom }}</p>
-                            {% endif %}
-
-                            <p class="titre_contenu">{% block titre_contenu %}Connexion{% endblock titre_contenu %}</p>
-
-                            {% block contenu_page %}
-                            {% endblock contenu_page %}
-
+                    {% block contenu_cadre %}
+                        <div class="col-md-5">
+                            <img src="{{ url_image_fond }}"
+                             alt="login" class="login-card-img">
                         </div>
-                    </div>
+                        <div class="col-md-7">
+                            <div class="card-body">
+                                <div class="brand-wrapper">
+                                    {% if organisateur and organisateur.logo %}
+                                        <img src="{{ organisateur.logo.url }}" alt="logo" class="logo">
+                                    {% endif %}
+                                </div>
+                                {% if not parametres_portail or parametres_portail.connexion_afficher_nom_organisateur %}
+                                    <p class="login-card-description">{{ organisateur.nom }}</p>
+                                {% endif %}
+
+                                <p class="titre_contenu">{% block titre_contenu %}Connexion{% endblock titre_contenu %}</p>
+
+                                {% block contenu_page %}
+                                {% endblock contenu_page %}
+
+                            </div>
+                        </div>
+                    {% endblock contenu_cadre %}
                 </div>
             </div>
         </div>
