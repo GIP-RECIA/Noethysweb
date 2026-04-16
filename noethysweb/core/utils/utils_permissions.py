@@ -13,11 +13,18 @@ def GetPermissionsPossibles(organisateur=None):
     liste_permissions = []
 
     # Commandes de menu
-    menu_principal = GetMenuPrincipal(organisateur=organisateur)
+    menu_principal = GetMenuPrincipal(organisateur=organisateur, force_permissions=True)
+    #menu_principal = GetMenuPrincipal(organisateur=organisateur)
     for menu in menu_principal.GetChildren():
         for sous_menu in menu.GetChildren():
             for commande in sous_menu.GetChildren():
                 liste_permissions.append((commande.code, "%s | %s" % (commande.parent.parent.titre, commande.titre)))
+    
+    # Ajout manuel de la permission desk_creer pour garantir sa présence
+    # même quand SECRET_EXPORT_DESK=None (menu masqué mais permission conservée)
+    #desk_creer_present = any(perm[0] == 'desk_creer' for perm in liste_permissions)
+    #if not desk_creer_present:
+    #    liste_permissions.append(('desk_creer', 'Outils | Récupérer les données'))
 
     # Fiche famille
     for commande in LISTE_ONGLETS_FAMILLES:
