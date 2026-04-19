@@ -1,3 +1,15 @@
+Version 1.3.3.0 (19/04/2026) :
+
+- Ajout de la création autonome des comptes utilisateurs sur le portail
+- Ajout de la création autonome de fiches individuelles sur le portail
+- Ajout de l'export Excel multipages dans les listes
+- Ajout des questionnaires dans les filtres de liste
+- Ajout d'une colonne Titre dans la liste des pièces fournies
+- Ajout du logout sur le storage pcloud
+- Ajout de la colonne Nombre d'activités associées dans le paramétrage des groupes d'activités
+- Correction sur l'affichage des structures sans coordonnées dans l'annuaire du portail
+- Correction sur la recherche d'un type de pièce dans la liste des pièces fournies
+
 Version 1.3.2.9 (06/04/2026) :
 
 - Ajout de l'export Excel des fiches de renseignements
