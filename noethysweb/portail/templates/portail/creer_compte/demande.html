@@ -34,4 +34,22 @@
 
         <a class="forgot-password-link" href="{% url 'portail_connexion' %}" title="{% trans "Revenir à la page de connexion" %}">{% blocktrans %}Revenir à la page de connexion{% endblocktrans %}</a>
     </div>
+
+    {# Modal : Conditions d'utilisation #}
+    <div class="modal" id="modal_conditions">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">{% blocktrans %}Conditions d'utilisation{% endblocktrans %}</h4>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size: 13px;">
+                        {{ texte_conditions|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 {% endblock contenu_cadre %}

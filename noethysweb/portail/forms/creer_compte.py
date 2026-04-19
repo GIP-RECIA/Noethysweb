@@ -10,6 +10,7 @@ from django.forms import ValidationError
 from django.contrib.auth.password_validation import get_password_validators
 from django.conf import settings
 from django.utils.translation import gettext as _
+from django.utils.safestring import mark_safe
 from django.core.validators import validate_email
 from core.models import Individu
 from crispy_forms.helper import FormHelper
@@ -23,9 +24,10 @@ class FormCreerCompte(forms.Form):
     nom = forms.CharField(label="Nom de famille", required=True, help_text="Saisissez votre nom de famille en majuscules. Ex : DUPOND.")
     prenom = forms.CharField(label="Prénom", required=True, help_text="Saisissez votre prénom en minuscules avec la première lettre en majuscule. Ex : Sophie.")
     email = forms.CharField(label="Email", required=True, max_length=254, widget=forms.EmailInput(attrs={"autocomplete": "email"}), help_text="Saisissez votre adresse email. Elle sera utilisée pour vous envoyer un email d'activation.")
-    mdp1 = forms.CharField(label="Mot de passe", required=False, widget=forms.TextInput(attrs={"type": "password"}), help_text="")
-    mdp2 = forms.CharField(label="Mot de passe", required=False, widget=forms.TextInput(attrs={"type": "password"}), help_text="Saisissez une seconde fois le mot de passe choisi.")
+    mdp1 = forms.CharField(label="Mot de passe", required=True, widget=forms.TextInput(attrs={"type": "password"}), help_text="")
+    mdp2 = forms.CharField(label="Mot de passe", required=True, widget=forms.TextInput(attrs={"type": "password"}), help_text="Saisissez une seconde fois le mot de passe choisi.")
     captcha = CaptchaField(widget=CustomCaptchaTextInput)
+    check_conditions = forms.BooleanField(label=mark_safe("J'accepte les <a href='#' data-toggle='modal' data-target='#modal_conditions'>conditions d'utilisation</a>"), required=True, initial=False)
 
     def __init__(self, *args, **kwargs):
         super(FormCreerCompte, self).__init__(*args, **kwargs)
@@ -43,7 +45,7 @@ class FormCreerCompte(forms.Form):
 
         # Affichage des exigences de mot de passe dans le help_text
         exigences = ["<li>%s</li>" % v.get_help_text() for v in get_password_validators(settings.AUTH_PASSWORD_VALIDATORS)]
-        self.fields["mdp1"].help_text = "<ul style='padding-left: 16px;padding-bottom: 0px'>%s</ul>" % "".join(exigences)
+        self.fields["mdp1"].help_text = "<ul style='padding-left: 16px;padding-bottom: 0px;margin-bottom: 0;'>%s</ul>" % "".join(exigences)
 
         self.helper.layout = Layout(
             Field("civilite"),
@@ -53,6 +55,7 @@ class FormCreerCompte(forms.Form):
             Field("mdp1"),
             Field("mdp2"),
             Field("captcha"),
+            Field("check_conditions"),
         )
 
     def clean(self):
