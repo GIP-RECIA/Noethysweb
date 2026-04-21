@@ -8,7 +8,6 @@ from django.urls import reverse_lazy
 from django.conf import settings
 
 
-#def GetMenuPrincipal(organisateur=None, user=None):
 def GetMenuPrincipal(organisateur=None, user=None, force_permissions=False):
     menu = Menu(titre="Menu principal", user=user, force_permissions=force_permissions)
 
