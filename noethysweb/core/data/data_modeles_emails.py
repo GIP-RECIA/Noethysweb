@@ -5,6 +5,8 @@
 
 import copy
 
+#ce fichier définit les catégories disponibles dans le dropdown de la page Modeles d'emails.
+
 CATEGORIES = [
     ("saisie_libre", "Saisie libre"),
     ("releve_prestations", "Relevé des prestations"),
@@ -34,6 +36,8 @@ CATEGORIES = [
     ("location_demande", "Demande de location"),
     ("commande_repas", "Commande de repas"),
     ("inscription", "Inscription"),
+    # catégorie pour l'envoi d'emails groupés aux familles inscrites à une activité.
+    ("activites", "Activité"),
     ("devis", "Devis"),
 ]
 
@@ -303,6 +307,16 @@ MOTSCLES = {
         ("{INDIVIDU_NOM}", "Nom de famille de l'individu"),
         ("{INDIVIDU_PRENOM}", "Prénom de l'individu"),
         ("{INDIVIDU_DATE_NAISS}", "Date de naissance de l'individu"),
+    ],
+
+    "activite": [
+        # ces mots-clés sont utilisés dans les modèles emails de catégorie "Activité".
+        # ils sont remplis automatiquement par GetDonneesImpression() dans utils_activites.py
+        # lors de l'envoi d'emails groupés aux familles inscrites à une activité.
+        ("{ACTIVITE_NOM_LONG}", "Nom de l'activité"),
+        ("{ACTIVITE_NOM_COURT}", "Nom abrégé de l'activité"),
+        ("{NOMBRE_INSCRIPTIONS}", "Nombre d'inscrits à l'activité"),
+        ("{FAMILLES}", "Liste des familles inscrites avec leurs emails"),
     ],
 
     "devis": [

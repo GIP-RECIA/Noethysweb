@@ -20,47 +20,70 @@ from django.contrib import messages
 import json
 
 
-
+# cette methode est appelée par un appel AJAX depuis la page de liste des activités (inscriptions_activites_email) 
+# lorsque l'utilisateur clique sur le bouton "Transférer" après avoir coché les activités qu'il souhaite envoyer par email. 
+# elle récupère les familles inscrites à ces activités, crée un mail groupé avec les champs de fusion correspondants, et redirige vers l'éditeur d'emails.
+'''
 def Transferer_activites(request):
     """Transfère les familles des activités cochées vers l'éditeur d'emails (sans PDF)."""
     if request.method != "POST":
         return JsonResponse({"erreur": "Méthode invalide."}, status=405)
 
+    # Récupère les activités cochées
     data = json.loads(request.POST.get("activites_selectionnees", "[]"))
     if not data:
         return JsonResponse({"erreur": "Aucune activité sélectionnée."}, status=401)
 
+    print("ACTIVITES SELECTIONNEES POUR ENVOI PAR EMAIL : ", data)
     
+    # Utilise le modèle email par défaut de catégorie "activites" si disponible
+    from core.models import ModeleEmail
+    modele_email = ModeleEmail.objects.filter(categorie="activites", defaut=True).first()
     mail = Mail.objects.create(
         categorie="activites",
-        objet="Informations sur l'activité",
-        html="",
+        objet=modele_email.objet if modele_email else "Informations sur l'activité",
+        html=modele_email.html if modele_email else "",
         adresse_exp=request.user.Get_adresse_exp_defaut(),
         selection="NON_ENVOYE",
         verrouillage_destinataires=False,
         utilisateur=request.user,
     )
 
+    # Récupère les champs de fusion par activité pour substitution dans le modèle email
+    from fiche_individu.utils import utils_activites as ua
+    # recupere les champs de fusion depuis utils_activites.py
+    activites_obj = ua.Activites()
+    dict_donnees, dict_champs_fusion = activites_obj.GetDonneesImpression(data)
+
     # Récupère les familles inscrites aux activités cochées — dédoublonnage par famille
     inscriptions = (
         Inscription.objects
         .filter(activite_id__in=data, famille__isnull=False)
-        .select_related("famille")
+        .select_related("famille", "activite")
     )
     familles_dict = {}
     for insc in inscriptions:
         if insc.famille and insc.famille.mail:
-            familles_dict[insc.famille.pk] = insc.famille.mail
+            # Associe les champs de fusion de l activite a la famille
+            champs = dict_champs_fusion.get(insc.activite_id, {})
+            familles_dict[insc.famille.pk] = {
+                "email": insc.famille.mail,
+                "valeurs": champs
+            }
 
     liste_anomalies = []
-    for fam_id, email in familles_dict.items():
+    for fam_id, donnees in familles_dict.items():
+        email = donnees["email"]
+        valeurs = donnees["valeurs"]
         if email:
             destinataire = Destinataire.objects.create(
                 categorie="activites",
                 famille_id=fam_id,
                 adresse=email,
+                valeurs=json.dumps(valeurs),  # champs de fusion stockés pour substitution
             )
             mail.destinataires.add(destinataire)
+
         else:
             liste_anomalies.append(str(fam_id))
 
@@ -69,10 +92,13 @@ def Transferer_activites(request):
 
     url = reverse_lazy("editeur_emails", kwargs={"pk": mail.pk})
     return JsonResponse({"url": url})
+'''
 
-
+# cette methode est appelée par un appel AJAX depuis la page de liste des activités (inscriptions_activites_email)
+# lorsque l'utilisateur clique sur le bouton "Transférer" après avoir coché les activités qu'il souhaite envoyer par email.
+# elle génère un PDF par activité avec les familles inscrites, crée un mail groupé avec les champs de fusion correspondants, et redirige vers l'éditeur d'emails.
 def Impression_pdf(request):
-    """Génère un PDF par activité et l'envoie en PJ à chaque famille inscrite."""
+    # Récupération les activités cochées
     activites_cochees = json.loads(request.POST.get("activites_cochees"))
     if not activites_cochees:
         return JsonResponse({"erreur": "Veuillez cocher au moins une activité dans la liste"}, status=401)
@@ -84,10 +110,13 @@ def Impression_pdf(request):
     if not resultat:
         return JsonResponse({"success": False}, status=401)
 
+    # Utilise le modèle email par défaut de catégorie "activites" si disponible
+    from core.models import ModeleEmail
+    modele_email = ModeleEmail.objects.filter(categorie="activites", defaut=True).first()
     mail = Mail.objects.create(
         categorie="activites",
-        objet="Notification d'activité",
-        html="",
+        objet=modele_email.objet if modele_email else "Notification d'activité",
+        html=modele_email.html if modele_email else "",
         adresse_exp=request.user.Get_adresse_exp_defaut(),
         selection="NON_ENVOYE",
         verrouillage_destinataires=True,
@@ -99,10 +128,13 @@ def Impression_pdf(request):
         inscriptions = Inscription.objects.select_related('famille').filter(activite_id=IDcotisation)
         for cotisation in inscriptions:
             if cotisation.famille.mail:
+                # Récupère les champs de fusion pour substitution dans le modèle email
+                champs = resultat["champs"].get(IDcotisation, {})
                 destinataire = Destinataire.objects.create(
-                    categorie="famille",
+                    categorie="activites",
                     famille=cotisation.famille,
-                    adresse=cotisation.famille.mail
+                    adresse=cotisation.famille.mail,
+                    valeurs=json.dumps(donnees["valeurs"])
                 )
                 document_joint = DocumentJoint.objects.create(nom="Activite", fichier=donnees["nom_fichier"])
                 destinataire.documents.add(document_joint)
