@@ -47,6 +47,7 @@ class Inscriptions():
                 "{IDINDIVIDU}": inscription.individu_id,
                 "{INDIVIDU_NOM}":  inscription.individu.nom,
                 "{INDIVIDU_PRENOM}": inscription.individu.prenom,
+                "{INDIVIDU_DATE_NAISS}": utils_dates.ConvertDateToFR(inscription.individu.date_naiss) or "",            
                 "{INDIVIDU_RUE}": inscription.individu.rue_resid,
                 "{INDIVIDU_CP}": inscription.individu.cp_resid,
                 "{INDIVIDU_VILLE}": inscription.individu.ville_resid,
