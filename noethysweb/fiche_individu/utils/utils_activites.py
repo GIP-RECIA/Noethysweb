@@ -21,8 +21,6 @@ class Activites():
     def __init__(self):
         """ Récupération de toutes les données de base """
         logger.debug("Recherche toutes les activités...")
-        self.questionnaires = utils_questionnaires.ChampsEtReponses(categorie="activite")
-
     def GetDonneesImpression(self, liste_activites=[]):
         """ Récupération des données d'impression des activités """
         logger.debug("Recherche des données d'impression pour les activités...")
@@ -72,11 +70,6 @@ class Activites():
                     [f"{famille['famille__nom']} ({famille['famille__mail']})" for famille in familles])
             }
 
-            # Correction : récupérer les inscriptions liées à l'activité
-            for inscription in Inscription.objects.filter(activite=activite):
-                if inscription.famille:
-                    for dictReponse in self.questionnaires.GetDonnees(inscription.famille_id):
-                        dictDonnee[dictReponse["champ"]] = dictReponse["reponse"]
 
             dictDonnees[activite.pk] = dictDonnee
             # Champs de fusion pour Email
@@ -129,7 +122,7 @@ class Activites():
                 logger.debug("Création du PDF de l'activité ID%d..." % IDactivite)
                 impression.Generation_document(dict_donnees={IDactivite: dictActivite})
                 noms_fichiers[IDactivite] = {"nom_fichier": impression.Get_nom_fichier(),
-                                             "valeurs": impression.Get_champs_fusion_pour_email("activite", IDactivite)}
+                                             "valeurs": impression.Get_champs_fusion_pour_email("activites", IDactivite)}
 
         # Fabrication du PDF global
         nom_fichier = None

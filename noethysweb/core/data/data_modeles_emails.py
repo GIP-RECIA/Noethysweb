@@ -309,7 +309,7 @@ MOTSCLES = {
         ("{INDIVIDU_DATE_NAISS}", "Date de naissance de l'individu"),
     ],
 
-    "activite": [
+    "activites": [
         # ces mots-clés sont utilisés dans les modèles emails de catégorie "Activité".
         # ils sont remplis automatiquement par GetDonneesImpression() dans utils_activites.py
         # lors de l'envoi d'emails groupés aux familles inscrites à une activité.
