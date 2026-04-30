@@ -26,8 +26,7 @@ class Activites():
         logger.debug("Recherche des données d'impression pour les activités...")
         # Recherche les activités sélectionnées
         activites = Activite.objects.filter(pk__in=liste_activites)
-        
-        '''
+
         # Récupération du nombre d'inscriptions par activité
         
         activites_data = (
@@ -39,8 +38,7 @@ class Activites():
 
         # Dictionnaire pour stocker le nombre d'inscriptions par activité
         dict_nb_inscriptions = {data["activite_id"]: data["nombre_inscriptions"] for data in activites_data}
-        '''
-        
+
         dictDonnees = {}
         dictChampsFusion = {}
         for activite in activites:
@@ -71,6 +69,7 @@ class Activites():
                     "{INDIVIDU_NOM}": inscription.individu.nom if inscription.individu else "",
                     "{INDIVIDU_PRENOM}": inscription.individu.prenom if inscription.individu else "",
                     "{INDIVIDU_DATE_NAISS}": utils_dates.ConvertDateToFR(inscription.individu.date_naiss) if inscription.individu and inscription.individu.date_naiss else "",
+                    "{NOMBRE_INSCRIPTIONS}": str(dict_nb_inscriptions.get(activite_id, 0))
                 }
         return dictDonnees, dictChampsFusion
 

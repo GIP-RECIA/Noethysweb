@@ -325,6 +325,7 @@ MOTSCLES = {
         ("{INDIVIDU_NOM}", "Nom de famille de l'enfant inscrit"),
         ("{INDIVIDU_PRENOM}", "Prénom de l'enfant inscrit"),
         ("{INDIVIDU_DATE_NAISS}", "Date de naissance de l'enfant inscrit"),
+        ("{NOMBRE_INSCRIPTIONS}", "Nombre total d'inscriptions à l'activité"),
     ],
 
     "devis": [
