@@ -98,7 +98,7 @@ def Transferer_activites(request):
 # lorsque l'utilisateur clique sur le bouton "Transférer" après avoir coché les activités qu'il souhaite envoyer par email.
 # elle génère un PDF par activité avec les familles inscrites, crée un mail groupé avec les champs de fusion correspondants, et redirige vers l'éditeur d'emails.
 def Impression_pdf(request):
-    # Récupération les activités cochées
+    # Récupération des activités cochées
     activites_cochees = json.loads(request.POST.get("activites_cochees"))
     if not activites_cochees:
         return JsonResponse({"erreur": "Veuillez cocher au moins une activité dans la liste"}, status=401)
@@ -123,35 +123,28 @@ def Impression_pdf(request):
         utilisateur=request.user,
     )
 
+    # 1 destinataire par inscription (par enfant)
     liste_anomalies = []
-    for IDcotisation, donnees in resultat["noms_fichiers"].items():
-        inscriptions = Inscription.objects.select_related('famille').filter(activite_id=IDcotisation)
-        # dedoublonnage des familles pour éviter d'envoyer plusieurs fois le même mail à une famille inscrite à plusieurs activités cochées
-        familles_vues = set()
-        for cotisation in inscriptions:
-            if cotisation.famille.mail and cotisation.famille_id not in familles_vues:
-                familles_vues.add(cotisation.famille_id) # marque la famille comme vue
-                # Récupère les champs de fusion pour substitution dans le modèle email
-                # champs = resultat["champs"].get(IDcotisation, {})
-                destinataire = Destinataire.objects.create(
-                    categorie="activites",
-                    famille=cotisation.famille,
-                    adresse=cotisation.famille.mail,
-                    valeurs=json.dumps(donnees["valeurs"])
-                )
-                document_joint = DocumentJoint.objects.create(nom="Activite", fichier=donnees["nom_fichier"])
-                destinataire.documents.add(document_joint)
-                mail.destinataires.add(destinataire)
-            else:
-                if not cotisation.famille.mail:
-                    liste_anomalies.append(cotisation.famille.nom)
+    for IDinscription, donnees in resultat["noms_fichiers"].items():
+        cotisation = Inscription.objects.select_related('famille').get(pk=IDinscription)
+        if cotisation.famille.mail:
+            destinataire = Destinataire.objects.create(
+                categorie="activites",
+                famille=cotisation.famille,
+                adresse=cotisation.famille.mail,
+                valeurs=json.dumps(donnees["valeurs"])
+            )
+            document_joint = DocumentJoint.objects.create(nom="Activite", fichier=donnees["nom_fichier"])
+            destinataire.documents.add(document_joint)
+            mail.destinataires.add(destinataire)
+        else:
+            liste_anomalies.append(cotisation.famille.nom)
 
     if liste_anomalies:
         messages.add_message(request, messages.ERROR, "Adresses mail manquantes : %s" % ", ".join(liste_anomalies))
 
     url = reverse_lazy("editeur_emails", kwargs={'pk': mail.pk})
     return JsonResponse({"url": url})
-
 
 
 class Page(crud.Page):
@@ -166,11 +159,10 @@ class Liste(Page, crud.Liste):
     categorie = "activites"
 
     def get_queryset(self):
-        # Groupe par activité+groupe pour éviter les doublons
         queryset = (
             Inscription.objects
             .filter(famille__mail__isnull=False,
-                    activite__structure__in=self.request.user.structures.all() # on limite aux activités des structures de l'utilisateur connecté
+                    activite__structure__in=self.request.user.structures.all()
             )
             .annotate(
                 id_activite=F("activite__idactivite"),
@@ -220,3 +212,4 @@ class Liste(Page, crud.Liste):
                     "nombre_inscriptions": row["nombre_inscriptions"],
                 })
             return results
+        

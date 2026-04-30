@@ -26,8 +26,10 @@ class Activites():
         logger.debug("Recherche des données d'impression pour les activités...")
         # Recherche les activités sélectionnées
         activites = Activite.objects.filter(pk__in=liste_activites)
-
+        
+        '''
         # Récupération du nombre d'inscriptions par activité
+        
         activites_data = (
             Inscription.objects
             .filter(activite_id__in=liste_activites)
@@ -37,47 +39,39 @@ class Activites():
 
         # Dictionnaire pour stocker le nombre d'inscriptions par activité
         dict_nb_inscriptions = {data["activite_id"]: data["nombre_inscriptions"] for data in activites_data}
-
+        '''
+        
         dictDonnees = {}
         dictChampsFusion = {}
-
         for activite in activites:
             activite_id = activite.pk
-            nombre_inscriptions = dict_nb_inscriptions.get(activite_id, 0)
 
-            # Récupérer les familles inscrites à cette activité
-            familles = (
-                Inscription.objects
-                .filter(activite_id=activite_id, famille__isnull=False)
-                .select_related("famille", "activite")
-                .values(
-                    "activite_id",
-                    "activite__nom",
-                    "famille_id",
-                    "famille__nom",
-                    "famille__mail"
-                )
-                .distinct()
-            )
-
-            # Mémorisation des données
-            dictDonnee = {
-                "{IDACTIVITE}": str(activite.pk),
+            # Données par activité - utilisées pour le PDF global (mode_email=False)
+            dictDonnees[activite_id] = {
                 "{ACTIVITE_NOM_LONG}": activite.nom,
-                "{ACTIVITE_NOM_COURT}": activite.abrege,
-                "{NOMBRE_INSCRIPTIONS}": nombre_inscriptions,
-                "{FAMILLES}": ", ".join(
-                    [f"{famille['famille__nom']} ({famille['famille__mail']})" for famille in familles])
+                "{ACTIVITE_NOM_COURT}": activite.abrege or "",
             }
 
-
-            dictDonnees[activite.pk] = dictDonnee
-            # Champs de fusion pour Email
-            dictChampsFusion[activite.pk] = {}
-            for key, valeur in dictDonnee.items():
-                if key.startswith("{"):
-                    dictChampsFusion[activite.pk][key] = valeur
-
+            # Données par inscription - utilisées pour les emails (mode_email=True)
+            inscriptions = (
+                Inscription.objects
+                .filter(activite_id=activite_id, famille__isnull=False)
+                .select_related("famille", "individu", "groupe", "categorie_tarif")
+            )
+            for inscription in inscriptions:
+                dictChampsFusion[inscription.idinscription] = {
+                    "{ACTIVITE_NOM_LONG}": activite.nom,
+                    "{ACTIVITE_NOM_COURT}": activite.abrege or "",
+                    "{IDINSCRIPTION}": str(inscription.idinscription),
+                    "{DATE_DEBUT}": utils_dates.ConvertDateToFR(inscription.date_debut) if inscription.date_debut else "",
+                    "{DATE_FIN}": utils_dates.ConvertDateToFR(inscription.date_fin) if inscription.date_fin else "",
+                    "{GROUPE_NOM_LONG}": inscription.groupe.nom if inscription.groupe else "",
+                    "{GROUPE_NOM_COURT}": inscription.groupe.abrege if inscription.groupe else "",
+                    "{NOM_CATEGORIE_TARIF}": inscription.categorie_tarif.nom if inscription.categorie_tarif else "",
+                    "{INDIVIDU_NOM}": inscription.individu.nom if inscription.individu else "",
+                    "{INDIVIDU_PRENOM}": inscription.individu.prenom if inscription.individu else "",
+                    "{INDIVIDU_DATE_NAISS}": utils_dates.ConvertDateToFR(inscription.individu.date_naiss) if inscription.individu and inscription.individu.date_naiss else "",
+                }
         return dictDonnees, dictChampsFusion
 
     def Impression(self, liste_activites=[], dict_options=None, mode_email=False):
@@ -118,11 +112,11 @@ class Activites():
                     IDmodele = modele_defaut.pk
 
             impression = utils_impression_activites.Impression(dict_options=dict_options, IDmodele=IDmodele,generation_auto=False)
-            for IDactivite, dictActivite in dict_activites.items():
-                logger.debug("Création du PDF de l'activité ID%d..." % IDactivite)
-                impression.Generation_document(dict_donnees={IDactivite: dictActivite})
-                noms_fichiers[IDactivite] = {"nom_fichier": impression.Get_nom_fichier(),
-                                             "valeurs": impression.Get_champs_fusion_pour_email("activites", IDactivite)}
+            for IDinscription, dictInscription in dictChampsFusion.items():
+                logger.debug("Création du PDF de l'inscription ID%d..." % IDinscription)
+                impression.Generation_document(dict_donnees={IDinscription: dictInscription})
+                noms_fichiers[IDinscription] = {"nom_fichier": impression.Get_nom_fichier(),
+                                                "valeurs": dictInscription}
 
         # Fabrication du PDF global
         nom_fichier = None

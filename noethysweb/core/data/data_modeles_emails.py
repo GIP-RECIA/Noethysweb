@@ -313,10 +313,18 @@ MOTSCLES = {
         # ces mots-clés sont utilisés dans les modèles emails de catégorie "Activité".
         # ils sont remplis automatiquement par GetDonneesImpression() dans utils_activites.py
         # lors de l'envoi d'emails groupés aux familles inscrites à une activité.
+
         ("{ACTIVITE_NOM_LONG}", "Nom de l'activité"),
         ("{ACTIVITE_NOM_COURT}", "Nom abrégé de l'activité"),
-        ("{NOMBRE_INSCRIPTIONS}", "Nombre d'inscrits à l'activité"),
-        ("{FAMILLES}", "Liste des familles inscrites avec leurs emails"),
+        ("{IDINSCRIPTION}", "ID de l'inscription"),
+        ("{DATE_DEBUT}", "Date de début de l'inscription"),
+        ("{DATE_FIN}", "Date de fin de l'inscription"),
+        ("{GROUPE_NOM_LONG}", "Nom du groupe"),
+        ("{GROUPE_NOM_COURT}", "Nom abrégé du groupe"),
+        ("{NOM_CATEGORIE_TARIF}", "Nom de la catégorie de tarif"),
+        ("{INDIVIDU_NOM}", "Nom de famille de l'enfant inscrit"),
+        ("{INDIVIDU_PRENOM}", "Prénom de l'enfant inscrit"),
+        ("{INDIVIDU_DATE_NAISS}", "Date de naissance de l'enfant inscrit"),
     ],
 
     "devis": [
