@@ -179,10 +179,7 @@ class Formulaire(FormulaireBase, ModelForm):
                                                     celle du début du forfait, mais vous pouvez choisir un autre type de date dans la liste proposée.""")
 
     # Forfait-crédit : Automatique
-    type_application = forms.TypedChoiceField(label="Application", choices=[
-        ("MANUEL", "Manuelle"),
-        #("AUTO", "Automatique")
-    ], initial="MANUEL", required=False)
+    type_application = forms.TypedChoiceField(label="Application", choices=[("MANUEL", "Manuelle"), ("AUTO", "Automatique")], initial="MANUEL", required=False)
     forfait_auto_nbre_conso_min = forms.IntegerField(label="Nbre conso min.", required=False, initial=2, validators=[MinValueValidator(1)], help_text="Ce forfait sera appliqué automatiquement si le nombre de consommations existantes sur la période est supérieur ou égal à X.")
     forfait_auto_debut = forms.TypedChoiceField(label="Début du forfait", initial="PREC_SEMAINE_PREMIER_JOUR", required=False, choices=[
         ("PREC_LUNDI", "Lundi précédent"), ("PREC_MARDI", "Mardi précédent"), ("PREC_MERCREDI", "Mercredi précédent"), ("PREC_JEUDI", "Jeudi précédent"),
