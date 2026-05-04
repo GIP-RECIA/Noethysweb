@@ -39,7 +39,14 @@ class Activites():
         # Dictionnaire pour stocker le nombre d'inscriptions par activité
         dict_nb_inscriptions = {data["activite_id"]: data["nombre_inscriptions"] for data in activites_data}
 
-        dictDonnees = {}
+        # champs famille/individu enrichis (adresse, téléphone, email...) — désactivé pour l'instant.
+        # à activer si on veut exposer plus de champs dans les modèles de documents et emails d'activité.
+        # pour activer : décommenter les 3 blocs ci-dessous et ajouter GetNomsChampsPossibles(mode="individu+famille")
+        # dans la classe Activite de core/utils/utils_modeles_documents.py
+        # liste_idfamille = list(Inscription.objects.filter(activite_id__in=liste_activites, famille__isnull=False).values_list("famille_id", flat=True).distinct())
+        # infosIndividus = utils_infos_individus.Informations(liste_familles=liste_idfamille)
+   
+        dictDonnees = {}     
         dictChampsFusion = {}
         for activite in activites:
             activite_id = activite.pk
@@ -71,6 +78,13 @@ class Activites():
                     "{INDIVIDU_DATE_NAISS}": utils_dates.ConvertDateToFR(inscription.individu.date_naiss) if inscription.individu and inscription.individu.date_naiss else "",
                     "{NOMBRE_INSCRIPTIONS}": str(dict_nb_inscriptions.get(activite_id, 0))
                 }
+
+                #à activer si on veut enrichir les champs famille/individu
+                # Ajout des infos famille et individu (adresse, téléphone, email...)
+                #dictChampsFusion[inscription.idinscription].update(
+                #    infosIndividus.GetDictValeurs(mode="famille", ID=inscription.famille_id, formatChamp=True)
+                #)
+
         return dictDonnees, dictChampsFusion
 
     def Impression(self, liste_activites=[], dict_options=None, mode_email=False):

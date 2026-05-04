@@ -67,11 +67,15 @@ class Impression(utils_impression.Impression):
                 largeursColonnes = [120, self.taille_cadre[2] - 120]
                 paraStyle = ParagraphStyle(name="detail", fontName="Helvetica-Bold", fontSize=9)
 
-                dataTableau.append(("Nom de l'Activité", Paragraph(dictValeur["{ACTIVITE_NOM_LONG}"], paraStyle)))
+                dataTableau.append(("Activité", Paragraph(dictValeur["{ACTIVITE_NOM_LONG}"], paraStyle)))
                 dataTableau.append(("Nom abrégé", Paragraph(dictValeur["{ACTIVITE_NOM_COURT}"], paraStyle)))
-                dataTableau.append(
-                    ("Nombre d'inscriptions", Paragraph(str(dictValeur["{NOMBRE_INSCRIPTIONS}"]), paraStyle)))
-                dataTableau.append(("Familles inscrites", Paragraph(dictValeur["{FAMILLES}"], paraStyle)))
+                dataTableau.append(("Enfant", Paragraph(dictValeur["{INDIVIDU_NOM}"] + " " + dictValeur["{INDIVIDU_PRENOM}"], paraStyle)))
+                dataTableau.append(("Date de naissance", Paragraph(dictValeur["{INDIVIDU_DATE_NAISS}"], paraStyle)))
+                dataTableau.append(("Date début", Paragraph(dictValeur["{DATE_DEBUT}"], paraStyle)))
+                dataTableau.append(("Date fin", Paragraph(dictValeur["{DATE_FIN}"], paraStyle)))
+                dataTableau.append(("Groupe", Paragraph(dictValeur["{GROUPE_NOM_LONG}"], paraStyle)))
+                dataTableau.append(("Catégorie de tarif", Paragraph(dictValeur["{NOM_CATEGORIE_TARIF}"], paraStyle)))
+                dataTableau.append(("Nombre d'inscrits", Paragraph(dictValeur["{NOMBRE_INSCRIPTIONS}"], paraStyle)))
 
                 style = TableStyle([
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
