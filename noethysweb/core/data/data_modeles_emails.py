@@ -5,7 +5,7 @@
 
 import copy
 
-#ce fichier définit les catégories disponibles dans le dropdown de la page Modeles d'emails.
+# ce fichier définit les catégories disponibles dans le dropdown de la page Modeles d'emails.
 
 CATEGORIES = [
     ("saisie_libre", "Saisie libre"),

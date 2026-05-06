@@ -46,7 +46,6 @@ urlpatterns = [
     # URL pour l'éditeur d'emails groupés des activités — à différencier de inscriptions_email qui est l'éditeur d'emails pour les inscriptions individuelles
     path('individus/inscriptions_activites_email', inscriptions_activites_email.Liste.as_view(), name='inscriptions_activites_email'),
     path('individus/inscriptions_activites_email_pdf', secure_ajax(inscriptions_activites_email.Impression_pdf), name='ajax_inscriptions_activites_email_pdf'),
-    #path('individus/inscriptions_activites_email/transferer', secure_ajax(inscriptions_activites_email.Transferer_activites), name='ajax_transferer_activites_email'),
     path('individus/imprimer_liste_inscrits', imprimer_liste_inscrits.View.as_view(), name='imprimer_liste_inscrits'),
     path('individus/liste_inscriptions_attente', liste_inscriptions_attente.View.as_view(etat="attente"), name='liste_inscriptions_attente'),
     path('individus/liste_inscriptions_refus', liste_inscriptions_attente.View.as_view(etat="refus"), name='liste_inscriptions_refus'),
