@@ -56,17 +56,9 @@ LISTE_PARAMETRES = [
     Parametre(code="prestations_afficher_page_famille", label="Afficher la page Prestations", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Prestations sur la fiche Famille."),
     Parametre(code="factures_afficher_page_famille", label="Afficher la page Factures", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Factures sur la fiche Famille."),
     Parametre(code="reglements_afficher_page_famille", label="Afficher la page Règlements", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Règlements sur la fiche Famille."),
-    Parametre(code="messagerie_afficher_page_famille", label="Afficher la page Messagerie", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Questionnaire sur la fiche Famille."),
+    Parametre(code="messagerie_afficher_page_famille", label="Afficher la page Messagerie", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Messagerie sur la fiche Famille."),
     Parametre(code="outils_afficher_page_famille", label="Afficher la page Outils", type="boolean",valeur=True, help_text="Cochez cette case pour afficher la page Outils sur la fiche Famille."),
     Parametre(code="consommations_afficher_page_famille", label="Afficher la page Consommations", type="boolean", valeur=True, help_text="Cochez cette case pour afficher la page Consommations sur la fiche Famille."),
-
-    # Emails par LOT
-    Parametre(code="emails_individus_afficher_page", label="Afficher d'envoi des emails par Individus", type="boolean", valeur=False, help_text="Cochez cette case pour afficher la page Individus pour l'envoi des email par lot sur la partie Envoi email par lot."),
-    Parametre(code="emails_familles_afficher_page", label="Afficher d'envoi des emails par Familles", type="boolean", valeur=False, help_text="Cochez cette case pour afficher la page Familles pour l'envoi des email par lot sur la partie Envoi email par lot."),
-    Parametre(code="emails_activites_afficher_page", label="Afficher d'envoi des emails par Activites",type="boolean", valeur=True,help_text="Cochez cette case pour afficher la page Activites pour l'envoi des email par lot sur la partie Envoi email par lot."),
-    Parametre(code="emails_inscriptions_afficher_page", label="Afficher d'envoi des emails par Inscriptions", type="boolean", valeur=False, help_text="Cochez cette case pour afficher la page Insciptions pour l'envoi des email par lot sur la partie Envoi email par lot."),
-    Parametre(code="emails_collaborateurs_afficher_page", label="Afficher d'envoi des emails par collaborations", type="boolean", valeur=False, help_text="Cochez cette case pour afficher la page collaborations pour l'envoi des email par lot sur la partie Envoi email par lot."),
-    Parametre(code="emails_liste_diffusion_afficher_page", label="Afficher d'envoi des emails par listes de diffusion", type="boolean",valeur=False, help_text="Cochez cette case pour afficher la page Listes de diffusion pour l'envoi des email par lot sur la partie Envoi email par lot."),
 
 ]
 
