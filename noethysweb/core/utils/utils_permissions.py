@@ -8,12 +8,14 @@ from fiche_famille.utils.utils_famille import LISTE_ONGLETS as LISTE_ONGLETS_FAM
 from fiche_individu.utils.utils_individu import LISTE_ONGLETS as LISTE_ONGLETS_INDIVIDUS
 
 
-def GetPermissionsPossibles(organisateur=None):
+def GetPermissionsPossibles(parametres_generaux=None, organisateur=None, categorie=None):
     """ Liste des commandes pour créer les permissions des utilisateurs """
     liste_permissions = []
 
     # Commandes de menu
-    menu_principal = GetMenuPrincipal(organisateur=organisateur)
+    menu_principal = GetMenuPrincipal(parametres_generaux=parametres_generaux, 
+                                    organisateur=organisateur, force_permissions=True)
+
     for menu in menu_principal.GetChildren():
         for sous_menu in menu.GetChildren():
             for commande in sous_menu.GetChildren():
