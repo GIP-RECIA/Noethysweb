@@ -2,6 +2,8 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
+from multiprocessing import context
+
 from django.urls import reverse_lazy
 from django.core.cache import cache
 from django.views.generic import TemplateView
@@ -15,13 +17,14 @@ from core.models import PortailParametre
 class Modifier(CustomView, TemplateView):
     template_name = "core/crud/edit.html"
     compatible_demo = False
+    menu_code = "parametres_generaux"
 
     def get_context_data(self, **kwargs):
         context = super(Modifier, self).get_context_data(**kwargs)
         context['page_titre'] = "Paramètres Généraux"
         context['box_titre'] = "Paramètres"
         context['box_introduction'] = "Ajustez les paramètres de Portail utilisateur et cliquez sur le bouton Enregistrer."
-        context['form'] = Formulaire()
+        context['form'] = context.get('form') or Formulaire(request=self.request)
         return context
 
     def post(self, request, **kwargs):
@@ -41,8 +44,9 @@ class Modifier(CustomView, TemplateView):
         if liste_modifications:
             PortailParametre.objects.bulk_update(liste_modifications, ["valeur"])
 
-        # Stocker le type de compte dans la session
+        # Invalider les caches de paramètres pour recharger les nouvelles valeurs
         cache.delete("parametres_portail")
+        cache.delete("parametres_generaux")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')
         return HttpResponseRedirect(reverse_lazy("parametrage_toc"))
