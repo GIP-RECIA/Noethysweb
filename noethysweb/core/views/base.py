@@ -124,7 +124,7 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin): #, PermissionRequired
         parametres_generaux = cache.get('parametres_generaux')
         if not parametres_generaux:
             parametres_generaux = utils_parametres_generaux.Get_dict_parametres()
-            cache.set('parametres_generaux', parametres_generaux, 1)
+            cache.set('parametres_generaux', parametres_generaux)
         context['parametres_generaux'] = parametres_generaux
 
         # Options d'interface
