@@ -25,7 +25,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None, for
     else:
         menu_structure.Add(code="organisateur_ajouter", titre="Organisateur", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="structures_liste", titre="Structures", icone="file-text-o", compatible_demo=False)
-    menu_structure.Add(code="parametres_generaux", titre="Paramètres généraux", icone="file-text-o")
+    menu_structure.Add(code="configuration_globale", titre="Configuration globale", icone="file-text-o", compatible_demo=False)
 
     # Activités
     menu_activites = menu_parametrage.Add(titre="Activités")

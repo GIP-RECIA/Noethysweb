@@ -121,11 +121,11 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin): #, PermissionRequired
         context['organisateur'] = organisateur
 
         # Paramètres du portail
-        parametres_generaux = cache.get('parametres_generaux')
+        parametres_generaux = cache.get('configuration_globale')
         if not parametres_generaux:
             parametres_generaux = utils_parametres_generaux.Get_dict_parametres()
-            cache.set('parametres_generaux', parametres_generaux)
-        context['parametres_generaux'] = parametres_generaux
+            cache.set('configuration_globale', parametres_generaux)
+        context['configuration_globale'] = parametres_generaux
 
         # Options d'interface
         key_cache = "options_interface_user%d" % self.request.user.pk

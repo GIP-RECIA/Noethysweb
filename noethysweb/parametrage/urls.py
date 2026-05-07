@@ -40,7 +40,7 @@ urlpatterns = [
     path('parametrage/organisateur/modifier/<int:pk>', organisateur.Modifier.as_view(), name='organisateur_modifier'),
 
     # Paramètres généraux
-    path('parametrage/parametres_generaux/', parametres_generaux.Modifier.as_view(), name='parametres_generaux'),
+    path('parametrage/configuration_globale/', parametres_generaux.Modifier.as_view(), name='configuration_globale'),
     # Structures
     path('parametrage/structures/liste', structures.Liste.as_view(), name='structures_liste'),
     path('parametrage/structures/ajouter', structures.Ajouter.as_view(), name='structures_ajouter'),
