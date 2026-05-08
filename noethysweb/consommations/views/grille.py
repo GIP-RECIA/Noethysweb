@@ -879,8 +879,11 @@ class Facturation():
                             if len(tarif_base.combi_retenue) == 1 and tarif_base.combi_retenue[0] in dict_options_conso:
                                 methode, id = dict_options_conso[tarif_base.combi_retenue[0]].split("=")
                                 if methode == "choix_tarif":
-                                    ligne = TarifLigne.objects.get(pk=int(id))
-                                    montant_tarif, nom_tarif, tarif_ligne = ligne.montant_unique, ligne.label or tarif_base.nom_tarif.nom, ligne
+                                    try:
+                                        ligne = TarifLigne.objects.get(pk=int(id))
+                                        montant_tarif, nom_tarif, tarif_ligne = ligne.montant_unique, ligne.label or tarif_base.nom_tarif.nom, ligne
+                                    except:
+                                        pass
 
                         logger.debug("Montant trouvé : Montant=%s (tarif=%s temps_facturé=%s Quantité=%d)" % (montant_tarif, nom_tarif, temps_facture, quantite))
 
