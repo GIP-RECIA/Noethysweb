@@ -223,6 +223,67 @@ class Formulaire(FormulaireBase, ModelForm):
 
         return self.cleaned_data
 
+    def save(self, commit=True):
+        """
+        Surcharge de la méthode save() pour garantir la synchronisation bidirectionnelle
+        des incompatibilités entre unités.
+        
+        Important : Sans cette surcharge, les incompatibilités ne seraient enregistrées
+        que dans un seul sens (ex: Matin incompatible avec Journée) mais pas dans l'autre
+        sens (Journée incompatible avec Matin).
+        """
+        # Sauvegarde de l'instance principale avec la méthode parent
+        instance = super().save(commit=commit)
+        
+        if commit:
+            # Si la sauvegarde est immédiate, on synchronise directement les incompatibilités
+            self._sync_incompatibilites(instance)
+        else:
+            # Si commit=False, la sauvegarde est différée. On crée une fonction wrapper
+            # qui sera appelée lors de save_m2m() pour garantir la synchronisation
+            original_save_m2m = self.save_m2m
+
+            def save_m2m():
+                # Sauvegarde des relations many-to-many par défaut
+                original_save_m2m()
+                # Synchronisation bidirectionnelle
+                self._sync_incompatibilites(instance)
+            self.save_m2m = save_m2m
+        return instance
+
+    def _sync_incompatibilites(self, instance):
+        """
+        Synchronise les incompatibilités dans les deux sens pour maintenir la cohérence.
+
+        Le modèle Unite utilise une relation many-to-many asymétrique (symmetrical=False)
+        pour les incompatibilités. Cette méthode garantit que si Unité A est incompatible
+        avec Unité B, alors Unité B est automatiquement incompatible avec Unité A.
+
+        Processus :
+        1. Récupère les nouvelles incompatibilités sélectionnées dans le formulaire
+        2. Trouve les incompatibilités inverses existantes
+        3. Ajoute les relations manquantes dans les deux sens
+        4. Supprime les relations obsolètes dans les deux sens
+        """
+        # Récupération des nouvelles incompatibilités depuis le formulaire
+        nouvelles = set(self.cleaned_data.get('incompatibilites', []))
+
+        # Recherche des unités qui incompatibilisent actuellement l'instance
+        # (relations inverses existantes)
+        actuelles_inverses = set(Unite.objects.filter(incompatibilites=instance).exclude(pk=instance.pk))
+
+        # Ajout des nouvelles incompatibilités dans le sens inverse
+        # Pour chaque unité nouvellement incompatible avec l'instance,
+        # on ajoute l'instance à ses incompatibilités
+        for unite in nouvelles - actuelles_inverses:
+            unite.incompatibilites.add(instance)
+
+        # Suppression des anciennes incompatibilités dans le sens inverse
+        # Pour chaque unité qui n'est plus incompatible avec l'instance,
+        # on retire l'instance de ses incompatibilités
+        for unite in actuelles_inverses - nouvelles:
+            unite.incompatibilites.remove(instance)
+
 
 
 EXTRA_SCRIPT = """
