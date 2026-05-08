@@ -733,17 +733,7 @@ def GetDictMethode(code=""):
 
 
 EXTRA_SCRIPT = """
-{{ form.errors }}
-{% if form.errors %}
-    {% for field in form %}
-        {% for error in field.errors %}
-            <p> {{ error }} </p>
-        {% endfor %}
-    {% endfor %}
-{% endif %}
-
 <script>
-
 
 // label_type
 function On_change_label_type() {
