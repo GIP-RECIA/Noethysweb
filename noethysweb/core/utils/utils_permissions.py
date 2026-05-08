@@ -13,12 +13,13 @@ def GetPermissionsPossibles(organisateur=None):
     liste_permissions = []
 
     # Commandes de menu
-    menu_principal = GetMenuPrincipal(organisateur=organisateur)
+    menu_principal = GetMenuPrincipal(organisateur=organisateur, force_permissions=True)
+
     for menu in menu_principal.GetChildren():
         for sous_menu in menu.GetChildren():
             for commande in sous_menu.GetChildren():
                 liste_permissions.append((commande.code, "%s | %s" % (commande.parent.parent.titre, commande.titre)))
-
+    
     # Fiche famille
     for commande in LISTE_ONGLETS_FAMILLES:
         liste_permissions.append(("famille_%s" % commande["code"], "Fiche famille | %s" % commande["label"]))

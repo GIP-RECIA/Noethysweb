@@ -8,8 +8,8 @@ from django.urls import reverse_lazy
 from django.conf import settings
 
 
-def GetMenuPrincipal(organisateur=None, user=None):
-    menu = Menu(titre="Menu principal", user=user)
+def GetMenuPrincipal(organisateur=None, user=None, force_permissions=False):
+    menu = Menu(titre="Menu principal", user=user, force_permissions=force_permissions)
 
     # ------------------------------------ Accueil ------------------------------------
     menu.Add(code="accueil", titre="Accueil", icone="home", toujours_afficher=True)
@@ -563,7 +563,7 @@ def GetMenuPrincipal(organisateur=None, user=None):
 
 
 class Menu():
-    def __init__(self, parent=None, code="", titre="", icone=None, url=None, user=None, toujours_afficher=False, compatible_demo=True, masquer=False, args=None):
+    def __init__(self, parent=None, code="", titre="", icone=None, url=None, user=None, toujours_afficher=False, compatible_demo=True, masquer=False, force_permissions=False, args=None):
         self.parent = parent
         self.code = code
         self.titre = titre
@@ -575,6 +575,7 @@ class Menu():
         self.toujours_afficher = toujours_afficher
         self.compatible_demo = compatible_demo
         self.masquer = masquer
+        self.force_permissions = force_permissions
 
     def __repr__(self):
         return "<Menu '%s'>" % self.titre
@@ -583,10 +584,18 @@ class Menu():
         return self.parent
 
     def Add(self, code="", titre="", icone="", url=None, toujours_afficher=False, compatible_demo=True, args=None, superutilisateur_only=False, masquer=False):
-        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user, compatible_demo=compatible_demo, toujours_afficher=toujours_afficher, masquer=masquer)
-        afficher = not code or not self.user or toujours_afficher or code.endswith("_toc") or self.user.has_perm("core.%s" % code)
-        if masquer or (self.user and superutilisateur_only and not self.user.is_superuser):
-            afficher = False
+        # Créer l'objet menu
+        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user, compatible_demo=compatible_demo, toujours_afficher=toujours_afficher, masquer=masquer, force_permissions=self.force_permissions)
+        
+        afficher = True # Par défaut, on affiche tout
+        
+        # Si on n'est pas en mode force_permissions pour générer les permissions, on vérifie si l'on doit ou non afficher le menu
+        if not self.force_permissions:
+            afficher = not code or not self.user or toujours_afficher or code.endswith("_toc") or self.user.has_perm("core.%s" % code)
+            
+            if masquer or (self.user and superutilisateur_only and not self.user.is_superuser):
+                afficher = False
+    
         if afficher:
             self.children.append(menu)
         return menu
