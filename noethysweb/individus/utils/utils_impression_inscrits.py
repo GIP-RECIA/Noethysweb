@@ -12,7 +12,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from core.models import Inscription, Ventilation, Prestation, Rattachement, Cotisation, ContactUrgence, Scolarite
-from core.utils import utils_texte, utils_impression, utils_questionnaires
+from core.utils import utils_texte, utils_impression, utils_questionnaires, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -101,9 +101,9 @@ class Impression(utils_impression.Impression):
         questionnaires_familles = utils_questionnaires.ChampsEtReponses(categorie="famille", filtre_reponses=Q(famille__in=[i.famille for i in inscriptions]))
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_activite = ParagraphStyle(name="centre", fontName="Helvetica-bold", alignment=1, fontSize=8, spaceBefore=0, spaceAfter=20, leading=0)
-        style_infos = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceBefore=10, spaceAfter=0, leading=0)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_activite = ParagraphStyle(name="centre", fontName=utils_polices.FONT_BOLD, alignment=1, fontSize=8, spaceBefore=0, spaceAfter=20, leading=0)
+        style_infos = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceBefore=10, spaceAfter=0, leading=0)
 
         # Création du titre du document
         self.Insert_header()
@@ -168,7 +168,7 @@ class Impression(utils_impression.Impression):
         # Finalisation du tableau
         style = TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+            ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
         ])

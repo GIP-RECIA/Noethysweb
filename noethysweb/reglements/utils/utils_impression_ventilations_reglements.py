@@ -11,7 +11,7 @@ from reportlab.platypus import Spacer, Paragraph, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import colors
 from core.models import Reglement, Ventilation
-from core.utils import utils_impression, utils_texte
+from core.utils import utils_impression, utils_texte, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -40,9 +40,9 @@ class Impression(utils_impression.Impression):
             dict_ventilations_reglement[ventilation.reglement].append(ventilation)
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
-        style_droite = ParagraphStyle(name="right", fontName="Helvetica", alignment=2, fontSize=7, spaceAfter=0, leading=9)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_droite = ParagraphStyle(name="right", fontName=utils_polices.FONT_NORMAL, alignment=2, fontSize=7, spaceAfter=0, leading=9)
 
         # Création du titre du document
         self.Insert_header()
@@ -57,7 +57,7 @@ class Impression(utils_impression.Impression):
             largeurs=[50, 90, 50, 230, 50, 50],
             styles=[
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+                ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                 ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
                 ("ALIGN", (0, 0), (-1, -1), "CENTRE")],
             lignes=[],
@@ -72,7 +72,7 @@ class Impression(utils_impression.Impression):
                 largeurs=[50, 90, 50, 230, 50, 50],
                 styles=[
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+                    ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                     ("BOX", (0, 0), (-1, -1), 0.25, colors.black),
                     ("ALIGN", (0, 0), (-1, -1), "CENTRE"),
                     ("BACKGROUND", (0, 0), (-1, 0), (0.8, 0.8, 0.8)),],
@@ -92,7 +92,7 @@ class Impression(utils_impression.Impression):
                 largeurs=[50, 140, 120, 160, 50],
                 styles=[
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("FONT", (0, 0), (-1, -1), "Helvetica", 5),
+                    ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 5),
                     ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
                     ("ALIGN", (0, 0), (-1, -1), "CENTRE")],
                 lignes=[],
@@ -104,7 +104,7 @@ class Impression(utils_impression.Impression):
                     largeurs=[50, 140, 120, 160, 50],
                     styles=[
                         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                        ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+                        ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                         ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
                         ("ALIGN", (0, 0), (-1, -1), "CENTRE")],
                     lignes=[(

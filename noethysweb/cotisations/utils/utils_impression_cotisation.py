@@ -5,7 +5,7 @@
 
 import logging
 logger = logging.getLogger(__name__)
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.platypus.flowables import DocAssign, Flowable
@@ -19,7 +19,7 @@ class Impression(utils_impression.Impression):
     def Draw(self):
         styleSheet = getSampleStyleSheet()
         styleTexte = styleSheet['BodyText']
-        styleTexte.fontName = "Helvetica"
+        styleTexte.fontName = utils_polices.FONT_NORMAL
         styleTexte.fontSize = 9
         styleTexte.borderPadding = 9
         styleTexte.leading = 12

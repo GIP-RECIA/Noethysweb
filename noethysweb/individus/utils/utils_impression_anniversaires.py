@@ -5,7 +5,7 @@
 
 import logging
 logger = logging.getLogger(__name__)
-from core.utils import utils_dates, utils_impression
+from core.utils import utils_dates, utils_impression, utils_polices
 from reportlab.platypus import Spacer, Table, TableStyle, PageBreak
 from reportlab.platypus.doctemplate import PageTemplate, BaseDocTemplate
 from reportlab.platypus.flowables import Image, DocAssign
@@ -58,7 +58,7 @@ class MyPageTemplate(PageTemplate):
         canvas.setFillColorRGB(0.7, 0.7, 1)
         canvas.rect(self.margeBord, self.pageHeight - self.margeBord, self.pageWidth - (self.margeBord * 2), -38, fill=1)
 
-        canvas.setFont("Helvetica-Bold", 24)
+        canvas.setFont(utils_polices.FONT_BOLD, 24)
         canvas.setFillColorRGB(0, 0, 0)
         canvas.drawString(self.margeBord + 10, self.pageHeight - self.margeBord - 26, nomMois)
 
@@ -156,12 +156,12 @@ class Impression(utils_impression.Impression):
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ('BACKGROUND', (0, 0), (-1, -1), couleurFondTableau),
 
-                    ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                     ('ALIGN', (0, 1), (-1, -1), 'CENTRE'),
 
                     ('SPAN', (0, 0), (-1, 0)),
-                    ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 10),
+                    ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 10),
                     ('BACKGROUND', (0, 0), (-1, 0), couleurFondJour),
                 ])
 

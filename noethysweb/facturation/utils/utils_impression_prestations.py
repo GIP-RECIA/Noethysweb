@@ -11,7 +11,7 @@ from reportlab.platypus import Spacer, Paragraph, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import colors
 from core.models import Prestation, Activite
-from core.utils import utils_impression, utils_texte
+from core.utils import utils_impression, utils_texte, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -61,8 +61,8 @@ class Impression(utils_impression.Impression):
                 dict_prestations_famille[famille].append(dict_prestation)
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
 
         # Création du titre du document
         self.Insert_header()
@@ -107,7 +107,7 @@ class Impression(utils_impression.Impression):
         # Finalisation du tableau
         style = TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+            ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
             ("ALIGN", (0, 0), (-1, -1), "CENTRE"),
         ])
@@ -165,7 +165,7 @@ class Impression(utils_impression.Impression):
         tableau = Table(dataTableau, largeurs_colonnes)
         tableau.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+            ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
             ("GRID", (0, 0), (-1, -2), 0.25, colors.black),
             ("GRID", (-2, -1), (-1, -1), 0.25, colors.black),
             ("ALIGN", (0, 0), (-1, -1), "CENTRE"),

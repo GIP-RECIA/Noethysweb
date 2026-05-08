@@ -13,7 +13,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from core.models import Activite, Rattachement, RegimeAlimentaire, Information
-from core.utils import utils_dates, utils_impression
+from core.utils import utils_dates, utils_impression, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -52,9 +52,9 @@ class Impression(utils_impression.Impression):
             self.erreurs.append("Aucun individu n'a été trouvé avec les paramètres donnés")
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
-        style_detail = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=6, textColor="gray", spaceAfter=0, leading=8)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_detail = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=6, textColor="gray", spaceAfter=0, leading=8)
 
         # Création du titre du document
         self.Insert_header()
@@ -98,7 +98,7 @@ class Impression(utils_impression.Impression):
         # Finalisation du tableau
         style = TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+            ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
         ])

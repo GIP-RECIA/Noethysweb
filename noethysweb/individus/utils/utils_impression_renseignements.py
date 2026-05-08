@@ -16,7 +16,7 @@ from reportlab.lib import colors
 from core.models import Lien, Rattachement, ContactUrgence, Information, Assurance, Organisateur, Scolarite
 from core.data.data_liens import DICT_TYPES_LIENS
 from core.data import data_civilites
-from core.utils import utils_dates, utils_impression, utils_questionnaires
+from core.utils import utils_dates, utils_impression, utils_questionnaires, utils_polices
 from individus.utils import utils_vaccinations
 
 
@@ -138,10 +138,10 @@ class Impression(utils_impression.Impression):
                 self.export_xlsx["colonnes"].append({"code": "question_%s" % dict_question["IDquestion"], "titre": dict_question["label"]})
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
-        style_droite = ParagraphStyle(name="droite", fontName="Helvetica", alignment=2, fontSize=7, spaceAfter=0, leading=9)
-        style_identite = ParagraphStyle(name="identite", fontName="Helvetica-Bold", fontSize=16, spaceAfter=0, leading=28)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_droite = ParagraphStyle(name="droite", fontName=utils_polices.FONT_NORMAL, alignment=2, fontSize=7, spaceAfter=0, leading=9)
+        style_identite = ParagraphStyle(name="identite", fontName=utils_polices.FONT_BOLD, fontSize=16, spaceAfter=0, leading=28)
 
         def Img(fichier=""):
             return "<img src='%s/images/%s' width='6' height='6' valign='middle'/> " % (settings.STATIC_ROOT, fichier)
@@ -153,12 +153,12 @@ class Impression(utils_impression.Impression):
             style = [
                 ('SPAN', (0, 1), (-1, 1)),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                 ('LINEBEFORE', (0, 0), (0, -1), 0.25, colors.black),
                 ('LINEAFTER', (-1, 0), (-1, -1), 0.25, colors.black),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
-                ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 7),
-                ('FONT', (1, 0), (1, 0), "Helvetica", 6),
+                ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 7),
+                ('FONT', (1, 0), (1, 0), utils_polices.FONT_NORMAL, 6),
                 ('TEXTCOLOR', (0, 0), (-1, 0), (1, 1, 1)),
                 ('BACKGROUND', (0, 0), (-1, 0), (0.5, 0.5, 0.5)),
                 ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
@@ -271,7 +271,7 @@ class Impression(utils_impression.Impression):
                 ('BOX', (0, 0), (-1, -1), 0.25, colors.black),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-                ('FONT', (2, 0), (2, 0), "Helvetica", 6),
+                ('FONT', (2, 0), (2, 0), utils_polices.FONT_NORMAL, 6),
                 ('LEFTPADDING', (0, 0), (0, 0), 0),
                 ('TOPPADDING', (0, 0), (0, 0), 0),
                 ('BOTTOMPADDING', (0, 0), (0, 0), 0),
@@ -464,7 +464,7 @@ class Impression(utils_impression.Impression):
                 tableau = Table(contenu_tableau, [largeur_contenu/6] * 6)
                 tableau.setStyle(TableStyle([
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                 ]))
             else:
                 tableau = [Paragraph("Aucune vaccination obligatoire", style_defaut)]

@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.platypus.flowables import DocAssign
 from core.models import MessageFacture
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 
 
 def PeriodeComplete(mois, annee):
@@ -42,7 +42,7 @@ class Impression(utils_impression.Impression):
         styleSheet = getSampleStyleSheet()
         h3 = styleSheet['Heading3']
         styleTexte = styleSheet['BodyText'] 
-        styleTexte.fontName = "Helvetica"
+        styleTexte.fontName = utils_polices.FONT_NORMAL
         styleTexte.fontSize = 9
         styleTexte.borderPadding = 9
         styleTexte.leading = 12
@@ -89,13 +89,13 @@ class Impression(utils_impression.Impression):
                         dataTableau.append((u"Période du %s au %s" % (utils_dates.ConvertDateENGtoFR(str(dateDebut)), utils_dates.ConvertDateENGtoFR(str(dateFin))),))
                     styles = [
                             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                            ('FONT', (0, 0), (0, 0), "Helvetica-Bold", int(self.dict_options["taille_texte_titre"])),
+                            ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, int(self.dict_options["taille_texte_titre"])),
                             ('LINEBELOW', (0, 0), (0 ,0), 0.25, colors.black),
                             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                             ]
 
                     if self.dict_options["afficher_periode"] == True:
-                        styles.append(('FONT', (0, 1), (0, 1), "Helvetica", int(self.dict_options["taille_texte_periode"])))
+                        styles.append(('FONT', (0, 1), (0, 1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_periode"])))
                     tableau = Table(dataTableau, largeursColonnes)
                     tableau.setStyle(TableStyle(styles))
                     self.story.append(tableau)
@@ -103,7 +103,7 @@ class Impression(utils_impression.Impression):
 
                 if self.dict_options["texte_introduction"] != "":
                     paraStyle = ParagraphStyle(name="introduction",
-                                          fontName="Helvetica",
+                                          fontFace=utils_polices.FONT_NORMAL,
                                           fontSize=int(self.dict_options["taille_texte_introduction"]),
                                           leading=14,
                                           spaceBefore=0,
@@ -176,7 +176,7 @@ class Impression(utils_impression.Impression):
                         
                         # Insertion du nom de l'individu
                         paraStyle = ParagraphStyle(name="individu",
-                                              fontName="Helvetica",
+                                              fontFace=utils_polices.FONT_NORMAL,
                                               fontSize=int(self.dict_options["taille_texte_individu"]),
                                               leading=int(self.dict_options["taille_texte_individu"]+2),
                                               spaceBefore=0,
@@ -187,7 +187,7 @@ class Impression(utils_impression.Impression):
                         tableau = Table(dataTableau, [self.taille_cadre[2],])
                         listeStyles = [
                                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                ('FONT', (0, 0), (-1, -1), "Helvetica", int(self.dict_options["taille_texte_individu"])),
+                                ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_individu"])),
                                 ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                                 ('BACKGROUND', (0, 0), (-1, 0), couleurFond),
                                 ]
@@ -209,7 +209,7 @@ class Impression(utils_impression.Impression):
                                 tableau = Table(dataTableau, [self.taille_cadre[2],])
                                 listeStyles = [
                                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                    ('FONT', (0, 0), (-1, -1), "Helvetica", int(self.dict_options["taille_texte_activite"])),
+                                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_activite"])),
                                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                                     ('BACKGROUND', (0, 0), (-1, 0), couleurFondActivite),
@@ -219,20 +219,20 @@ class Impression(utils_impression.Impression):
 
                             # Style de paragraphe normal
                             paraStyle = ParagraphStyle(name="prestation",
-                                          fontName="Helvetica",
+                                          fontFace=utils_polices.FONT_NORMAL,
                                           fontSize=int(self.dict_options["taille_texte_prestation"]),
                                           leading=int(self.dict_options["taille_texte_prestation"]),
                                           spaceBefore=0,
                                           spaceAfter=0)
 
                             paraLabelsColonnes = ParagraphStyle(name="paraLabelsColonnes",
-                                          fontName="Helvetica",
+                                          fontFace=utils_polices.FONT_NORMAL,
                                           fontSize=int(self.dict_options["taille_texte_noms_colonnes"]),
                                           leading=int(self.dict_options["taille_texte_noms_colonnes"]),
                                           spaceBefore=0,
                                           spaceAfter=0)
 
-                            paraStyleDatesForfait = ParagraphStyle(name="prestation", fontName="Helvetica", fontSize=int(self.dict_options["taille_texte_prestation"]),
+                            paraStyleDatesForfait = ParagraphStyle(name="prestation", fontFace=utils_polices.FONT_NORMAL, fontSize=int(self.dict_options["taille_texte_prestation"]),
                                                                    leading=int(self.dict_options["taille_texte_prestation"]), spaceBefore=2, spaceAfter=0)
 
                             if self.dict_options["affichage_prestations"] != "0":
@@ -337,7 +337,7 @@ class Impression(utils_impression.Impression):
                                 listeDates.sort() 
                                 
                                 paraStyle = ParagraphStyle(name="prestation",
-                                              fontName="Helvetica",
+                                              fontFace=utils_polices.FONT_NORMAL,
                                               fontSize=int(self.dict_options["taille_texte_prestation"]),
                                               leading=int(self.dict_options["taille_texte_prestation"]),
                                               spaceBefore=0,
@@ -456,7 +456,7 @@ class Impression(utils_impression.Impression):
                             tableau = Table(dataTableau, largeursColonnes)
                             listeStyles = [
                                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                ('FONT', (0, 0), (-1, -1), "Helvetica", int(self.dict_options["taille_texte_prestation"])),
+                                ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_prestation"])),
                                 ('GRID', (0, 0), (-1,-1), 0.25, colors.black), 
                                 ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
                                 ('ALIGN', (1, 0), (1, -1), 'LEFT'),
@@ -486,14 +486,14 @@ class Impression(utils_impression.Impression):
                         
                         listeStyles = [
                                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                ('FONT', (0, 0), (-1, -1), "Helvetica", int(self.dict_options["taille_texte_prestation"])),
+                                ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_prestation"])),
                                 ('GRID', (-1, -1), (-1,-1), 0.25, colors.black), 
                                 ('ALIGN', (-1, -1), (-1, -1), 'CENTRE'),
                                 ('BACKGROUND', (-1, -1), (-1, -1), couleurFond), 
                                 ('TOPPADDING', (0, 0), (-1, -1), 1), 
                                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
                                 ('SPAN', (0, -1), (-2, -1)), # Fusion de la dernière ligne pour le texte_prestations_anterieures
-                                ('FONT', (0, -1), (0, -1), "Helvetica", int(self.dict_options["taille_texte_prestations_anterieures"])),
+                                ('FONT', (0, -1), (0, -1), utils_polices.FONT_NORMAL, int(self.dict_options["taille_texte_prestations_anterieures"])),
                             ]
                             
                         # Création du tableau
@@ -505,7 +505,7 @@ class Impression(utils_impression.Impression):
                 # Intégration des messages, des reports et des qf
                 listeMessages = []
                 paraStyle = ParagraphStyle(name="message",
-                                          fontName="Helvetica",
+                                          fontFace=utils_polices.FONT_NORMAL,
                                           fontSize=int(self.dict_options["taille_texte_messages"]),
                                           leading=int(self.dict_options["taille_texte_messages"]),
                                           spaceAfter=2)
@@ -630,12 +630,12 @@ class Impression(utils_impression.Impression):
                         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), 
 
                         # Lignes Période, avoir, impayés
-                        ('FONT', (1, 0), (1, -2), "Helvetica", 8),
-                        ('FONT', (2, 0), (2, -2), "Helvetica-Bold", 8),
+                        ('FONT', (1, 0), (1, -2), utils_polices.FONT_NORMAL, 8),
+                        ('FONT', (2, 0), (2, -2), utils_polices.FONT_BOLD, 8),
                         
                         # Ligne Reste à régler
-                        ('FONT', (1, -1), (1, -1), "Helvetica-Bold", int(self.dict_options["taille_texte_labels_totaux"])),
-                        ('FONT', (2, -1), (2, -1), "Helvetica-Bold", int(self.dict_options["taille_texte_montants_totaux"])),
+                        ('FONT', (1, -1), (1, -1), utils_polices.FONT_BOLD, int(self.dict_options["taille_texte_labels_totaux"])),
+                        ('FONT', (2, -1), (2, -1), utils_polices.FONT_BOLD, int(self.dict_options["taille_texte_montants_totaux"])),
                         
                         ('GRID', (2, 0), (2, -1), 0.25, colors.black),
                         
@@ -648,7 +648,7 @@ class Impression(utils_impression.Impression):
                 
                 if self.mode == "facture" and len(listeMessages) > 0:
                     #style.append( ('BACKGROUND', (0, 0), (0, 0), couleurFondActivite) )
-                    style.append( ('FONT', (0, 0), (0, -1), "Helvetica", 8))
+                    style.append( ('FONT', (0, 0), (0, -1), utils_polices.FONT_NORMAL, 8))
                     style.append( ('VALIGN', (0, 0), (0, -1), 'TOP'))
                     
                 tableau = Table(dataTableau, largeursColonnes)
@@ -658,7 +658,7 @@ class Impression(utils_impression.Impression):
                 # ------------------------- PRELEVEMENTS --------------------
                 if self.dict_options.get("afficher_avis_prelevements", False) and dictValeur.get("prelevement", False):
                     paraStyle = ParagraphStyle(name="intro",
-                          fontName="Helvetica",
+                          fontFace=utils_polices.FONT_NORMAL,
                           fontSize=8,
                           leading=11,
                           spaceBefore=2,
@@ -672,7 +672,7 @@ class Impression(utils_impression.Impression):
                 if self.dict_options["texte_conclusion"] != "":
                     self.story.append(Spacer(0, 20))
                     paraStyle = ParagraphStyle(name="conclusion",
-                                          fontName="Helvetica",
+                                          fontFace=utils_polices.FONT_NORMAL,
                                           fontSize=int(self.dict_options["taille_texte_conclusion"]),
                                           leading=14,
                                           spaceBefore=0,
