@@ -649,14 +649,14 @@ class Formulaire(FormulaireBase, ModelForm):
         if "tarifs_lignes_data" in self.cleaned_data and len(self.cleaned_data["tarifs_lignes_data"]) > 0:
             tarifs_lignes_data = json.loads(self.cleaned_data["tarifs_lignes_data"])
             code_methode = self.cleaned_data["methode"]
-            liste_lignes_resultats = Clean_tarifs_lignes_data(tarifs_lignes_data=tarifs_lignes_data, code_methode=code_methode)
+            liste_lignes_resultats = Clean_tarifs_lignes_data(self, tarifs_lignes_data=tarifs_lignes_data, code_methode=code_methode)
 
         self.cleaned_data["tarifs_lignes_data_resultats"] = liste_lignes_resultats
 
         return self.cleaned_data
 
 
-def Clean_tarifs_lignes_data(tarifs_lignes_data=[], code_methode=""):
+def Clean_tarifs_lignes_data(self=None, tarifs_lignes_data=[], code_methode=""):
     dict_methode = GetDictMethode(code_methode)
     liste_champs_obligatoires = dict_methode["champs_obligatoires"]
     liste_lignes_resultats = []
@@ -676,8 +676,10 @@ def Clean_tarifs_lignes_data(tarifs_lignes_data=[], code_methode=""):
             code_colonne, dict_colonne = liste_colonnes[index_colonne]
 
             def RaiseError():
-                raise ValidationError("Paramètres du tarif : La valeur '%s' de la ligne %d n'est pas valide ! " % (
-                dict_colonne["label"], index_ligne + 1))
+                if self:
+                    self.add_error("parametres_tarif", "La valeur '%s' de la ligne %d n'est pas valide dans l'onglet Calcul du tarif" % (dict_colonne["label"], index_ligne + 1))
+                else:
+                    raise ValidationError("Paramètres du tarif : La valeur '%s' de la ligne %d n'est pas valide ! " % (dict_colonne["label"], index_ligne + 1))
 
             # Vérification des valeurs
             if valeur == "":
@@ -711,9 +713,10 @@ def Clean_tarifs_lignes_data(tarifs_lignes_data=[], code_methode=""):
         for nom_champ in liste_champs_obligatoires:
             if nom_champ not in dict_ligne:
                 label_colonne = DICT_COLONNES_TARIFS[nom_champ]["label"]
-                raise ValidationError(
-                    "Paramètres du tarif : Vous devez obligatoirement renseigner la valeur '%s' de la ligne %d ! " % (
-                    label_colonne, index_ligne + 1))
+                if self:
+                    self.add_error("parametres_tarif", "Vous devez obligatoirement renseigner la valeur '%s' de la ligne %d dans l'onglet Calcul du tarif" % (label_colonne, index_ligne + 1))
+                else:
+                    raise ValidationError("Paramètres du tarif : Vous devez obligatoirement renseigner la valeur '%s' de la ligne %d ! " % (label_colonne, index_ligne + 1))
 
         liste_lignes_resultats.append(dict_ligne)
         index_ligne += 1
