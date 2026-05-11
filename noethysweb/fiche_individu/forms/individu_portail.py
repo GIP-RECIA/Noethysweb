@@ -48,7 +48,11 @@ class Formulaire(FormulaireBase, ModelForm):
         #     self.fields["internet_mdp"].widget.attrs["date_expiration_mdp"] = individu.utilisateur.date_expiration_mdp
         # else:
         #     self.fields["internet_mdp"].widget.attrs["date_expiration_mdp"] = None  # or a default value
-        self.fields["internet_mdp"].widget.attrs["date_expiration_mdp"] = individu.utilisateur.date_expiration_mdp
+
+        # vérification que l'individu possède un compte utilisateur avant d'accéder à date_expiration_mdp
+        # car utilisateur est null=True - un individu existant en base peut ne pas avoir de compte portail
+        date_expiration_mdp = individu.utilisateur.date_expiration_mdp if individu.utilisateur else None
+        self.fields["internet_mdp"].widget.attrs["date_expiration_mdp"] = date_expiration_mdp
 
         # Individus masqués
         individus = [rattachement.individu_id for rattachement in Rattachement.objects.filter(individu_id=idindividu)]
@@ -70,7 +74,7 @@ class Formulaire(FormulaireBase, ModelForm):
         self.helper.layout = Layout(
             commandes,
             Hidden("idindividu", value=idindividu),
-            Hidden("date_expiration_mdp", value=individu.utilisateur.date_expiration_mdp),
+            Hidden("date_expiration_mdp", value=individu.utilisateur.date_expiration_mdp if individu.utilisateur else None),
             Fieldset("Activation",
                 Field("internet_actif"),
             ),
