@@ -83,9 +83,12 @@ class Modifier(Consulter):
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
 
-        # Importation de l'individu'
+        # Importation de l'individu
         individu = self.get_object()
         utilisateur = individu.utilisateur
+        if utilisateur is None:
+            messages.add_message(request, messages.ERROR, "Aucun compte utilisateur n'est associé à cet individu. Veuillez créer le compte portail avant de le modifier.")
+            return self.render_to_response(self.get_context_data(form=form))
 
         # Récupération des données
         internet_actif = form.cleaned_data.get("internet_actif")
