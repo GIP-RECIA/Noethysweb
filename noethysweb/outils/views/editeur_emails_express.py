@@ -93,6 +93,13 @@ def Get_view_editeur_email(request):
         utilisateur=request.user,
     )
 
+
+    # création du destinataire selon le contexte d'appel :
+    # - idfamille présent -> envoi depuis une fiche famille (facture, devis, ...)
+    # - idindividu présent -> envoi depuis une fiche individu
+    # - aucun des deux -> saisie libre, ex: envoi au restaurateur depuis commandes de repas
+    # correction : le else original supposait toujours un individu -> KeyError si ni idfamille ni idindividu
+
     if 'idfamille' in donnees:
 
         # Importation de la famille
@@ -103,11 +110,19 @@ def Get_view_editeur_email(request):
             document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
             destinataire.documents.add(document_joint)
         mail.destinataires.add(destinataire)
-
-    else : #individu
+ 
+    elif 'idindividu' in donnees:
         # Importation de l'individu
         individu = Individu.objects.get(pk=donnees["idindividu"])
         destinataire = Destinataire.objects.create(categorie="individu", individu=individu, adresse=individu.mail, valeurs=json.dumps(donnees["champs"]))
+        if "nom_fichier" in donnees:
+            document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
+            destinataire.documents.add(document_joint)
+        mail.destinataires.add(destinataire)
+
+    else:
+        # Saisie libre (ex: restaurateur avec adresse uniquement)
+        destinataire = Destinataire.objects.create(categorie="saisie_libre", adresse=donnees.get("adresse", ""), valeurs=json.dumps(donnees["champs"]))
         if "nom_fichier" in donnees:
             document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
             destinataire.documents.add(document_joint)
