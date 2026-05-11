@@ -44,6 +44,7 @@ class Consulter(Onglet, crud.Modifier):
     template_name = "fiche_individu/individu_portail.html"
     mode = "CONSULTATION"
 
+
     def get_context_data(self, **kwargs):
         self.object = self.get_object()
         context = super(Consulter, self).get_context_data(**kwargs)
@@ -57,10 +58,11 @@ class Consulter(Onglet, crud.Modifier):
     def get_object(self):
         return Individu.objects.get(pk=self.kwargs['idindividu'])
 
-    def get_form_kwargs(self, **kwargs):
-        form_kwargs = super(Consulter, self).get_form_kwargs(**kwargs)
-        form_kwargs["idindividu"] = self.Get_idindividu()
-        return form_kwargs
+    def get_form_kwargs(self):
+        kwargs = super(Consulter, self).get_form_kwargs()
+        kwargs['idindividu'] = self.kwargs['idindividu']
+        kwargs['idfamille'] = self.kwargs['idfamille']
+        return kwargs
 
 
 class Modifier(Consulter):
@@ -76,10 +78,13 @@ class Modifier(Consulter):
         return self.request.user.has_perm("core.individu_portail_modifier")
 
     def get_success_url(self):
-        return reverse_lazy("individu_portail", kwargs={'idindividu': self.kwargs.get('idindividu', None)})
-
+        return reverse_lazy("individu_portail", kwargs={
+            'idfamille': self.kwargs.get('idfamille', None),
+            'idindividu': self.kwargs.get('idindividu', None),
+        })
+    
     def post(self, request, **kwargs):
-        form = Formulaire(request.POST, idindividu=self.kwargs['idindividu'], request=self.request, mode=self.mode)
+        form = Formulaire(request.POST, idindividu=self.kwargs['idindividu'], idfamille=self.kwargs['idfamille'], request=self.request, mode=self.mode)
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
 
@@ -99,6 +104,7 @@ class Modifier(Consulter):
         date_expiration_mdp = form.cleaned_data.get("date_expiration_mdp")
         individus_masques = form.cleaned_data.get("individus_masques")
         blocage_impayes_off = form.cleaned_data.get("blocage_impayes_off")
+        internet_reservations = form.cleaned_data.get("internet_reservations")
 
         # Si changement de l'état actif
         if internet_actif != individu.internet_actif:
@@ -123,6 +129,10 @@ class Modifier(Consulter):
         # Si changement de categorie
         if internet_categorie != individu.internet_categorie:
             individu.internet_categorie = internet_categorie
+
+        # Si changement des réservations
+        if internet_reservations != individu.internet_reservations:
+            individu.internet_reservations = internet_reservations
 
         # Enregistrement
         utilisateur.save()
