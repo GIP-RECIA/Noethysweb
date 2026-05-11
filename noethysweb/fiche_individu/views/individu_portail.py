@@ -22,7 +22,7 @@ def Envoyer_codes(request):
     # Récupération des valeurs de fusion
     individu = Individu.objects.get(pk=idindividu)
     champs = {
-        "{NOM_INDIVIDU": individu.nom,
+        "{NOM_INDIVIDU}": individu.nom,
         "{IDENTIFIANT_INTERNET}": internet_identifiant,
         "{MOTDEPASSE_INTERNET}": internet_mdp,
     }
