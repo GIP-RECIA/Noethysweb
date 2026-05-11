@@ -32,6 +32,7 @@ class Formulaire(FormulaireBase, ModelForm):
 
     def __init__(self, *args, **kwargs):
         idindividu = kwargs.pop("idindividu")
+        idfamille = kwargs.pop("idfamille")
         individu = Individu.objects.get(pk=idindividu)
         if "instance" not in kwargs:
             self.instance = individu
@@ -55,7 +56,7 @@ class Formulaire(FormulaireBase, ModelForm):
         self.fields["internet_mdp"].widget.attrs["date_expiration_mdp"] = date_expiration_mdp
 
         # Individus masqués
-        individus = [rattachement.individu_id for rattachement in Rattachement.objects.filter(individu_id=idindividu)]
+        individus = [rattachement.individu_id for rattachement in Rattachement.objects.filter(famille_id=idfamille)]
         self.fields["individus_masques"].queryset = Individu.objects.filter(pk__in=individus).order_by("nom")
 
         # Création des boutons de commande
