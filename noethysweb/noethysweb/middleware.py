@@ -15,12 +15,15 @@ class CustomMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # 🔹 Initialisation du type de compte dans la session
-        if 'type_compte' not in request.session:
-            parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
-            type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+        # synchronisation du type_compte depuis la DB à chaque requête
+        # pour que les changements de l'admin soient immédiatement pris en compte
+        # sans attendre la déconnexion des utilisateurs déjà connectés
+        parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
+        type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+        #print(f"DB type_compte={type_compte}, Session type_compte={request.session.get('type_compte')}")
+        if request.session.get('type_compte') != type_compte:
             request.session['type_compte'] = type_compte
-            request.session.modified = True  # 🔹 Assure que Django met bien à jour la session
+            request.session.modified = True
 
         response = self.get_response(request)
 
@@ -36,7 +39,7 @@ class CustomMiddleware:
 
             # Vérification pour les utilisateurs de type individu
             elif request.user.categorie == "individu" and request.user.force_reset_password and request.path != url_change_password:
-                famille = Famille.objects.filter(titulaire_helios_id=request.user.individu).first()
+                famille = Famille.objects.filter(titulaire_helios=request.user.individu).first()
                 if famille:
                     utils_secquest.Generation_secquest(famille=famille)  # Génération de la question de sécurité pour la famille associée
                 return HttpResponseRedirect(url_change_password)
