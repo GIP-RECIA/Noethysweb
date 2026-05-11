@@ -51,9 +51,7 @@ def secure_ajax_portail(function):
             return HttpResponseForbidden()
         # Vérifie que c'est un user de type utilisateur
         # et que la catégorie correspond au type de compte configuré
-        if((request.user.categorie not in ["famille", "individu"])  # Vérification de la catégorie : Si l'utilisateur n'est ni "famille" ni "individu", l'accès est interdit.
-                or (type_compte != TYPE_COMPTE_FAMILLE and request.user.categorie == "famille")   #Compte famille non activé pour une famille: Si type_compte n'est pas "famille" et que la catégorie est "famille", l'accès est interdit.
-                or (type_compte == TYPE_COMPTE_INDIVIDU and request.user.categorie == "famille")): #Compte individu activé pour une famille: Si type_compte est "individu" alors que l'utilisateur est de catégorie "famille", l'accès est interdit.
+        if request.user.categorie not in ["famille", "individu"] or request.user.categorie != type_compte:
             return HttpResponseForbidden()
         return function(request, *args, **kwargs)
     return _function
