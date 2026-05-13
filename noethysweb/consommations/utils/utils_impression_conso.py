@@ -15,7 +15,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from reportlab.graphics.barcode import code39
-from core.utils import utils_dates, utils_impression, utils_infos_individus, utils_dictionnaires
+from core.utils import utils_dates, utils_impression, utils_infos_individus, utils_dictionnaires, utils_polices
 from core.models import Activite, Ouverture, Unite, UniteRemplissage, Consommation, MemoJournee, Note, Information, Individu, \
                         Inscription, Scolarite, Classe, Ecole, Evenement, QuestionnaireQuestion, QuestionnaireChoix, Rattachement
 from individus.utils import utils_pieces_manquantes
@@ -290,9 +290,9 @@ class Impression(utils_impression.Impression):
         # --------------------------------------- Création du PDF ----------------------------------------------
 
         # Font normale
-        styleNormal = ParagraphStyle(name="normal", fontName="Helvetica", alignment=1, fontSize=7, leading=8)
-        styleEntetes = ParagraphStyle(name="entetes", fontName="Helvetica", alignment=1, fontSize=6, leading=7)
-        styleDifferences = ParagraphStyle(name="differences", fontName="Helvetica", alignment=1, fontSize=4, spaceAfter=0, leading=5, textColor=colors.grey)
+        styleNormal = ParagraphStyle(name="normal", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, leading=8)
+        styleEntetes = ParagraphStyle(name="entetes", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=6, leading=7)
+        styleDifferences = ParagraphStyle(name="differences", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=4, spaceAfter=0, leading=5, textColor=colors.grey)
 
         # Nom du profil
         profil = self.dict_donnees.get("profil", None)
@@ -310,10 +310,10 @@ class Impression(utils_impression.Impression):
             dataTableau = []
             largeursColonnes = ((largeur_contenu * 1.0 / 3, largeur_contenu * 2.0 / 3))
 
-            styleActivite = ParagraphStyle(name="activite", fontName="Helvetica", fontSize=self.dict_donnees["activite_taille_nom"], leading=self.dict_donnees["activite_taille_nom"], spaceAfter=0, textColor=couleurTexte)
-            styleGroupe = ParagraphStyle(name="groupe", fontName="Helvetica-Bold", fontSize=tailleGroupe, leading=tailleGroupe+2, spaceBefore=0, spaceAfter=2, textColor=couleurTexte)
-            styleEcole = ParagraphStyle(name="ecole", fontName="Helvetica", alignment=2, fontSize=5, leading=3, spaceAfter=0, textColor=couleurTexte)
-            styleClasse = ParagraphStyle(name="classe", fontName="Helvetica-Bold", alignment=2, fontSize=14, leading=16, spaceBefore=0, spaceAfter=2, textColor=couleurTexte)
+            styleActivite = ParagraphStyle(name="activite", fontName=utils_polices.FONT_NORMAL, fontSize=self.dict_donnees["activite_taille_nom"], leading=self.dict_donnees["activite_taille_nom"], spaceAfter=0, textColor=couleurTexte)
+            styleGroupe = ParagraphStyle(name="groupe", fontName=utils_polices.FONT_BOLD, fontSize=tailleGroupe, leading=tailleGroupe+2, spaceBefore=0, spaceAfter=2, textColor=couleurTexte)
+            styleEcole = ParagraphStyle(name="ecole", fontName=utils_polices.FONT_NORMAL, alignment=2, fontSize=5, leading=3, spaceAfter=0, textColor=couleurTexte)
+            styleClasse = ParagraphStyle(name="classe", fontName=utils_polices.FONT_BOLD, alignment=2, fontSize=14, leading=16, spaceBefore=0, spaceAfter=2, textColor=couleurTexte)
 
             ligne = [(Paragraph(nomActivite, styleActivite), Paragraph(nomGroupe, styleGroupe)), None]
 
@@ -554,7 +554,7 @@ class Impression(utils_impression.Impression):
                                 # Création de l'entete des DATES
                                 if len(self.dict_donnees["dates"]) > 1:
                                     ligneTempExport = []
-                                    styleDate = ParagraphStyle(name="date", fontName="Helvetica-Bold", fontSize=8, spaceAfter=0, leading=9)
+                                    styleDate = ParagraphStyle(name="date", fontName=utils_polices.FONT_BOLD, fontSize=8, spaceAfter=0, leading=9)
                                     ligne = []
                                     for index in range(0, len(labelsColonnes)-1):
                                         ligne.append("")
@@ -668,9 +668,9 @@ class Impression(utils_impression.Impression):
                                                     listeLabels = []
                                                     quantite = None
 
-                                                    styleConso = ParagraphStyle(name="label_conso", fontName="Helvetica", alignment=1, fontSize=6, leading=6, spaceBefore=0, spaceAfter=0, textColor=colors.black)
-                                                    styleEvenement = ParagraphStyle(name="label_evenement", fontName="Helvetica", alignment=1, fontSize=5, leading=5, spaceBefore=2, spaceAfter=0, textColor=colors.black)
-                                                    styleEtiquette = ParagraphStyle(name="label_etiquette", fontName="Helvetica", alignment=1, fontSize=5, leading=5, spaceBefore=2, spaceAfter=2, textColor=colors.grey)
+                                                    styleConso = ParagraphStyle(name="label_conso", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=6, leading=6, spaceBefore=0, spaceAfter=0, textColor=colors.black)
+                                                    styleEvenement = ParagraphStyle(name="label_evenement", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=5, leading=5, spaceBefore=2, spaceAfter=0, textColor=colors.black)
+                                                    styleEtiquette = ParagraphStyle(name="label_etiquette", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=5, leading=5, spaceBefore=2, spaceAfter=2, textColor=colors.grey)
 
                                                     if typeTemp == "consommation":
                                                         # Unité de Conso
@@ -910,7 +910,7 @@ class Impression(utils_impression.Impression):
 
                                     # Informations personnelles
                                     listeInfos = []
-                                    paraStyle = ParagraphStyle(name="infos", fontName="Helvetica", fontSize=7, leading=8, spaceAfter=2)
+                                    paraStyle = ParagraphStyle(name="infos", fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=8, spaceAfter=2)
 
                                     # Mémo-journée
                                     if inscription.pk in dictMemos:
@@ -1034,10 +1034,10 @@ class Impression(utils_impression.Impression):
 
                                 style = [
                                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                    ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                                     ('ALIGN', (0, 0), (-2, -1), 'CENTRE'),
                                     ('ALIGN', (0, 0), (-1, 0), 'CENTRE'),
-                                    ('FONT', (0, 0), (-1, 0), "Helvetica", 6),
+                                    ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 6),
                                     ('LEFTPADDING', (0, 0), (-1, 0), 0),
                                     ('RIGHTPADDING', (0, 0), (-1, 0), 0),
                                     ('LEFTPADDING', (1, 1), (-2, -1), 1),
@@ -1052,7 +1052,7 @@ class Impression(utils_impression.Impression):
                                     style.append(('LINEBEFORE', (0, 0), (0, 0), 0.25, colors.black))
                                     style.append(('LINEAFTER', (-1, 0), (-1, 0), 0.25, colors.black))
                                     style.append(('ALIGN', (0, 1), (-1, 1), 'CENTRE'))
-                                    style.append(('FONT', (0, 0), (-1, 0), "Helvetica-Bold", 8))
+                                    style.append(('FONT', (0, 0), (-1, 0), utils_polices.FONT_BOLD, 8))
                                     for date, positionG, positionD in listePositionsDates:
                                         style.append(('SPAN', (positionG, 0), (positionD, 0)))
                                         style.append(('BACKGROUND', (positionG, 0), (positionD, 0), (1, 1, 1)))
@@ -1113,7 +1113,7 @@ class Impression(utils_impression.Impression):
 
                                 style = [
                                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                    ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                                    ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                                     ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
                                     ('GRID', (colPremiereUnite, -1), (colDerniereUnite, -1), 0.25, colors.black),
                                     ('BACKGROUND', (colPremiereUnite, -1), (colDerniereUnite, -1), self.dict_donnees["couleur_fond_total"])
@@ -1132,8 +1132,8 @@ class Impression(utils_impression.Impression):
 
                                     dataTableauRecap = []
 
-                                    style_categorie = ParagraphStyle(name="recap_categorie", fontName="Helvetica-Bold", fontSize=7, leading=8, spaceAfter=2)
-                                    style_info = ParagraphStyle(name="recap_info", fontName="Helvetica", fontSize=7, leading=8, spaceAfter=2)
+                                    style_categorie = ParagraphStyle(name="recap_categorie", fontName=utils_polices.FONT_BOLD, fontSize=7, leading=8, spaceAfter=2)
+                                    style_info = ParagraphStyle(name="recap_info", fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=8, spaceAfter=2)
 
                                     info_par_categories = {}
                                     for info in recapitulatif["informations"]:
@@ -1153,7 +1153,7 @@ class Impression(utils_impression.Impression):
                                     if dataTableauRecap:
                                         styleRecap = [
                                             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                                            ('FONT', (0, 0), (-1, -1), "Helvetica", 7),
+                                            ('FONT', (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
                                             ('ALIGN', (0, 0), (-1, -1), 'CENTRE'),
                                             ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                                             ('BACKGROUND', (0, 0), (-1, -1), self.dict_donnees["couleur_fond_entetes"])

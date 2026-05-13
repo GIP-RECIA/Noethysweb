@@ -17,7 +17,7 @@ from crispy_forms.bootstrap import Field
 from core.forms.select2 import Select2MultipleWidget
 from core.forms.base import FormulaireBase
 from core.utils import utils_dates
-from core.models import FiltreListe
+from core.models import FiltreListe, QuestionnaireQuestion, LISTE_CONTROLES_QUESTIONNAIRES
 from core.widgets import DatePickerWidget, SelectionActivitesWidget, DateTimePickerWidget
 from consommations.widgets import SelectionEcolesWidget, SelectionClassesWidget, SelectionNiveauxWidget, SelectionEvenementsWidget
 
@@ -59,11 +59,15 @@ def Get_form_filtres(request):
             nom_champ = filtre.split(":")[1]
             filtres.extend(["%s:%s" % (txt, nom_champ) for txt in ("ipresent", "iscolarise", "datenaiss", "age")])
             filtres.extend(["%s%s" % ("" if nom_champ == "pk" else nom_champ + "__", txt) for txt in ("nom", "prenom", "rue_resid", "cp_resid", "ville_resid", "tel_domicile", "tel_mobile", "mail", "date_creation")])
+            for question in QuestionnaireQuestion.objects.filter(categorie="individu").exclude(controle__in=["couleur", "codebarres"]).order_by("ordre"):
+                filtres.append(("iquestion%s:%s" % (question.pk, nom_champ)))
 
         if filtre.startswith("fgenerique:"):
             nom_champ = filtre.split(":")[1]
             filtres.extend(["%s:%s" % (txt, nom_champ) for txt in ("fpresent", "fscolarise")])
             filtres.extend(["%s%s" % ("" if nom_champ == "pk" else nom_champ + "__", txt) for txt in ("nom", "rue_resid", "cp_resid", "ville_resid", "date_creation")])
+            for question in QuestionnaireQuestion.objects.filter(categorie="famille").exclude(controle__in=["couleur", "codebarres"]).order_by("ordre"):
+                filtres.append(("fquestion%s:%s" % (question.pk, nom_champ)))
 
     # Suppression des filtres en doublon
     filtres = list({filtre: True for filtre in filtres}.keys())
@@ -244,6 +248,10 @@ class Formulaire(FormulaireBase, forms.Form):
         # Date du jour
         # self.fields["critere_classes"].widget.attrs.update({"dates": [datetime.date.today()]})
 
+        # Import des questions individuelles et familiales
+        dict_questions = {question.pk: question for question in QuestionnaireQuestion.objects.filter(categorie__in=("individu", "famille"))}
+        dict_filtres_questions = {q["code"]: q["filtre_liste"] for q in LISTE_CONTROLES_QUESTIONNAIRES}
+
         # Choix du champ à filtrer
         choix_champs = []
         dict_champs = {}
@@ -259,6 +267,12 @@ class Formulaire(FormulaireBase, forms.Form):
                 if nom_filtre == "fprelevement_actif": nom_champ = "Famille : Prélèvement actif"
                 if nom_filtre == "datenaiss": nom_champ = "Individu : Date de naissance"
                 if nom_filtre == "age": nom_champ = "Individu : Age"
+                if nom_filtre.startswith("iquestion") or nom_filtre.startswith("fquestion"):
+                    question = dict_questions.get(int(nom_filtre[9:]))
+                    if question:
+                        nom_filtre = dict_filtres_questions.get(question.controle)
+                        nom_champ = "%s : Question '%s'" % ("Individu" if filtre.startswith("iquestion") else "Famille", question.label)
+
                 # Mémorisation du champ
                 if nom_champ:
                     dict_champs[filtre] = {'type': nom_filtre, 'label': nom_champ}
@@ -302,21 +316,22 @@ class Formulaire(FormulaireBase, forms.Form):
             dict_filtre = json.loads(filtre.parametres)
             # Saisit le champ
             self.fields["champ"].initial = dict_filtre["champ"]
-            type_champ = dict_champs[dict_filtre["champ"]]["type"]
-            # Saisit la condition
-            ctrl_condition = self.dict_types[type_champ]["condition"]
-            self.fields[ctrl_condition].initial = dict_filtre["condition"]
-            # Saisit les critères
-            ctrl_criteres = self.dict_types[type_champ]["criteres"][dict_filtre["condition"]]
-            for index, nom_ctrl in enumerate(ctrl_criteres):
-                # Si datetime
-                if index <= len(dict_filtre["criteres"])-1 and "-" in dict_filtre["criteres"][index] and ":" in dict_filtre["criteres"][index]:
-                    dict_filtre["criteres"][index] = datetime.datetime.strptime(dict_filtre["criteres"][index], "%Y-%m-%d %H:%M:%S")
-                # Importation de la valeur par défaut
-                try:
-                    self.fields[nom_ctrl].initial = dict_filtre["criteres"][index]
-                except:
-                    pass
+            if dict_filtre["champ"] in dict_champs:
+                type_champ = dict_champs[dict_filtre["champ"]]["type"]
+                # Saisit la condition
+                ctrl_condition = self.dict_types[type_champ]["condition"]
+                self.fields[ctrl_condition].initial = dict_filtre["condition"]
+                # Saisit les critères
+                ctrl_criteres = self.dict_types[type_champ]["criteres"][dict_filtre["condition"]]
+                for index, nom_ctrl in enumerate(ctrl_criteres):
+                    # Si datetime
+                    if index <= len(dict_filtre["criteres"])-1 and "-" in dict_filtre["criteres"][index] and ":" in dict_filtre["criteres"][index]:
+                        dict_filtre["criteres"][index] = datetime.datetime.strptime(dict_filtre["criteres"][index], "%Y-%m-%d %H:%M:%S")
+                    # Importation de la valeur par défaut
+                    try:
+                        self.fields[nom_ctrl].initial = dict_filtre["criteres"][index]
+                    except:
+                        pass
 
         # Affichage
         self.helper.layout = Layout(

@@ -49,12 +49,14 @@
             {% block box_contenu %}
                 <div class="row">
                     {% for structure in liste_structures_coords %}
-                        <div class="col-md-4 pl-3 pr-3 pb-3 pt-1">
-                            <div><strong>{{ structure.nom }}</strong></div>
-                            {% if structure.rue or structure.cp or structure.ville %}<div><i class='fa fa-map-marker margin-r-5'></i>{{ structure.rue }} {{ structure.cp }} {{ structure.ville }}</div>{% endif %}
-                            {% if structure.tel %}<div><i class='fa fa-phone margin-r-5'></i>{{ structure.tel }}</div>{% endif %}
-                            {% if structure.mail %}<div><i class='fa fa-envelope-o margin-r-5'></i>{{ structure.mail }}</div>{% endif %}
-                            {% if structure.site %}<div><i class='fa fa-globe margin-r-5'></i><a href="http://{{ structure.site }}" target="_blank">{{ structure.site }}</a></div>{% endif %}
+                        {% if structure.rue or structure.cp or structure.ville or structure.tel or structure.mail or structure.site %}
+                            <div class="col-md-4 pl-3 pr-3 pb-3 pt-1">
+                                <div><strong>{{ structure.nom }}</strong></div>
+                                {% if structure.rue or structure.cp or structure.ville %}<div><i class='fa fa-map-marker margin-r-5'></i>{{ structure.rue }} {{ structure.cp }} {{ structure.ville }}</div>{% endif %}
+                                {% if structure.tel %}<div><i class='fa fa-phone margin-r-5'></i>{{ structure.tel }}</div>{% endif %}
+                                {% if structure.mail %}<div><i class='fa fa-envelope-o margin-r-5'></i>{{ structure.mail }}</div>{% endif %}
+                                {% if structure.site %}<div><i class='fa fa-globe margin-r-5'></i><a href="http://{{ structure.site }}" target="_blank">{{ structure.site }}</a></div>{% endif %}
+                            {% endif %}
                         </div>
                     {% endfor %}
                 </div>

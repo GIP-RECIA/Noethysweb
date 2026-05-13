@@ -1,0 +1,43 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f8fafc; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .card { background-color: #efe7e7; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
+        .organisateur { text-align: center; margin-bottom: 25px; }
+        .button {
+            display: inline-block;
+            padding: 14px 30px;
+            background-color: #07689F;
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .footer { text-align: center; margin-top: 25px; color: #94a3b8; font-size: 13px; }
+        h1 { color: #1e293b; font-size: 18px; margin-bottom: 20px; }
+        p { color: #475569; line-height: 1.6; font-size: 16px; }
+        ul { color: #475569; line-height: 1.6; font-size: 16px; padding-left: 18px;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="organisateur">
+                <span style="font-size: 28px; font-weight: bold; color: #07689F;">{% blocktrans %}Le portail famille{% endblocktrans %}</span>
+            </div>
+            {% block contenu_page %}
+            {% endblock %}
+        </div>
+
+        <div class="footer">
+            <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0 10px 0;">
+            &copy; {% now "Y" %} Noethysweb
+        </div>
+    </div>
+</body>
+</html>

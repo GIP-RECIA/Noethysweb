@@ -1,0 +1,13 @@
+{% extends "core/base_login.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block titre_contenu %}
+    {% blocktrans %}Un problème a été rencontré durant l'activation de votre compte{% endblocktrans %}
+{% endblock titre_contenu %}
+
+{% block contenu_page %}
+
+    <p>{% blocktrans %}Contactez directement l'administrateur du portail.{% endblocktrans %}</p>
+
+{% endblock contenu_page %}

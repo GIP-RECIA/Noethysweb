@@ -1,0 +1,17 @@
+{% extends "portail/creer_compte/emails/base.html" %}
+{% load i18n %}
+
+{% block contenu_page %}
+    <h1>{% blocktrans %}Réinitialisation du mot de passe{% endblocktrans %}</h1>
+
+    <p>{% blocktrans %}Vous recevez ce message car vous avez demandé une réinitialisation de votre mot de passe sur le portail famille{% endblocktrans %} {{ site_name }}. {% blocktrans %}Pour confirmer, cliquez sur le bouton ci-dessous{% endblocktrans %} :</p>
+
+    <div style="text-align: center;">
+        <a href="{{ protocol }}://{{ domain }}{% url 'password_reset_confirm' uidb64=uid token=token %}" class="button">{% blocktrans %}Changer mon mot de passe{% endblocktrans %}</a>
+    </div>
+
+    <p style="margin-top: 30px; font-size: 14px;">{% blocktrans %}Si le bouton ne fonctionne pas, vous pouvez copier et coller ce lien dans votre navigateur{% endblocktrans %} :<br>
+    <span style="color: #6366f1;">{{ protocol }}://{{ domain }}{% url 'password_reset_confirm' uidb64=uid token=token %}</span></p>
+
+    <p>{% blocktrans %}Si vous n'êtes pas à l'origine de cette demande, veuillez contacter l'administrateur du portail{% endblocktrans %}.</p>
+{% endblock %}

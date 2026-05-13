@@ -3,14 +3,35 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import os.path
+import logging, os.path, requests
+logger = logging.getLogger(__name__)
 from django.core.files.storage import Storage
 from django.utils.deconstruct import deconstructible
-# from storages.utils import get_available_overwrite_name
+from django.dispatch import receiver
 from storages.utils import setting
 from pcloud import PyCloud
 
 _DEFAULT_MODE = 'add'
+
+
+class AuthenticationError(Exception):
+    """Authentication failed"""
+
+
+class MyPyCloud(PyCloud):
+    def get_auth_token(self):
+        params = {
+            "getauth": 1,
+            "logout": 1,
+            "username": self.username.decode("utf-8"),
+            "password": self.password.decode("utf-8"),
+            "authexpire": 43200,
+        }
+        response = requests.post("https://eapi.pcloud.com/login", data=params, headers={"Accept": "application/json"}, timeout=10)
+        resp = response.json()
+        if "auth" not in resp:
+            raise AuthenticationError(resp)
+        return resp["auth"]
 
 
 @deconstructible
@@ -28,9 +49,27 @@ class PcloudStorage(Storage):
         app_key=app_key,
         app_secret=app_secret,
     ):
+        logger.debug("PcloudStorage > __init__...")
+        self.client = None
         self.root_path = root_path
         self.write_mode = write_mode
-        self.client = PyCloud(app_key, app_secret, endpoint="eapi")
+        self.client = MyPyCloud(app_key, app_secret, endpoint="eapi")
+
+    def disconnect(self):
+        """Invalide le jeton et ferme la session pCloud."""
+        logger.debug("PcloudStorage > disconnect...")
+        if getattr(self, "client", None) is not None:
+            try:
+                self.client.logout()
+            except Exception:
+                pass
+            finally:
+                self.client = None
+
+    def __del__(self):
+        """Sécurité pour les scripts (dbbackup, shell) : ferme la session à la destruction de l'objet."""
+        logger.debug("PcloudStorage > __del__...")
+        self.disconnect()
 
     def _full_path(self, name):
         if name == '/':
@@ -41,6 +80,7 @@ class PcloudStorage(Storage):
         return full_path
 
     def delete(self, name):
+        logger.debug("PcloudStorage > delete...")
         repertoire, nom_fichier = os.path.split(self._full_path(name))
         self.client.deletefile(path=repertoire, fileid=self.Get_fileid(name))
 
@@ -51,6 +91,7 @@ class PcloudStorage(Storage):
             return False
 
     def listdir(self, path):
+        logger.debug("PcloudStorage > listdir...")
         repertoires, fichiers = [], []
         data = self.client.listfolder(path=self._full_path(path))
         for dict_fichier in data["metadata"]["contents"]:
@@ -83,6 +124,7 @@ class PcloudStorage(Storage):
         pass
 
     def _save(self, name, content):
+        logger.debug("PcloudStorage > _save...")
         content.open()
         self.client.uploadfile(data=content.read(), filename=name, path=self.root_path)
         content.close()
@@ -95,3 +137,16 @@ class PcloudStorage(Storage):
         # if self.write_mode == 'overwrite':
         #     return get_available_overwrite_name(name, max_length)
         return super().get_available_name(name, max_length)
+
+
+try:
+    from dbbackup.signals import post_backup
+    @receiver(post_backup)
+    def close_pcloud_session_backup(sender, **kwargs):
+        """Ferme la session immédiatement après la fin du backup."""
+        logger.debug("PcloudStorage > close_pcloud_session_backup...")
+        from django.core.files.storage import default_storage
+        if isinstance(default_storage, PcloudStorage):
+            default_storage.disconnect()
+except ImportError:
+    pass

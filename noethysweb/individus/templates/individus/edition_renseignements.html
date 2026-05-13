@@ -33,6 +33,9 @@
         {# Insertion des modals #}
         {% include 'core/modal_pdf.html' %}
 
+        {# Lien de téléchargement du fichier d'export #}
+        <a id="download" download></a>
+
         <script>
 
             // Générer le PDF
@@ -61,6 +64,32 @@
                 })
             };
 
+            // Exporter au format xlsx
+            function exporter_excel() {
+                var box = bootbox.dialog({
+                        message: "<p class='text-center mb-0'><i class='fa fa-spin fa-cog'></i> <b>Génération de l'export en cours</b><br><br>Veuillez patienter...</p>",
+                        closeButton: false
+                    });
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'ajax_edition_renseignements_exporter_xlsx' %}",
+                    data: {
+                        form_options: JSON.stringify($("#form_parametres").serializeObject()),
+                        rattachements: JSON.stringify(get_coches()),
+                        csrfmiddlewaretoken: '{{ csrf_token }}',
+                    },
+                    datatype: "json",
+                    success: function(data){
+                        bootbox.hideAll();
+                        $("#download").attr("href", data.nom_fichier);
+                        document.getElementById("download").click();
+                    },
+                    error: function(data) {
+                        bootbox.hideAll();
+                        toastr.error(data.responseJSON.erreur);
+                    }
+                })
+            };
         </script>
 
     </div>

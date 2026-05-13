@@ -16,7 +16,7 @@ class Exporter(BaseExporter):
         format_money = classeur.add_format({"num_format": "# ##0.00"})
 
         # Importation des prestations
-        prestations = Prestation.objects.select_related("activite").filter(date__gte=self.options.date_debut, date__lte=self.options.date_fin).order_by("date")
+        prestations = Prestation.objects.select_related("activite", "facture").filter(date__gte=self.options.date_debut, date__lte=self.options.date_fin).order_by("date")
 
         lignes = []
         for num_ecriture, prestation in enumerate(prestations, 1):
@@ -28,13 +28,14 @@ class Exporter(BaseExporter):
                 "label": ("%s - %s" % (prestation.activite.abrege, prestation.label)) if prestation.activite else prestation.label,
                 "montant": prestation.montant,
                 "sens": "C",
+                "facture": prestation.facture.numero if prestation.facture else None,
                 "monnaie": "EUR",
             })
 
         # Définition des colonnes
         colonnes = [
             ("num_ecriture", None), ("date", None), ("code_journal", None), ("compte", None), ("vide", None), ("label", None),
-            ("vide", None), ("montant", format_money), ("sens", None), ("vide", None), ("monnaie", None),
+            ("vide", None), ("montant", format_money), ("sens", None), ("facture", None), ("vide", None), ("monnaie", None),
         ]
 
         # Remplissage des cases

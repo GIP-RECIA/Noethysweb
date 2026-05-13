@@ -1,0 +1,13 @@
+{% load i18n %}
+{% blocktrans %}Bonjour{% endblocktrans %} {{ prenom }},
+
+{% blocktrans %}Votre compte a bien été activé{% endblocktrans %}.
+
+{% blocktrans %}Vous pouvez désormais vous connecter au portail famille. Pour y accéder, cliquez sur le lien ci-dessous{% endblocktrans %} :
+{{ protocol }}://{{ domain }}{% url 'portail_creer_compte_activer' uidb64=uid token=token %}"
+
+{% blocktrans %}Et utilisez les codes d'accès suivants{% endblocktrans %} :
+{% blocktrans %}Identifiant{% endblocktrans %} : {{ identifiant }}
+{% blocktrans %}Mot de passe{% endblocktrans %} : {% blocktrans %}Vous seul le connaissez{% endblocktrans %}
+
+{{ organisateur.nom }}

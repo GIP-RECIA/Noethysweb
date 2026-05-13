@@ -79,6 +79,7 @@ class Formulaire(FormulaireBase, ModelForm):
                 Field("code_prodloc", type=None if format in ("pes", "magnus", "jvs") else "hidden"),
                 Field("id_poste", type=None if format in ("pes", "magnus", "jvs") else "hidden"),
                 Field("code_etab", type=None if format in ("pes",) else "hidden"),
+                Field("objet_dette", type=None if format in ("pes",) else "hidden"),
                 Field("operation", type=None if format in ("magnus",) else "hidden"),
                 Field("fonction", type=None if format in ("magnus",) else "hidden"),
                 Field("service1", type=None if format in ("magnus",) else "hidden"),
@@ -125,7 +126,10 @@ class Formulaire(FormulaireBase, ModelForm):
             self.add_error("code_prodloc", "Vous devez renseigner le code produit local")
 
         if not self.cleaned_data["code_etab"] and format in ("pes",):
-            self.add_error("code_prodloc", "Vous devez renseigner le code produit local")
+            self.add_error("code_etab", "Vous devez renseigner le code établissement")
+
+        if not self.cleaned_data["objet_dette"] and format in ("pes",):
+            self.add_error("objet_dette", "Vous devez renseigner l'objet de la dette")
 
         if not self.cleaned_data["modele_document"] and format in ("magnus",) and self.cleaned_data["inclure_pieces_jointes"]:
             self.add_error("modele_document", "Vous devez sélectionner un modèle de facture")

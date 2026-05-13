@@ -93,7 +93,48 @@ $(document).ready(function() {
                 buttons: [
                     'copy',
                     'csv',
-                    'excel',
+                    {
+                        extend: 'excel',
+                        text: 'Excel (La page affichée)',
+                        exportOptions: {
+                            search: 'applied'
+                        }
+                    },
+                    {
+                        extend: 'excel',
+                        text: 'Excel (Toutes les pages)',
+                        exportOptions: {
+                            search: 'applied'
+                        },
+                        action: function (e, dt, button, config) {
+                            var self = this;
+                            var oldStart = dt.settings()[0]._iDisplayStart;
+
+                            // On prépare la requête Ajax pour récupérer l'intégralité des données
+                            dt.one('preXhr', function (e, s, data) {
+                                data.start = 0;
+                                data.length = -1; // -1 demande généralement "tout" au serveur
+                            });
+
+                            // On récupère les données une seule fois
+                            dt.one('draw', function (e, settings) {
+                                // On déclenche l'exportation Excel sur ces données complètes
+                                $.fn.dataTable.ext.buttons.excelHtml5.action.call(self, e, dt, button, config);
+
+                                // On remet immédiatement le tableau dans son état initial (pagination)
+                                dt.one('preXhr', function (e, s, data) {
+                                    settings._iDisplayStart = oldStart;
+                                    data.start = oldStart;
+                                });
+
+                                // On recharge pour que l'utilisateur ne voie pas de changement
+                                setTimeout(dt.draw, 0);
+                            });
+
+                            // On lance la procédure
+                            dt.draw();
+                        }
+                    },
                     {
                         text: 'PDF (portrait)',
                         extend: 'pdf',

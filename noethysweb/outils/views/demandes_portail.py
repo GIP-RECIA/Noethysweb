@@ -184,7 +184,7 @@ class Liste(Page, crud.Liste):
                 label = self.dict_labels.get((instance.categorie, instance.code))
             # Insère une icône si donnée importante
             warning = False
-            if instance.categorie in ("individu_questionnaire", "famille_questionnaire", "individu_informations", "famille_quotients", "famille_pieces", "individu_regimes_alimentaires"):
+            if instance.categorie in ("nouvelle_famille", "nouvel_individu", "individu_questionnaire", "famille_questionnaire", "individu_informations", "famille_quotients", "famille_pieces", "individu_regimes_alimentaires"):
                 warning = True
             if instance.categorie == "individu_coords" and instance.code in ("type_adresse", "ville_resid"):
                 warning = True

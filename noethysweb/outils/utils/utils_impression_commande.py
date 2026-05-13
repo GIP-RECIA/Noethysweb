@@ -11,7 +11,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4, portrait, landscape
 from reportlab.lib import colors
 from core.models import Commande, CommandeModeleColonne
-from core.utils import utils_dates, utils_impression
+from core.utils import utils_dates, utils_impression, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -29,14 +29,14 @@ class Impression(utils_impression.Impression):
         self.Insert_header()
 
         # Insère le nom et la période de la commande
-        style_titre_commande = ParagraphStyle(name="1", alignment=1, fontName="Helvetica-Bold", fontSize=9, leading=8, spaceAfter=14)
+        style_titre_commande = ParagraphStyle(name="1", alignment=1, fontName=utils_polices.FONT_BOLD, fontSize=9, leading=8, spaceAfter=14)
         self.story.append(Paragraph("<para>%s - Du %s au %s</para>" % (commande.nom, commande.date_debut.strftime("%d/%m/%Y"), commande.date_fin.strftime("%d/%m/%Y")), style_titre_commande))
 
         # Styles
-        style_entete = ParagraphStyle(name="1", alignment=1, fontName="Helvetica-Bold", fontSize=7, leading=8, spaceAfter=2)
-        style_numerique = ParagraphStyle(name="2", alignment=2, fontName="Helvetica", fontSize=7, leading=8, spaceAfter=2)
-        style_total = ParagraphStyle(name="3", alignment=2, fontName="Helvetica-Bold", fontSize=7, leading=8, spaceAfter=2)
-        style_texte = ParagraphStyle(name="4", alignment=0, fontName="Helvetica", fontSize=7, leading=8, spaceAfter=2)
+        style_entete = ParagraphStyle(name="1", alignment=1, fontName=utils_polices.FONT_BOLD, fontSize=7, leading=8, spaceAfter=2)
+        style_numerique = ParagraphStyle(name="2", alignment=2, fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=8, spaceAfter=2)
+        style_total = ParagraphStyle(name="3", alignment=2, fontName=utils_polices.FONT_BOLD, fontSize=7, leading=8, spaceAfter=2)
+        style_texte = ParagraphStyle(name="4", alignment=0, fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=8, spaceAfter=2)
 
         # Calcule des largeurs de colonne
         largeur_colonne_date = 110
@@ -97,11 +97,11 @@ class Impression(utils_impression.Impression):
 
         listeStyles = [
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('FONT',(0,0),(-1,-1), "Helvetica", 7),
+                ("FONT",(0,0),(-1,-1), utils_polices.FONT_NORMAL, 7),
                 ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                 ('ALIGN', (0,1), (-2,-1), 'CENTER'),
-                ('FONT', (0, 0), (0, -1), "Helvetica-Bold", 7),
-                ('FONT', (0, 0), (-1, 0), "Helvetica-Bold", 7),
+                ('FONT', (0, 0), (0, -1), utils_polices.FONT_BOLD, 7),
+                ('FONT', (0, 0), (-1, 0), utils_polices.FONT_BOLD, 7),
                 ]
 
         # Création du tableau
@@ -111,7 +111,7 @@ class Impression(utils_impression.Impression):
 
         # Observations
         if commande.observations:
-            style_observations = ParagraphStyle(name="2", alignment=1, fontName="Helvetica", fontSize=7, leading=8, spaceBefore=10)
+            style_observations = ParagraphStyle(name="2", alignment=1, fontName=utils_polices.FONT_NORMAL, fontSize=7, leading=8, spaceBefore=10)
             self.story.append(Paragraph(commande.observations, style=style_observations))
 
         # Mémorisation des champs de fusion

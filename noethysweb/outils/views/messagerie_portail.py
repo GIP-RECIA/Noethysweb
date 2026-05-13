@@ -34,7 +34,7 @@ class Page(crud.Page):
         context['page_titre'] = "Messagerie"
         liste_messages_discussion = PortailMessage.objects.select_related("famille", "structure", "utilisateur").filter(famille_id=self.get_idfamille(), structure_id=self.get_idstructure()).order_by("date_creation")
         context['liste_messages_discussion'] = list(liste_messages_discussion)
-        messages_non_lus = PortailMessage.objects.select_related("famille", "structure").filter(utilisateur__isnull=True, date_lecture__isnull=True)
+        messages_non_lus = PortailMessage.objects.select_related("famille", "structure").filter(utilisateur__isnull=True, date_lecture__isnull=True).order_by("date_creation")
         context['messagerie_liste_messages_non_lus'] = list(messages_non_lus)
 
         if self.get_idstructure():

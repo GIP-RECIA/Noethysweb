@@ -43,6 +43,7 @@ class Liste(Page, crud.Liste):
         famille = columns.TextColumn("Famille", sources=['famille__nom'])
         tarif = columns.TextColumn("ID Tarif", sources=['tarif__idtarif'])
         tarif_date_debut = columns.TextColumn("Tarif Début", sources=['tarif__date_debut'], processor=helpers.format_date("%d/%m/%Y"))
+        facture = columns.TextColumn("Facture", sources=["facture__numero"])
 
         class Meta:
             structure_template = MyDatatable.structure_template

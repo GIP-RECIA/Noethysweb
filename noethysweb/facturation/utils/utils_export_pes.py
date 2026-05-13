@@ -143,7 +143,7 @@ class Exporter(ExporterBase):
         BlocBordereau.appendChild(DteAsp)
 
         Objet = doc.createElement("Objet")
-        Objet.setAttribute("V", self.ConvertToTexte(self.Formate_libelle(texte=self.lot.modele.objet_piece)[:160], majuscules=True))
+        Objet.setAttribute("V", self.ConvertToTexte(self.Formate_libelle(texte=self.lot.modele.objet_dette)[:160], majuscules=True))
         BlocBordereau.appendChild(Objet)
 
         for piece in self.pieces:

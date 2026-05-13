@@ -16,7 +16,7 @@ from reportlab.graphics.barcode.code39 import Extended39, Standard39
 from reportlab.graphics.barcode.code93 import Extended93, Standard93
 from reportlab.graphics.barcode.usps import FIM, POSTNET
 from reportlab.graphics.barcode import createBarcodeDrawing
-from core.utils import utils_infos_individus, utils_dates, utils_resolveur_formule
+from core.utils import utils_infos_individus, utils_dates, utils_resolveur_formule, utils_polices
 from core.models import ModeleDocument, Organisateur
 
 
@@ -1125,7 +1125,7 @@ class ObjetPDF():
             if self.categorie == "special":
                 canvas.rect(self.left, self.top, self.width, self.height, self.SetTrait(), self.SetRemplissage())
                 canvas.setFillColorRGB(0, 0, 0)
-                canvas.setFont("Helvetica", 9)
+                canvas.setFont(utils_polices.FONT_NORMAL, 9)
                 canvas.scale(1, -1)
                 canvas.drawString(self.left + 6, -self.top -12, self.nom)
 
@@ -1152,10 +1152,10 @@ class ObjetPDF():
         self.canvas.setFillColor(self.ConvertCouleur(self.fill))
 
     def GetPolice(self):
-        police = "Helvetica"
-        if hasattr(self, "fontWeight") and self.fontWeight == "bold" : police = "Helvetica-Bold"
-        if hasattr(self, "fontStyle") and self.fontStyle == "italic" : police = "Helvetica-Bold"
-        if hasattr(self, "fontWeight") and self.fontWeight == "bold" and self.fontStyle == "italic" : police = "Helvetica-BoldOblique"
+        police = utils_polices.FONT_NORMAL
+        if hasattr(self, "fontWeight") and self.fontWeight == "bold" : police = utils_polices.FONT_BOLD
+        if hasattr(self, "fontStyle") and self.fontStyle == "italic" : police = utils_polices.FONT_BOLD
+        if hasattr(self, "fontWeight") and self.fontWeight == "bold" and self.fontStyle == "italic" : police = utils_polices.FONT_BOLD_OBLIQUE
         return police
 
     def ConvertCouleur(self, couleur=""):

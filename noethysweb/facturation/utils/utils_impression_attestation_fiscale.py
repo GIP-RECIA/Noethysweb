@@ -5,7 +5,7 @@
 
 import logging
 logger = logging.getLogger(__name__)
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
@@ -39,15 +39,15 @@ class Impression(utils_impression.Impression):
                 dataTableau.append((self.dict_options["texte_titre"],))
                 dataTableau.append(("Période du %s au %s" % (dictValeur["{DATE_DEBUT}"], dictValeur["{DATE_FIN}"]),))
                 style = TableStyle(
-                    [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 19),
-                    ('FONT', (0, 1), (0, 1), "Helvetica", 8), ('LINEBELOW', (0, 0), (0, 0), 0.25, colors.black),
+                    [('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 19),
+                    ('FONT', (0, 1), (0, 1), utils_polices.FONT_NORMAL, 8), ('LINEBELOW', (0, 0), (0, 0), 0.25, colors.black),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ])
                 tableau = Table(dataTableau, largeursColonnes)
                 tableau.setStyle(style)
                 self.story.append(tableau)
                 self.story.append(Spacer(0, 30))
 
-            paraStyle = ParagraphStyle(name="contenu", fontName="Helvetica", fontSize=11, spaceBefore=0,
+            paraStyle = ParagraphStyle(name="contenu", fontName=utils_polices.FONT_NORMAL, fontSize=11, spaceBefore=0,
                                        spaceafter=0, leftIndent=6, rightIndent=6)
 
             # INTRO
@@ -72,10 +72,10 @@ class Impression(utils_impression.Impression):
             dataTableau.append(("", "Total :", dictValeur["{TOTAL}"]))
 
             style = TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE'), ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('GRID', (0, 0), (-1, -2), 0.25, colors.black), ('FONT', (0, 0), (-1, 0), "Helvetica", 6),
-                ('FONT', (0, 1), (-1, -1), "Helvetica", 10), ('TOPPADDING', (0, 1), (-1, -2), 10), ('BOTTOMPADDING', (0, 1), (-1, -2), 10),
-                ('GRID', (-1, -1), (-1, -1), 0.25, colors.black), ('FONT', (-1, -1), (-1, -1), "Helvetica-Bold", 10),
-                ('ALIGN', (-2, -1), (-2, -1), 'RIGHT'), ('FONT', (-2, -1), (-2, -1), "Helvetica", 6), ])
+                ('GRID', (0, 0), (-1, -2), 0.25, colors.black), ('FONT', (0, 0), (-1, 0), utils_polices.FONT_NORMAL, 6),
+                ('FONT', (0, 1), (-1, -1), utils_polices.FONT_NORMAL, 10), ('TOPPADDING', (0, 1), (-1, -2), 10), ('BOTTOMPADDING', (0, 1), (-1, -2), 10),
+                ('GRID', (-1, -1), (-1, -1), 0.25, colors.black), ('FONT', (-1, -1), (-1, -1), utils_polices.FONT_BOLD, 10),
+                ('ALIGN', (-2, -1), (-2, -1), 'RIGHT'), ('FONT', (-2, -1), (-2, -1), utils_polices.FONT_NORMAL, 6), ])
             tableau = Table(dataTableau, largeursColonnes)
             tableau.setStyle(style)
             self.story.append(tableau)

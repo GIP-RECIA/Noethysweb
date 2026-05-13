@@ -156,20 +156,20 @@ LISTE_ETATS_CONSO = [
 ]
 
 LISTE_CONTROLES_QUESTIONNAIRES = [
-    {"code": "ligne_texte", "label":u"Ligne de texte", "image": "Texte_ligne.png", "filtre": "texte"},
-    {"code": "bloc_texte", "label":u"Bloc de texte multiligne", "image": "Texte_bloc.png", "options": {"hauteur":60}, "filtre": "texte" },
-    {"code": "entier", "label":u"Nombre entier", "image": "Ctrl_nombre.png", "options": {"min":0, "max":99999}, "filtre": "entier" },
-    {"code": "decimal", "label":u"Nombre décimal", "image": "Ctrl_decimal.png", "options": {"min":0, "max":99999}, "filtre": "decimal" },
-    {"code": "montant", "label":u"Montant", "image": "Euro.png", "filtre": "montant" },
-    {"code": "liste_deroulante", "label":u"Liste déroulante basique", "image": "Ctrl_choice.png", "options":{"choix":None}, "filtre": "choix" },
-    {"code": "liste_deroulante_avancee", "label":u"Liste déroulante avancée", "image": "Ctrl_choice.png", "options":{"choix":None}, "filtre": "choix" },
-    {"code": "liste_coches", "label":u"Sélection multiple", "image": "Coches.png", "options": {"hauteur":-1, "choix":None} , "filtre": "choix"},
-    {"code": "case_coche", "label":u"Case à cocher", "image": "Ctrl_coche.png" , "filtre": "coche"},
-    {"code": "date", "label":u"Date", "image": "Jour.png" , "filtre": "date"},
-    {"code": "slider", "label":u"Réglette", "image": "Reglette.png", "options": {"hauteur":-1, "min":0, "max":100}, "filtre": "entier" },
-    {"code": "couleur", "label":u"Couleur", "image": "Ctrl_couleur.png", "options": {"hauteur":20}, "filtre": None},
+    {"code": "ligne_texte", "label":u"Ligne de texte", "image": "Texte_ligne.png", "filtre": "texte", "filtre_liste": "CharField"},
+    {"code": "bloc_texte", "label":u"Bloc de texte multiligne", "image": "Texte_bloc.png", "options": {"hauteur":60}, "filtre": "texte", "filtre_liste": "CharField"},
+    {"code": "entier", "label":u"Nombre entier", "image": "Ctrl_nombre.png", "options": {"min":0, "max":99999}, "filtre": "entier", "filtre_liste": "IntegerField"},
+    {"code": "decimal", "label":u"Nombre décimal", "image": "Ctrl_decimal.png", "options": {"min":0, "max":99999}, "filtre": "decimal", "filtre_liste": "DecimalField"},
+    {"code": "montant", "label":u"Montant", "image": "Euro.png", "filtre": "montant", "filtre_liste": "DecimalField"},
+    {"code": "liste_deroulante", "label":u"Liste déroulante basique", "image": "Ctrl_choice.png", "options":{"choix":None}, "filtre": "choix", "filtre_liste": "CharField"},
+    {"code": "liste_deroulante_avancee", "label":u"Liste déroulante avancée", "image": "Ctrl_choice.png", "options":{"choix":None}, "filtre": "choix", "filtre_liste": "CharField"},
+    {"code": "liste_coches", "label":u"Sélection multiple", "image": "Coches.png", "options": {"hauteur":-1, "choix":None} , "filtre": "choix", "filtre_liste": "CharField"},
+    {"code": "case_coche", "label":u"Case à cocher", "image": "Ctrl_coche.png" , "filtre": "coche", "filtre_liste": "BooleanField"},
+    {"code": "date", "label":u"Date", "image": "Jour.png" , "filtre": "date", "filtre_liste": "DateField"},
+    {"code": "slider", "label":u"Réglette", "image": "Reglette.png", "options": {"hauteur":-1, "min":0, "max":100}, "filtre": "entier", "filtre_liste": "IntegerField"},
+    {"code": "couleur", "label":u"Couleur", "image": "Ctrl_couleur.png", "options": {"hauteur":20}, "filtre": None, "filtre_liste": None},
     # {"code": "documents", "label":u"Porte-documents", "image": "Document.png", "options": {"hauteur":60}, "filtre": None},
-    {"code": "codebarres", "label":u"Code-barres", "image": "Codebarres.png", "options": {"norme":"39"}, "filtre": "texte" },
+    {"code": "codebarres", "label":u"Code-barres", "image": "Codebarres.png", "options": {"norme":"39"}, "filtre": "texte", "filtre_liste": None},
     # {"code": "rfid", "label":u"Badge RFID", "image": "Rfid.png" , "filtre": "texte"},
     ]
 
@@ -1331,12 +1331,12 @@ class Unite(models.Model):
     autogen_parametres = models.CharField(verbose_name="Paramètres de la génération", max_length=400, blank=True, null=True)
     groupes = models.ManyToManyField(Groupe, blank=True)
     categories_tarifs = models.ManyToManyField("CategorieTarif", blank=True)
-    incompatibilites = models.ManyToManyField("self", verbose_name="Incompatibilités", blank=True)
+    incompatibilites = models.ManyToManyField("self", verbose_name="Incompatibilités", related_name="unites_incompatibles", blank=True, symmetrical=False)
     visible_portail = models.BooleanField(verbose_name="Visible sur le portail", default=True)
     imposer_saisie_valeur = models.BooleanField(verbose_name="Imposer la saisie de la valeur aux usagers sur le portail", default=False)
     equiv_journees = models.FloatField(verbose_name="Equivalence en journées", blank=True, null=True)
     equiv_heures = models.TimeField(verbose_name="Equivalence en heures", blank=True, null=True)
-    dependances = models.ManyToManyField("self", verbose_name="Unités liées", blank=True, symmetrical=False)
+    dependances = models.ManyToManyField("self", verbose_name="Unités liées", related_name="unites_dependantes", blank=True, symmetrical=False)
     solidaires = models.ManyToManyField("self", verbose_name="Unités solidaires", related_name="unites_solidaires", blank=True, symmetrical=False)
 
     class Meta:
@@ -3369,6 +3369,7 @@ class PesModele(models.Model):
     code_etab = models.CharField(verbose_name="Code établissement", max_length=200, blank=True, null=True)
     service1 = models.CharField(verbose_name="Service axe 1", max_length=15, blank=True, null=True, help_text="Premier axe analytique.")
     service2 = models.CharField(verbose_name="Service axe 2", max_length=10, blank=True, null=True, help_text="Second axe analytique.")
+    objet_dette = models.CharField(verbose_name="Objet dette par défaut", max_length=450, blank=True, null=True)
     operation = models.CharField(verbose_name="Opération comptable", max_length=10, blank=True, null=True)
     fonction = models.CharField(verbose_name="Fonction comptable", max_length=10, blank=True, null=True)
     prelevement_libelle = models.CharField(verbose_name="Libellé du prélèvement", max_length=450, default="{NOM_ORGANISATEUR} - Facture {NUM_FACTURE}", help_text="Saisissez le libellé du prélèvement qui apparaîtra sur le relevé de compte de la famille. Vous pouvez personnaliser ce libellé grâce aux mots-clés suivants : {NOM_ORGANISATEUR}, {NUM_FACTURE}, {MOIS}, {MOIS_LETTRES}, {ANNEE}, {DATE_DEBUT_MOIS}, {DATE_FIN_MOIS}, {PRESTATION_DATE_MIN}, {PRESTATION_DATE_MAX}, {PRESTATION_DEBUT_MOIS}, {PRESTATION_FIN_MOIS}, {PRESTATION_MOIS}, {PRESTATION_ANNEE}.")

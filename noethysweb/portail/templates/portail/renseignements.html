@@ -74,6 +74,12 @@
         </div>
     {% endif %}
 
+    {% if parametres_portail.connexion_creation_compte or parametres_portail.renseignements_creation_individu %}
+        <p>
+            <a title="{% trans "Cliquez ici pour créer une nouvelle fiche individuelle" %}" href="{% url 'portail_creer_individu' %}" class="btn btn-success mb-2" type="button"><i class="fa fa-plus margin-r-5"></i>{% blocktrans %}Saisir un nouvel individu{% endblocktrans %}</a>
+        </p>
+    {% endif %}
+
     {# Approbations en attente #}
     {% if form.fields %}
         {% embed 'core/box.html' with box_introduction=True %}

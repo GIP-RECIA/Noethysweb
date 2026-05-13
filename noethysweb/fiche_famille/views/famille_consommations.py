@@ -99,6 +99,7 @@ class Modifier(Onglet, TemplateView):
                 # Conserve les individus possibles
                 if inscription.individu not in data["liste_individus_possibles"]:
                     data["liste_individus_possibles"].append(inscription.individu)
+        data["liste_activites_possibles"] = sorted(data["liste_activites_possibles"], key=lambda activite: activite.date_fin, reverse=True)
 
         # Mémorise l'activité favorite
         key_cache = "activite_favorite_user%d" % self.request.user.pk
@@ -111,10 +112,10 @@ class Modifier(Onglet, TemplateView):
         # Sélection de l'activité à afficher
         if data['liste_activites_possibles'] and not data["selection_activite"]:
             data['selection_activite'] = data['liste_activites_possibles'][0]
-            for activite in data['liste_activites_possibles']:
-                if not activite.date_fin:
-                    data['selection_activite'] = activite
-                    break
+            # for activite in data['liste_activites_possibles']:
+            #     if not activite.date_fin:
+            #         data['selection_activite'] = activite
+            #         break
         data["liste_inscriptions"] = dict_inscriptions.get(data['selection_activite'], [])
 
         # Définit le titre de la grille

@@ -4,7 +4,8 @@
 #  Distribué sous licence GNU GPL.
 
 from django.urls import reverse_lazy
-from core.views.mydatatableview import MyDatatable, columns, helpers
+from django.db.models import Count
+from core.views.mydatatableview import MyDatatable, columns
 from core.views import crud
 from core.models import TypeGroupeActivite
 from parametrage.forms.types_groupes_activites import Formulaire
@@ -29,8 +30,8 @@ class Liste(Page, crud.Liste):
     model = TypeGroupeActivite
 
     def get_queryset(self):
-        # return TypeGroupeActivite.objects.select_related("structure").filter(self.Get_filtres("Q"), structure=self.request.user.structure_actuelle)
-        return TypeGroupeActivite.objects.select_related("structure").filter(self.Get_filtres("Q"), structure__in=self.request.user.structures.all())
+        return TypeGroupeActivite.objects.select_related("structure").filter(self.Get_filtres("Q"), structure__in=self.request.user.structures.all()) \
+                .annotate(nbre_activites=Count("activite_groupes_activites", distinct=True))
 
 
     def get_context_data(self, **kwargs):
@@ -41,8 +42,8 @@ class Liste(Page, crud.Liste):
         return context
 
     class datatable_class(MyDatatable):
-        filtres = ["idtype_groupe_activite", "nom"]
-
+        filtres = ["idtype_groupe_activite", "nom", "nbre_activites"]
+        nbre_activites = columns.TextColumn("Activités associées", sources="nbre_activites")
         actions = columns.TextColumn("Actions", sources=None, processor='Get_actions_standard')
 
         class Meta:
