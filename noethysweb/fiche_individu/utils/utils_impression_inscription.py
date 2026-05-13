@@ -5,7 +5,7 @@
 
 import logging
 logger = logging.getLogger(__name__)
-from core.utils import utils_dates, utils_impression, utils_preferences
+from core.utils import utils_dates, utils_impression, utils_preferences, utils_polices
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.platypus.flowables import DocAssign, Flowable
@@ -19,7 +19,7 @@ class Impression(utils_impression.Impression):
     def Draw(self):
         styleSheet = getSampleStyleSheet()
         styleTexte = styleSheet['BodyText']
-        styleTexte.fontName = "Helvetica"
+        styleTexte.fontName = utils_polices.FONT_NORMAL
         styleTexte.fontSize = 9
         styleTexte.borderPadding = 9
         styleTexte.leading = 12
@@ -47,8 +47,8 @@ class Impression(utils_impression.Impression):
                 dataTableau.append((u"",))
                 style = TableStyle([
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONT', (0, 0), (0, 0), "Helvetica-Bold", 19),
-                    ('FONT', (0, 1), (0, 1), "Helvetica", 8),
+                    ('FONT', (0, 0), (0, 0), utils_polices.FONT_BOLD, 19),
+                    ('FONT', (0, 1), (0, 1), utils_polices.FONT_NORMAL, 8),
                     ('LINEBELOW', (0, 0), (0, 0), 0.25, colors.black),
                     ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ])
@@ -59,7 +59,7 @@ class Impression(utils_impression.Impression):
 
                 # TEXTE D'INTRODUCTION
                 # paraStyleIntro = ParagraphStyle(name="intro",
-                #                                 fontName="Helvetica",
+                #                                 fontName=utils_polices.FONT_NORMAL,
                 #                                 fontSize=11,
                 #                                 leading=14,
                 #                                 spaceBefore=0,
@@ -77,7 +77,7 @@ class Impression(utils_impression.Impression):
                 # ------------------- TABLEAU CONTENU -----------------
                 dataTableau = []
                 largeursColonnes = [100, self.taille_cadre[2] - 100]
-                paraStyle = ParagraphStyle(name="detail", fontName="Helvetica-Bold", fontSize=9)
+                paraStyle = ParagraphStyle(name="detail", fontName=utils_polices.FONT_BOLD, fontSize=9)
                 dataTableau.append(("Nom", Paragraph(dictValeur["{INDIVIDU_NOM}"], paraStyle)))
                 dataTableau.append(("Prénom", Paragraph(dictValeur["{INDIVIDU_PRENOM}"] or "", paraStyle)))
                 dataTableau.append(("Activité", Paragraph(dictValeur["{ACTIVITE_NOM_LONG}"], paraStyle)))
@@ -88,7 +88,7 @@ class Impression(utils_impression.Impression):
 
                 style = TableStyle([
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('FONT', (0, 0), (0, -1), "Helvetica", 9),
+                    ('FONT', (0, 0), (0, -1), utils_polices.FONT_NORMAL, 9),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
                     ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
                 ])

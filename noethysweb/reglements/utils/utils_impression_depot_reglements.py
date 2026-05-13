@@ -11,7 +11,7 @@ from reportlab.platypus import Spacer, Paragraph, Table, TableStyle
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import colors
 from core.models import Depot, Reglement
-from core.utils import utils_impression, utils_texte
+from core.utils import utils_dates, utils_impression, utils_texte, utils_polices
 
 
 class Impression(utils_impression.Impression):
@@ -32,9 +32,9 @@ class Impression(utils_impression.Impression):
         reglements = Reglement.objects.select_related("famille", "mode", "emetteur", "payeur").filter(depot=depot).order_by(tri)
 
         # Préparation des polices
-        style_defaut = ParagraphStyle(name="defaut", fontName="Helvetica", fontSize=7, spaceAfter=0, leading=9)
-        style_centre = ParagraphStyle(name="centre", fontName="Helvetica", alignment=1, fontSize=7, spaceAfter=0, leading=9)
-        style_titre = ParagraphStyle(name="titre", fontName="Helvetica-bold", alignment=1, fontSize=11, spaceAfter=0, leading=11)
+        style_defaut = ParagraphStyle(name="defaut", fontName=utils_polices.FONT_NORMAL, fontSize=7, spaceAfter=0, leading=9)
+        style_centre = ParagraphStyle(name="centre", fontName=utils_polices.FONT_NORMAL, alignment=1, fontSize=7, spaceAfter=0, leading=9)
+        style_titre = ParagraphStyle(name="titre", fontName=utils_polices.FONT_BOLD, alignment=1, fontSize=11, spaceAfter=0, leading=11)
 
         # Création du titre du document
         self.Insert_header()
@@ -114,7 +114,7 @@ class Impression(utils_impression.Impression):
         # Finalisation du tableau
         style = TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("FONT", (0, 0), (-1, -1), "Helvetica", 7),
+            ("FONT", (0, 0), (-1, -1), utils_polices.FONT_NORMAL, 7),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
             ("ALIGN", (0, 0), (-1, -1), "CENTRE"),
         ])

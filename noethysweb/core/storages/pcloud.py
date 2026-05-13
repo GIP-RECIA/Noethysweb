@@ -3,16 +3,35 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-import logging, os.path
+import logging, os.path, requests
 logger = logging.getLogger(__name__)
 from django.core.files.storage import Storage
 from django.utils.deconstruct import deconstructible
-# from storages.utils import get_available_overwrite_name
 from django.dispatch import receiver
 from storages.utils import setting
 from pcloud import PyCloud
 
 _DEFAULT_MODE = 'add'
+
+
+class AuthenticationError(Exception):
+    """Authentication failed"""
+
+
+class MyPyCloud(PyCloud):
+    def get_auth_token(self):
+        params = {
+            "getauth": 1,
+            "logout": 1,
+            "username": self.username.decode("utf-8"),
+            "password": self.password.decode("utf-8"),
+            "authexpire": 43200,
+        }
+        response = requests.post("https://eapi.pcloud.com/login", data=params, headers={"Accept": "application/json"}, timeout=10)
+        resp = response.json()
+        if "auth" not in resp:
+            raise AuthenticationError(resp)
+        return resp["auth"]
 
 
 @deconstructible
@@ -34,7 +53,7 @@ class PcloudStorage(Storage):
         self.client = None
         self.root_path = root_path
         self.write_mode = write_mode
-        self.client = PyCloud(app_key, app_secret, endpoint="eapi")
+        self.client = MyPyCloud(app_key, app_secret, endpoint="eapi")
 
     def disconnect(self):
         """Invalide le jeton et ferme la session pCloud."""

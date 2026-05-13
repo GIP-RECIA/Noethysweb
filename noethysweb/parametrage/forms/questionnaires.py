@@ -23,9 +23,9 @@ def Get_controle(question=None):
     nom_controle = "question_%d" % question.pk
 
     if question.controle == "ligne_texte":
-        ctrl = forms.CharField(label=question.label, required=question.obligatoire, help_text=question.texte_aide)
+        ctrl = forms.CharField(label=question.label, max_length=450, required=question.obligatoire, help_text=question.texte_aide)
     elif question.controle == "bloc_texte":
-        ctrl = forms.CharField(label=question.label, widget=forms.Textarea(attrs={'rows': 4}), required=question.obligatoire, help_text=question.texte_aide)
+        ctrl = forms.CharField(label=question.label, widget=forms.Textarea(attrs={"rows": 4, "maxlength": 450}), required=question.obligatoire, help_text=question.texte_aide)
     elif question.controle == "entier":
         ctrl = forms.IntegerField(label=question.label, required=question.obligatoire, help_text=question.texte_aide)
     elif question.controle == "decimal":

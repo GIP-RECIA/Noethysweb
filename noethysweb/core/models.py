@@ -1331,12 +1331,12 @@ class Unite(models.Model):
     autogen_parametres = models.CharField(verbose_name="Paramètres de la génération", max_length=400, blank=True, null=True)
     groupes = models.ManyToManyField(Groupe, blank=True)
     categories_tarifs = models.ManyToManyField("CategorieTarif", blank=True)
-    incompatibilites = models.ManyToManyField("self", verbose_name="Incompatibilités", blank=True)
+    incompatibilites = models.ManyToManyField("self", verbose_name="Incompatibilités", related_name="unites_incompatibles", blank=True, symmetrical=False)
     visible_portail = models.BooleanField(verbose_name="Visible sur le portail", default=True)
     imposer_saisie_valeur = models.BooleanField(verbose_name="Imposer la saisie de la valeur aux usagers sur le portail", default=False)
     equiv_journees = models.FloatField(verbose_name="Equivalence en journées", blank=True, null=True)
     equiv_heures = models.TimeField(verbose_name="Equivalence en heures", blank=True, null=True)
-    dependances = models.ManyToManyField("self", verbose_name="Unités liées", blank=True, symmetrical=False)
+    dependances = models.ManyToManyField("self", verbose_name="Unités liées", related_name="unites_dependantes", blank=True, symmetrical=False)
     solidaires = models.ManyToManyField("self", verbose_name="Unités solidaires", related_name="unites_solidaires", blank=True, symmetrical=False)
 
     class Meta:
