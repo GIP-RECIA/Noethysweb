@@ -109,14 +109,6 @@ INSTALLED_APPS = [
 if int(crispy_forms.__version__.split(".")[0]) >= 2:
     INSTALLED_APPS.append("crispy_bootstrap4")
 
-# Debug toolbar (uniquement en développement)
-if DEBUG:
-    try:
-        import debug_toolbar
-        INSTALLED_APPS.append('debug_toolbar')
-    except ImportError:
-        pass
-
 # Liste des plugins
 PLUGINS = []
 
@@ -131,25 +123,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-if DEBUG:
-    try:
-        import debug_toolbar
-        MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
-    except ImportError:
-        pass
-
-MIDDLEWARE += [
-    'csp.middleware.CSPMiddleware',
-    'axes.middleware.AxesMiddleware',
-    'noethysweb.middleware.CustomMiddleware',
-]
-
-
-if DEBUG:
-    # Ajouté pour permettre l'affichage de la debugtoolbar
-    INTERNAL_IPS = [
-        '127.0.0.1',
-    ]
 
 ROOT_URLCONF = 'noethysweb.urls'
 
@@ -337,6 +310,23 @@ try:
     from .settings_production import *
 except:
     print("Settings en production non trouvés : Utilisation des settings par défaut.")
+
+# Si on est en debug on charge la debug_toolbar en plus
+if DEBUG:
+    try:
+        import debug_toolbar
+        INSTALLED_APPS.append('debug_toolbar')
+        MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+        # Ajouté pour permettre l'affichage de la debugtoolbar
+        INTERNAL_IPS = ['127.0.0.1']
+    except ImportError:
+        pass
+
+MIDDLEWARE += [
+    'csp.middleware.CSPMiddleware',
+    'axes.middleware.AxesMiddleware',
+    'noethysweb.middleware.CustomMiddleware',
+]
 
 # Intégration des plugins
 for nom_plugin in PLUGINS:
