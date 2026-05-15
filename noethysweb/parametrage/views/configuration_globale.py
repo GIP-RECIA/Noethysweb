@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.views.generic import TemplateView
 from django.http import HttpResponseRedirect
 from core.views.base import CustomView
-from parametrage.forms.parametres_generaux import Formulaire
+from parametrage.forms.configuration_globale import Formulaire
 import django.contrib.messages
 from core.models import PortailParametre
 

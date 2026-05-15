@@ -9,7 +9,7 @@ from crispy_forms.layout import Layout, HTML, Fieldset
 from crispy_forms.bootstrap import Field
 from core.utils.utils_commandes import Commandes
 from core.models import PortailParametre
-from core.utils.utils_parametres_generaux import LISTE_PARAMETRES
+from core.utils.utils_configuration_globale import LISTE_PARAMETRES
 
 
 LISTE_RUBRIQUES = [
