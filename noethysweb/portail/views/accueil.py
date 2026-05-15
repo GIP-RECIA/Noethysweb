@@ -19,25 +19,48 @@ class Accueil(CustomView, TemplateView):
     template_name = "portail/accueil.html"
     menu_code = "portail_accueil"
 
+    def get_famille(self):
+        """Retourne la famille de l'utilisateur (ou None si individu)"""
+        if self.request.user.categorie == "famille":
+            return self.request.user.famille
+        # Pour un individu, on pourrait retourner sa famille principale
+        # mais pour l'instant on retourne None
+        return None
+
     def get_context_data(self, **kwargs):
         context = super(Accueil, self).get_context_data(**kwargs)
         context['page_titre'] = _("Accueil")
 
+        # Récupérer la famille (None si utilisateur individu)
+        famille = self.get_famille()
+        
+        # Si pas de famille (utilisateur individu sans famille), on retourne un contexte vide
+        if not famille:
+            context['nbre_informations_manquantes'] = 0
+            context['nbre_pieces_manquantes'] = 0
+            context['nbre_messages_non_lus'] = 0
+            context['nbre_approbations_requises'] = 0
+            context['nbre_vaccinations_manquantes'] = 0
+            context['nbre_assurances_manquantes'] = 0
+            context['articles'] = []
+            context['articles_popups'] = []
+            return context
+        
         # Informations manquantes
-        context['nbre_informations_manquantes'] = utils_champs.Get_renseignements_manquants(famille=self.request.user.famille)["NBRE"]
+        context['nbre_informations_manquantes'] = utils_champs.Get_renseignements_manquants(famille=famille)["NBRE"]
 
         # Pièces manquantes
-        context['nbre_pieces_manquantes'] = len(utils_pieces_manquantes.Get_pieces_manquantes(famille=self.request.user.famille, only_invalides=True, exclure_individus=self.request.user.famille.individus_masques.all()))
+        context['nbre_pieces_manquantes'] = len(utils_pieces_manquantes.Get_pieces_manquantes(famille=famille, only_invalides=True, exclure_individus=famille.individus_masques.all()))
 
         # Messages non lus
-        context['nbre_messages_non_lus'] = len(PortailMessage.objects.filter(famille=self.request.user.famille, utilisateur__isnull=False, date_lecture__isnull=True))
+        context['nbre_messages_non_lus'] = len(PortailMessage.objects.filter(famille=famille, utilisateur__isnull=False, date_lecture__isnull=True))
 
         # Approbations
-        approbations_requises = utils_approbations.Get_approbations_requises(famille=self.request.user.famille)
+        approbations_requises = utils_approbations.Get_approbations_requises(famille=famille)
         context['nbre_approbations_requises'] = approbations_requises["nbre_total"]
 
         # Récupération des activités de la famille
-        conditions = Q(famille=self.request.user.famille) & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.date.today()))
+        conditions = Q(famille=famille) & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.date.today()))
         inscriptions = Inscription.objects.select_related("activite", "individu").filter(conditions)
         activites = list({inscription.activite: True for inscription in inscriptions}.keys())
 
@@ -45,11 +68,11 @@ class Accueil(CustomView, TemplateView):
         context["nbre_vaccinations_manquantes"] = sum([len(liste_vaccinations) for (famille, individu), liste_vaccinations in utils_vaccinations.Get_vaccins_obligatoires_by_inscriptions(inscriptions=inscriptions).items()])
 
         # Assurances manquantes
-        context["nbre_assurances_manquantes"] = len(utils_assurances.Get_assurances_manquantes_by_inscriptions(famille=self.request.user.famille, inscriptions=inscriptions))
+        context["nbre_assurances_manquantes"] = len(utils_assurances.Get_assurances_manquantes_by_inscriptions(famille=famille, inscriptions=inscriptions))
 
         # Adhésions manquantes
         if context["parametres_portail"].get("cotisations_afficher_page", False):
-            context["cotisations_manquantes"] = utils_cotisations_manquantes.Get_cotisations_manquantes(famille=self.request.user.famille, exclure_individus=self.request.user.famille.individus_masques.all())
+            context["cotisations_manquantes"] = utils_cotisations_manquantes.Get_cotisations_manquantes(famille=famille, exclure_individus=famille.individus_masques.all())
 
         # Articles
         conditions = Q(statut="publie") & Q(date_debut__lte=datetime.datetime.now()) & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.datetime.now()))
@@ -60,7 +83,7 @@ class Accueil(CustomView, TemplateView):
         for article in articles:
             # Filtre les présents si besoin
             if article.public in ("presents", "presents_groupes"):
-                conditions = Q(inscription__famille=self.request.user.famille, date__gte=article.present_debut, date__lte=article.present_fin, etat__in=("reservation", "present"))
+                conditions = Q(inscription__famille=famille, date__gte=article.present_debut, date__lte=article.present_fin, etat__in=("reservation", "present"))
                 if article.public == "presents":
                     conditions &= Q(activite__in=article.activites.all())
                 if article.public == "presents_groupes":
@@ -77,10 +100,10 @@ class Accueil(CustomView, TemplateView):
         # Popups
         context['articles_popups'] = []
         if popups:
-            popups_lus = [lecture.article for lecture in Lecture.objects.filter(article__in=popups, famille=self.request.user.famille)]
+            popups_lus = [lecture.article for lecture in Lecture.objects.filter(article__in=popups, famille=famille)]
             for popup in popups:
                 if popup not in popups_lus:
                     context['articles_popups'].append(popup)
-                    Lecture.objects.create(famille=self.request.user.famille, article=popup)
+                    Lecture.objects.create(famille=famille, article=popup)
 
         return context
