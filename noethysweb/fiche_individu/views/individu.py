@@ -13,6 +13,8 @@ from core.views.base import CustomView
 from core.models import Individu, Famille, Note, Rattachement, Inscription
 from core.utils import utils_texte, utils_dates
 from fiche_individu.utils.utils_individu import LISTE_ONGLETS
+from core.constants import TYPE_COMPTE_FAMILLE, TYPE_COMPTE_INDIVIDU
+from core.utils.utils_parametres_generaux import Get_dict_parametres
 
 
 class Page(crud.Page):
@@ -122,7 +124,24 @@ class Onglet(CustomView):
     def get_context_data(self, **kwargs):
         context = super(Onglet, self).get_context_data(**kwargs)
         context['page_titre'] = "Fiche individuelle"
-        context['liste_onglets'] = [dict_onglet for dict_onglet in self.liste_onglets if self.request.user.has_perm("core.individu_%s" % dict_onglet["code"])]
+
+        # Récupération des paramètres pour le filtrage des onglets
+        parametres = Get_dict_parametres()
+
+        # Récupération des droits utilisateur et paramètres spécifiques
+        titulaire_rattachement = self.get_titulaire_rattachement()
+        type_compte = self.request.session.get('type_compte', TYPE_COMPTE_FAMILLE)
+
+        # Filtrage des onglets en fonction des permissions et paramètres
+        context['liste_onglets'] = [
+            dict_onglet for dict_onglet in self.liste_onglets
+            if self.request.user.has_perm("core.individu_%s" % dict_onglet["code"])  # Vérifie les permissions
+               and parametres.get(f"{dict_onglet['code']}_afficher_page_individu", True)  # Filtre selon les paramètres
+               and (dict_onglet["code"] != "portail" or (type_compte == TYPE_COMPTE_INDIVIDU and titulaire_rattachement == 1))
+            # Logique spécifique au portail
+        ]
+
+        # Récupération des informations supplémentaires
         context['idindividu'] = self.kwargs['idindividu']
         context['individu'] = Individu.objects.get(pk=self.kwargs['idindividu'])
         if self.kwargs.get('idfamille', None):
@@ -131,6 +150,7 @@ class Onglet(CustomView):
         else:
             context['idfamille'] = None
             context['famille'] = None
+
         return context
 
     def Get_idindividu(self):
@@ -152,7 +172,24 @@ class Onglet(CustomView):
         for rattachement in rattachements:
             rattachement.famille.Maj_infos()
 
+    def get_rattachement(self):
+        """Fetches the rattachement based on the individual ID and family ID"""
+        idindividu = self.Get_idindividu()
+        idfamille = self.Get_idfamille()
+        if idindividu and idfamille:
+            try:
+                return Rattachement.objects.select_related('individu', 'famille').get(
+                    individu_id=idindividu,
+                    famille_id=idfamille
+                )
+            except Rattachement.DoesNotExist:
+                return None
+        return None
 
+    def get_titulaire_rattachement(self):
+        """Fetches the categorie of the rattachement"""
+        rattachement = self.get_rattachement()
+        return rattachement.titulaire if rattachement else None
 
 class Resume(Onglet, DetailView):
     template_name = "fiche_individu/individu_resume.html"

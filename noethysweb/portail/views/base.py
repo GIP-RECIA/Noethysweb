@@ -12,8 +12,9 @@ from django.core.cache import cache
 from django.shortcuts import redirect
 from portail.views.menu import GetMenuPrincipal
 from noethysweb.version import GetVersion
-from core.models import Organisateur, Parametre
+from core.models import Organisateur, Parametre, PortailParametre
 from core.utils import utils_parametres, utils_portail, utils_historique
+from core.constants import TYPE_COMPTE_FAMILLE
 
 
 class CustomView(LoginRequiredMixin, UserPassesTestMixin):
@@ -39,8 +40,14 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin):
         #     if not self.request.user.has_perm("core.%s" % menu_code):
         #         return False
 
-        # Vérifie que l'user est de type "utilisateur"
-        if self.request.user.categorie != "famille":
+        # Vérifie que l'user est de type "famille" ou "individu" selon le type de compte configuré
+        parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
+        type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+        # Vérifie que la catégorie est valide
+        if self.request.user.categorie not in ["famille", "individu"]:
+            return False
+        # Vérifie que la catégorie correspond au type de compte configuré
+        if self.request.user.categorie != type_compte:
             return False
         return True
 
