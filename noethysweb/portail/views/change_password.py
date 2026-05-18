@@ -49,7 +49,9 @@ class MyPasswordChangeView(ClassCommuneLogin, auth_views.PasswordChangeView):
         if utilisateur.categorie == "famille":
             utilisateur.famille.internet_mdp = "*****"
             utilisateur.famille.save()
-
+        elif utilisateur.categorie == "individu":
+            utilisateur.individu.internet_mdp = "*****"
+            utilisateur.individu.save()
         return super().form_valid(form)
 
 
