@@ -143,7 +143,10 @@ urlpatterns = [
 
     # Contact
     path('contact', contact.View.as_view(), name='portail_contact'),
+    # Messagerie - URL de base (affiche sélecteur si plusieurs familles)
     path('contact/messagerie/<int:idstructure>', messagerie.Ajouter.as_view(), name='portail_messagerie'),
+    # Messagerie - Discussion d'une famille spécifique
+    path('contact/messagerie/<int:idstructure>/<int:idfamille>/', messagerie.Ajouter.as_view(), name='portail_messagerie_famille'),
 
     # Mentions
     path('mentions', mentions.View.as_view(), name='portail_mentions'),
