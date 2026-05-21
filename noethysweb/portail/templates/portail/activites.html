@@ -35,14 +35,18 @@
         </p>
     {% endif %}
 
-    {% for individu in liste_individus %}
+    {% for data in donnees_par_famille %}
+
+        <h3>Famille: {{ data.famille }}</h3>
+
+        {% for item in data.activites %}
         <div class="card card-individu mb-4">
 
             <!-- Nom de l'individu -->
             <div class="user-block card-footer m-0" style="padding: .6rem 1rem;">
-                <img class="img-circle" src="{{ individu.Get_photo }}" alt="Individu Image">
-                <span class="username">{{ individu.prenom }}</span>
-                {% if individu.Get_age %}<span class="description">{{ individu.Get_age }} ans</span>{% endif %}
+                <img class="img-circle" src="{{ item.individu.Get_photo }}" alt="Individu Image">
+                <span class="username">{{ item.individu.prenom }}</span>
+                {% if item.individu.Get_age %}<span class="description">{{ item.individu.Get_age }} ans</span>{% endif %}
             </div>
 
             <!-- Liste des activités -->
@@ -56,7 +60,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for inscription in individu.inscriptions %}
+                            {% for inscription in item.inscriptions %}
                                 <tr class="text-center">
                                     <td>{{ inscription.activite.nom }}</td>
                                     <td>{{ inscription.groupe.nom }}</td>
@@ -64,17 +68,19 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% for demande in demandes_inscriptions_attente|get_item:individu.pk %}
-                        demande={{ demande }}
+                    {% for demande in data.demandes_inscriptions_attente %}
+                        {% if demande.individu_id == item.individu.pk %}
+                            demande={{ demande }}
+                        {% endif %}
                     {% endfor %}
                 </div>
             </div>
 
         </div>
 
-    {% endfor %}
+        {% endfor %}
 
-    {% if demandes_inscriptions_attente %}
+    {% if data.demandes_inscriptions_attente %}
         <div class="card card-individu bg-warning">
 
             <!-- Nom de l'individu -->
@@ -92,7 +98,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for demande in demandes_inscriptions_attente %}
+                            {% for demande in data.demandes_inscriptions_attente %}
                                 <tr class="text-center">
                                     <td>{{ demande.individu.prenom }}</td>
                                     <td>{{ demande.nom_activite }}</td>
@@ -105,5 +111,7 @@
         </div>
 
     {% endif %}
+
+    {% endfor %}
 
 {% endblock contenu_page %}
