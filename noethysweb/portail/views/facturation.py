@@ -16,7 +16,7 @@ from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
 from portail.views.base import CustomView
-from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat
+from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat, Rattachement
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
 ETATS_PAIEMENTS = {1: "RECEIVED", 2: "ACCEPTED", 3: "PAID", 4: "DENIED", 5: "CANCELLED", 6: "WAITING", 99: "ERROR"}
@@ -426,7 +426,26 @@ def imprimer_facture(request):
     return JsonResponse({"nom_fichier": resultat["nom_fichier"]})
 
 
-class View(CustomView, TemplateView):
+class Page(CustomView, TemplateView):
+
+    def get_famille_object(self):
+        """Retourne la/les familles rattachées à l'utilisateur."""
+        user = self.request.user
+        if hasattr(user, "famille") and user.famille:
+            return [user.famille]
+        if hasattr(user, "individu") and user.individu:
+            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
+            familles = []
+            seen_ids = set()
+            for rattachement in rattachements:
+                if rattachement.famille and rattachement.famille_id not in seen_ids:
+                    familles.append(rattachement.famille)
+                    seen_ids.add(rattachement.famille_id)
+            return familles
+        return []
+
+
+class View(Page):
     menu_code = "portail_facturation"
     template_name = "portail/facturation.html"
 
@@ -434,73 +453,96 @@ class View(CustomView, TemplateView):
         context = super(View, self).get_context_data(**kwargs)
         context['page_titre'] = "Facturation"
 
-        # Vérifie si la famille est abonnée au prélèvement automatique
-        context["prelevement_actif"] = Mandat.objects.filter(famille=self.request.user.famille, actif=True).exists()
-        context['paiement_actif'] = not (context['parametres_portail']["paiement_ligne_off_si_prelevement"] and context["prelevement_actif"])
+        familles = self.get_famille_object()
+        context["familles"] = familles
 
-        # Importation des paiements PAYFIP en cours
-        context['liste_paiements'] = Paiement.objects.filter(famille=self.request.user.famille, systeme_paiement="payfip", resultat__isnull=True, horodatage__gt=datetime.datetime.now() - datetime.timedelta(minutes=5))
-        dict_paiements = {"F": {}, "P": {}, "C": {}}
-        for paiement in context['liste_paiements']:
-            for texte in paiement.ventilation.split(","):
-                type_impaye = texte[0]
-                ID, montant = texte[1:].split("#")
-                ID, montant = int(ID), decimal.Decimal(montant)
-                dict_paiements[type_impaye].setdefault(ID, decimal.Decimal(0))
-                dict_paiements[type_impaye][ID] += montant
+        def _build_data_for_famille(famille, emit_notifications=False):
+            data = {"famille": famille}
 
-        # Affichage des notifications de paiements récents
-        for paiement in Paiement.objects.filter(famille=self.request.user.famille, notification__isnull=True, horodatage__gt=datetime.datetime.now() - datetime.timedelta(hours=1)):
-            if paiement.resultat == "PAID":
-                messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès" % paiement.montant)
-            elif paiement.resultat == "DENIED":
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé" % paiement.montant)
-            elif paiement.resultat == "CANCELLED":
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé" % paiement.montant)
-            else:
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente." % paiement.montant)
-            paiement.notification = datetime.datetime.now()
-            paiement.save()
+            # Vérifie si la famille est abonnée au prélèvement automatique
+            data["prelevement_actif"] = Mandat.objects.filter(famille=famille, actif=True).exists()
+            data['paiement_actif'] = not (context['parametres_portail']["paiement_ligne_off_si_prelevement"] and data["prelevement_actif"])
 
-        # Importation des factures impayées
-        liste_factures = []
-        liste_factures_impayees = []
-        total_factures_impayees = decimal.Decimal(0)
-        for facture in Facture.objects.filter(famille=self.request.user.famille).exclude(etat="annulation").order_by("-date_edition"):
-            if facture.pk in dict_paiements["F"]:
-                facture.regle = facture.total
-                facture.solde_actuel = decimal.Decimal(0)
-            if facture.solde_actuel and (not facture.date_limite_paiement or datetime.date.today() <= facture.date_limite_paiement):
-                liste_factures_impayees.append(facture)
-                total_factures_impayees += facture.solde_actuel
-            liste_factures.append(facture)
-        context['liste_factures_impayees'] = liste_factures_impayees
-        context['liste_factures'] = liste_factures
+            # Importation des paiements PAYFIP en cours
+            data['liste_paiements'] = Paiement.objects.filter(
+                famille=famille,
+                systeme_paiement="payfip",
+                resultat__isnull=True,
+                horodatage__gt=datetime.datetime.now() - datetime.timedelta(minutes=5),
+            )
+            dict_paiements = {"F": {}, "P": {}, "C": {}}
+            for paiement in data['liste_paiements']:
+                for texte in paiement.ventilation.split(","):
+                    type_impaye = texte[0]
+                    ID, montant = texte[1:].split("#")
+                    ID, montant = int(ID), decimal.Decimal(montant)
+                    dict_paiements[type_impaye].setdefault(ID, decimal.Decimal(0))
+                    dict_paiements[type_impaye][ID] += montant
 
-        # Importation de la préfacturation des périodes
-        total_periodes_impayees = decimal.Decimal(0)
-        liste_finale_periodes = []
+            # Affichage des notifications de paiements récents (sur la famille principale uniquement)
+            if emit_notifications:
+                for paiement in Paiement.objects.filter(
+                    famille=famille,
+                    notification__isnull=True,
+                    horodatage__gt=datetime.datetime.now() - datetime.timedelta(hours=1),
+                ):
+                    if paiement.resultat == "PAID":
+                        messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès" % paiement.montant)
+                    elif paiement.resultat == "DENIED":
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé" % paiement.montant)
+                    elif paiement.resultat == "CANCELLED":
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé" % paiement.montant)
+                    else:
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente." % paiement.montant)
+                    paiement.notification = datetime.datetime.now()
+                    paiement.save()
 
-        # Récupération des périodes de réservations
-        liste_dates_extremes = []
-        liste_periodes = []
-        for periode in PortailPeriode.objects.select_related("activite").prefetch_related("categories").filter(prefacturation=True):
-            if periode.Is_famille_authorized(famille=self.request.user.famille):
-                periode.total = decimal.Decimal(0)
-                periode.regle = decimal.Decimal(0)
-                periode.solde = decimal.Decimal(0)
-                liste_periodes.append(periode)
-                liste_dates_extremes.append(periode.date_debut)
-                liste_dates_extremes.append(periode.date_fin)
-        if liste_periodes:
-            date_min = min(liste_dates_extremes)
-            date_max = max(liste_dates_extremes)
+            # Importation des factures impayées
+            liste_factures = []
+            liste_factures_impayees = []
+            total_factures_impayees = decimal.Decimal(0)
+            for facture in Facture.objects.filter(famille=famille).exclude(etat="annulation").order_by("-date_edition"):
+                if facture.pk in dict_paiements["F"]:
+                    facture.regle = facture.total
+                    facture.solde_actuel = decimal.Decimal(0)
+                if facture.solde_actuel and (not facture.date_limite_paiement or datetime.date.today() <= facture.date_limite_paiement):
+                    liste_factures_impayees.append(facture)
+                    total_factures_impayees += facture.solde_actuel
+                liste_factures.append(facture)
+            data['liste_factures_impayees'] = liste_factures_impayees
+            data['liste_factures'] = liste_factures
 
-            # Recherche les impayés par période de réservations
+            # Importation de la préfacturation des périodes
+            total_periodes_impayees = decimal.Decimal(0)
+            liste_finale_periodes = []
+
+            # Récupération des périodes de réservations
+            liste_dates_extremes = []
+            liste_periodes = []
+            for periode in PortailPeriode.objects.select_related("activite").prefetch_related("categories").filter(prefacturation=True):
+                if periode.Is_famille_authorized(famille=famille):
+                    periode.total = decimal.Decimal(0)
+                    periode.regle = decimal.Decimal(0)
+                    periode.solde = decimal.Decimal(0)
+                    liste_periodes.append(periode)
+                    liste_dates_extremes.append(periode.date_debut)
+                    liste_dates_extremes.append(periode.date_fin)
             if liste_periodes:
-                ventilations = Ventilation.objects.values("prestation").filter(famille=self.request.user.famille, prestation__date__gte=date_min, prestation__date__lte=date_max).annotate(total=Sum("montant"))
+                date_min = min(liste_dates_extremes)
+                date_max = max(liste_dates_extremes)
+
+                ventilations = Ventilation.objects.values("prestation").filter(
+                    famille=famille,
+                    prestation__date__gte=date_min,
+                    prestation__date__lte=date_max,
+                ).annotate(total=Sum("montant"))
                 dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
-                for prestation in Prestation.objects.filter(famille=self.request.user.famille, date__gte=date_min, date__lte=date_max, facture__isnull=True):
+                for prestation in Prestation.objects.filter(
+                    famille=famille,
+                    date__gte=date_min,
+                    date__lte=date_max,
+                    facture__isnull=True,
+                ):
                     solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
                     if solde_prestation > decimal.Decimal(0):
                         for periode in liste_periodes:
@@ -518,48 +560,100 @@ class View(CustomView, TemplateView):
                     if periode.solde:
                         liste_finale_periodes.append(periode)
 
-        context["liste_periodes_prefacturation"] = liste_finale_periodes
+            data["liste_periodes_prefacturation"] = liste_finale_periodes
 
-        # Importation de la préfacturation des cotisations
-        total_cotisations_impayees = decimal.Decimal(0)
-        liste_finale_cotisations = []
+            # Importation de la préfacturation des cotisations
+            total_cotisations_impayees = decimal.Decimal(0)
+            liste_finale_cotisations = []
 
-        ventilations = Ventilation.objects.values("prestation").filter(famille=self.request.user.famille, prestation__cotisation__isnull=False).annotate(total=Sum("montant"))
-        dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
-        for prestation in Prestation.objects.select_related("cotisation").filter(famille=self.request.user.famille, cotisation__isnull=False, facture__isnull=True, cotisation__unite_cotisation__prefacturation=True):
-            solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
-            if solde_prestation > decimal.Decimal(0):
-                prestation.total = prestation.montant
-                prestation.regle = dict_ventilations.get(prestation.pk, decimal.Decimal(0))
-                prestation.solde = solde_prestation
+            ventilations = Ventilation.objects.values("prestation").filter(
+                famille=famille,
+                prestation__cotisation__isnull=False,
+            ).annotate(total=Sum("montant"))
+            dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
+            for prestation in Prestation.objects.select_related("cotisation").filter(
+                famille=famille,
+                cotisation__isnull=False,
+                facture__isnull=True,
+                cotisation__unite_cotisation__prefacturation=True,
+            ):
+                solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
+                if solde_prestation > decimal.Decimal(0):
+                    prestation.total = prestation.montant
+                    prestation.regle = dict_ventilations.get(prestation.pk, decimal.Decimal(0))
+                    prestation.solde = solde_prestation
 
-                # Ajoute les paiements en cours
-                if prestation.pk in dict_paiements["C"]:
-                    prestation.regle = prestation.total
-                    prestation.solde = decimal.Decimal(0)
-                total_cotisations_impayees += prestation.solde
-                if prestation.solde:
-                    liste_finale_cotisations.append(prestation)
+                    # Ajoute les paiements en cours
+                    if prestation.pk in dict_paiements["C"]:
+                        prestation.regle = prestation.total
+                        prestation.solde = decimal.Decimal(0)
+                    total_cotisations_impayees += prestation.solde
+                    if prestation.solde:
+                        liste_finale_cotisations.append(prestation)
 
-        context["liste_cotisations_prefacturation"] = liste_finale_cotisations
+            data["liste_cotisations_prefacturation"] = liste_finale_cotisations
 
-        # Création du texte de rappel des impayés
-        liste_impayes = []
-        texte_impayes = None
-        if liste_factures_impayees:
-            liste_impayes.append(_("1 facture à régler") if len(liste_factures_impayees) == 1 else _("%d factures à régler") % len(liste_factures_impayees))
-        if liste_finale_periodes or liste_finale_cotisations:
-            liste_impayes.append(_("des prestations à régler en avance"))
-        if liste_impayes:
-            texte_impayes = _("Il reste %s pour un total de") % utils_texte.Convert_liste_to_texte_virgules(liste_impayes) + " <strong>%s</strong>" % utils_texte.Formate_montant(total_factures_impayees + total_periodes_impayees + total_cotisations_impayees)
-        context["texte_impayes"] = texte_impayes
+            # Création du texte de rappel des impayés
+            liste_impayes = []
+            texte_impayes = None
+            if liste_factures_impayees:
+                liste_impayes.append(_("1 facture à régler") if len(liste_factures_impayees) == 1 else _("%d factures à régler") % len(liste_factures_impayees))
+            if liste_finale_periodes or liste_finale_cotisations:
+                liste_impayes.append(_("des prestations à régler en avance"))
+            if liste_impayes:
+                texte_impayes = _("Il reste %s pour un total de") % utils_texte.Convert_liste_to_texte_virgules(liste_impayes) + " <strong>%s</strong>" % utils_texte.Formate_montant(total_factures_impayees + total_periodes_impayees + total_cotisations_impayees)
+            data["texte_impayes"] = texte_impayes
 
-        # Calcul du solde
-        if context["parametres_portail"].get("facturation_afficher_solde_famille", False):
-            total_prestations = Prestation.objects.values('famille_id').filter(famille=self.request.user.famille).aggregate(total=Sum("montant"))
-            total_reglements = Reglement.objects.values('famille_id').filter(famille=self.request.user.famille).aggregate(total=Sum("montant"))
-            total_du = total_prestations["total"] if total_prestations["total"] else decimal.Decimal(0)
-            total_regle = total_reglements["total"] if total_reglements["total"] else decimal.Decimal(0)
-            context["solde_famille"] = total_du - total_regle
+            # Calcul du solde
+            solde_famille = None
+            if context["parametres_portail"].get("facturation_afficher_solde_famille", False):
+                total_prestations = Prestation.objects.values('famille_id').filter(famille=famille).aggregate(total=Sum("montant"))
+                total_reglements = Reglement.objects.values('famille_id').filter(famille=famille).aggregate(total=Sum("montant"))
+                total_du = total_prestations["total"] if total_prestations["total"] else decimal.Decimal(0)
+                total_regle = total_reglements["total"] if total_reglements["total"] else decimal.Decimal(0)
+                solde_famille = total_du - total_regle
+                data["solde_famille"] = solde_famille
+
+            # Structure attendue
+            data["factures"] = liste_factures
+            data["solde"] = solde_famille
+
+            return data
+
+        # -----------------------------
+        # Données par famille (multi-famille)
+        # -----------------------------
+        donnees_par_famille = []
+        for index, famille in enumerate(familles):
+            donnees_par_famille.append(_build_data_for_famille(famille, emit_notifications=(index == 0)))
+        context["donnees_par_famille"] = donnees_par_famille
+
+        # -----------------------------
+        # Contexte historique (template actuel)
+        # -----------------------------
+        famille_principale = familles[0] if familles else None
+        if not famille_principale:
+            context["prelevement_actif"] = False
+            context['paiement_actif'] = False
+            context['liste_paiements'] = []
+            context['liste_factures_impayees'] = []
+            context['liste_factures'] = []
+            context["liste_periodes_prefacturation"] = []
+            context["liste_cotisations_prefacturation"] = []
+            context["texte_impayes"] = None
+            return context
+
+        # Injecte les clés historiques à partir des données de la famille principale
+        data_principale = donnees_par_famille[0]
+        context["prelevement_actif"] = data_principale.get("prelevement_actif", False)
+        context['paiement_actif'] = data_principale.get("paiement_actif", False)
+        context['liste_paiements'] = data_principale.get("liste_paiements", [])
+        context['liste_factures_impayees'] = data_principale.get("liste_factures_impayees", [])
+        context['liste_factures'] = data_principale.get("liste_factures", [])
+        context["liste_periodes_prefacturation"] = data_principale.get("liste_periodes_prefacturation", [])
+        context["liste_cotisations_prefacturation"] = data_principale.get("liste_cotisations_prefacturation", [])
+        context["texte_impayes"] = data_principale.get("texte_impayes")
+        if "solde_famille" in data_principale:
+            context["solde_famille"] = data_principale.get("solde_famille")
 
         return context
