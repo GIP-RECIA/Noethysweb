@@ -12,9 +12,20 @@ from django.core.cache import cache
 from django.shortcuts import redirect
 from portail.views.menu import GetMenuPrincipal
 from noethysweb.version import GetVersion
-from core.models import Organisateur, Parametre, PortailParametre
+from core.models import Organisateur, Parametre, PortailParametre, Rattachement
 from core.utils import utils_parametres, utils_portail, utils_historique
 from core.constants import TYPE_COMPTE_FAMILLE
+
+
+def get_famille_from_request(request):
+    """Retourne la famille principale de l'utilisateur (compte famille ou individu)."""
+    user = request.user
+    if hasattr(user, "famille") and user.famille:
+        return user.famille
+    if hasattr(user, "individu") and user.individu:
+        rattachement = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1).first()
+        return rattachement.famille if rattachement else None
+    return None
 
 
 class CustomView(LoginRequiredMixin, UserPassesTestMixin):
@@ -24,6 +35,25 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin):
     # Connexion obligatoire
     login_url = 'portail_connexion'
     redirect_field_name = 'portail_accueil'
+
+    def get_famille_object(self):
+        """Retourne la liste des familles rattachées à l'utilisateur."""
+        user = self.request.user
+        if hasattr(user, "famille") and user.famille:
+            return [user.famille]
+        if hasattr(user, "individu") and user.individu:
+            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
+            familles, seen_ids = [], set()
+            for r in rattachements:
+                if r.famille and r.famille_id not in seen_ids:
+                    familles.append(r.famille)
+                    seen_ids.add(r.famille_id)
+            return familles
+        return []
+
+    def get_famille(self):
+        familles = self.get_famille_object()
+        return familles[0] if familles else None
 
     def dispatch(self, request, *args, **kwargs):
         """ Vérifie que l'utilisateur est connecté """
