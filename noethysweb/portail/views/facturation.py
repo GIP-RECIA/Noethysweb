@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
-from portail.views.base import CustomView
+from portail.views.base import CustomView, get_famille_from_request
 from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat, Rattachement
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
@@ -75,7 +75,8 @@ def effectuer_paiement_en_ligne(request):
         return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % parametres_portail.paiement_ligne_montant_minimal}, status=401)
 
     # Vérifie que la famille a une adresse mail
-    if not request.user.famille.mail:
+    famille = get_famille_from_request(request)
+    if not famille or not famille.mail:
         return JsonResponse({"erreur": _("Aucune adresse mail n'a été renseignée sur votre dossier. Le paiement en ligne est impossible sans cette information.")}, status=401)
 
     # Mémorise les numéros de factures et la ventilation
@@ -100,14 +101,14 @@ def effectuer_paiement_en_ligne(request):
     # --------------------------- Mode démo -----------------------------
 
     if parametres_portail.get("paiement_ligne_systeme") == "demo":
-        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE MODE DEMO (Famille %s) : montant=%s ventilation_str=%s", request.user.famille, str(montant_reglement), ventilation_str)
+        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE MODE DEMO (Famille %s) : montant=%s ventilation_str=%s", famille, str(montant_reglement), ventilation_str)
         return JsonResponse({"systeme_paiement": "demo", "texte": "Paiement impossible, vous êtes en mode démo !"})
 
     # ----------------------- Paiement avec PAYFIP -------------------------
 
     if parametres_portail.get("paiement_ligne_systeme") == "payfip":
         payfip_mode = parametres_portail.get("payfip_mode")
-        logger.debug("Page EFFECTUER_PAIEMENT EN LIGNE : famille=%s payfip_mode=%s", request.user.famille, payfip_mode)
+        logger.debug("Page EFFECTUER_PAIEMENT EN LIGNE : famille=%s payfip_mode=%s", famille, payfip_mode)
 
         if payfip_mode == "validation": saisie = "X"
         elif payfip_mode == "production": saisie = "A"
@@ -115,18 +116,18 @@ def effectuer_paiement_en_ligne(request):
 
         # il y a plus d'une facture sélectionnée
         if len(dict_ventilation["facture"]) > 1:
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): plus d'une facture selectionnee pour PAYFIP NON TRAITE", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): plus d'une facture selectionnee pour PAYFIP NON TRAITE", famille)
             return JsonResponse({"erreur": "Paiement en ligne multi-factures impossible"}, status=401)
 
         # Vérifie qu'il n'y a pas de préfacturation dedans
         if len(dict_ventilation["periode"]) > 0 :
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): Il n'est pas possible de régler de la préfacturation avec PAYFIP", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): Il n'est pas possible de régler de la préfacturation avec PAYFIP", famille)
             return JsonResponse({"erreur": "Paiement de la prefacturation impossible avec TIPI"}, status=401)
 
         # Envoi de la requete
         facture = liste_factures[0]
         if not facture.regie:
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE TIPI (%s): Aucune régie n'a été paramétrée.", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE TIPI (%s): Aucune régie n'a été paramétrée.", famille)
             return JsonResponse({"erreur": "Aucune régie n'a été paramétrée. Contactez l'administrateur du portail."}, status=401)
 
         p = Payment("tipi", {'numcli': facture.regie.numclitipi, "automatic_return_url": request.build_absolute_uri(reverse("retour_payfip"))})
@@ -137,12 +138,12 @@ def effectuer_paiement_en_ligne(request):
             exer=str(facture.date_debut.year),
             refdet=refdet,
             objet=objet,
-            email=request.user.famille.mail,
+            email=famille.mail,
             saisie=saisie)
-        logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): requete: %s // systeme_paiement(%s)", request.user.famille, requete, "payfip")
+        logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): requete: %s // systeme_paiement(%s)", famille, requete, "payfip")
 
         # Enregistrement du paiement
-        Paiement.objects.create(famille=request.user.famille, systeme_paiement="payfip", idtransaction=requete[0],
+        Paiement.objects.create(famille=famille, systeme_paiement="payfip", idtransaction=requete[0],
                                 refdet=refdet, montant=montant_reglement, objet=objet, saisie=saisie, ventilation=ventilation_str)
 
         return JsonResponse({"systeme_paiement": "payfip", "urltoredirect": requete[2]})
@@ -172,13 +173,13 @@ def effectuer_paiement_en_ligne(request):
             # vads_payment_config = "MULTI_EXT:%s;%s;%s" % (paiement_1, paiement_2, paiement_3)
         else:
             vads_payment_config = "SINGLE"
-        requete = p.request(amount=montant_reglement, email=request.user.famille.mail, vads_payment_config=vads_payment_config)
-        transaction_id, f, form = requete
+        requete = p.request(amount=montant_reglement, email=famille.mail, vads_payment_config=vads_payment_config)
+        transaction_id, _, form = requete
 
-        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE PAYZEN (Famille %s) : IDtransaction=%s montant=%s ventilation_str=%s", request.user.famille, transaction_id, str(montant_reglement), ventilation_str)
+        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE PAYZEN (Famille %s) : IDtransaction=%s montant=%s ventilation_str=%s", famille, transaction_id, str(montant_reglement), ventilation_str)
 
         # Enregistrement du paiement
-        Paiement.objects.create(famille=request.user.famille, systeme_paiement="payzen", idtransaction=transaction_id,
+        Paiement.objects.create(famille=famille, systeme_paiement="payzen", idtransaction=transaction_id,
                                 montant=montant_reglement, saisie=parametres_portail.get("payzen_mode"), ventilation=ventilation_str)
 
         # Renvoie le formulaire de paiement au template
@@ -393,7 +394,7 @@ def get_detail_facture(request):
 
     # Importation de la facture
     facture = Facture.objects.get(pk=idfacture)
-    if facture.famille != request.user.famille:
+    if facture.famille != get_famille_from_request(request):
         return JsonResponse({"texte": "Accès interdit"}, status=401)
 
     # Importation des prestations

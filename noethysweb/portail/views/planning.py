@@ -32,7 +32,7 @@ class View(CustomView, TemplateView):
         if not request.user.is_authenticated:
             return redirect("portail_connexion")
         activite = Activite.objects.prefetch_related("types_consentements").get(pk=kwargs["idactivite"])
-        approbations_requises = utils_approbations.Get_approbations_requises(famille=request.user.famille, activites=[activite,], idindividu=kwargs["idindividu"])
+        approbations_requises = utils_approbations.Get_approbations_requises(famille=self.get_famille(), activites=[activite,], idindividu=kwargs["idindividu"])
         if approbations_requises["nbre_total"] > 0:
             messages.add_message(request, messages.ERROR, "L'accès à ces réservations nécessite au moins une approbation. Veuillez valider les approbations en attente.")
             return redirect("portail_renseignements")
@@ -43,8 +43,9 @@ class View(CustomView, TemplateView):
         resultat = Save_grille(request=request, donnees=json.loads(self.request.POST.get("donnees")))
 
         # Ventilation auto si besoin
-        if utils_portail.Get_parametre(code="reservations_ventilation_auto") and utils_ventilation.GetAnomaliesVentilation(idfamille=self.request.user.famille.pk):
-            utils_ventilation.Ventilation_auto(IDfamille=self.request.user.famille.pk)
+        famille = self.get_famille()
+        if utils_portail.Get_parametre(code="reservations_ventilation_auto") and utils_ventilation.GetAnomaliesVentilation(idfamille=famille.pk):
+            utils_ventilation.Ventilation_auto(IDfamille=famille.pk)
 
         # Envoi d'un mail de confirmation des modifications
         idadresse_exp = utils_portail.Get_parametre(code="reservations_adresse_exp")
@@ -57,17 +58,20 @@ class View(CustomView, TemplateView):
         """ Vérifie que l'utilisateur peut se connecter à cette page """
         if not super(View, self).test_func():
             return False
-        inscription = Inscription.objects.filter(famille=self.request.user.famille, individu_id=self.kwargs.get('idindividu'), activite_id=self.kwargs["idactivite"])
+        famille = self.get_famille()
+        if not famille:
+            return False
+        inscription = Inscription.objects.filter(famille=famille, individu_id=self.kwargs.get('idindividu'), activite_id=self.kwargs["idactivite"])
         if not inscription:
             return False
         if not inscription.first().internet_reservations:
             return False
-        if not self.request.user.famille.internet_reservations:
+        if not famille.internet_reservations:
             return False
         periode = PortailPeriode.objects.select_related("activite").prefetch_related("categories").get(pk=self.kwargs.get('idperiode'))
         if not periode or not periode.Is_active_today():
             return False
-        if not periode.Is_famille_authorized(famille=self.request.user.famille):
+        if not periode.Is_famille_authorized(famille=famille):
             return False
         return True
 
@@ -82,7 +86,7 @@ class View(CustomView, TemplateView):
         return context
 
     def Get_data_planning(self):
-        data = {"mode": "portail", "idfamille": self.request.user.famille.pk, "consommations": {}, "prestations": {}, "memos": {}, "options": {"afficher_quantites": False}}
+        data = {"mode": "portail", "idfamille": self.get_famille().pk, "consommations": {}, "prestations": {}, "memos": {}, "options": {"afficher_quantites": False}}
         data["dict_suppressions"] = {"consommations": [], "prestations": [], "memos": []}
 
         # Importation de l'individu
@@ -136,7 +140,7 @@ class View(CustomView, TemplateView):
 
         # Importation de toutes les inscriptions de l'individu
         data['liste_inscriptions'] = []
-        for inscription in Inscription.objects.select_related('individu', 'activite', 'groupe', 'famille', 'categorie_tarif').filter(famille=self.request.user.famille, individu=individu, activite=periode_reservation.activite):
+        for inscription in Inscription.objects.select_related('individu', 'activite', 'groupe', 'famille', 'categorie_tarif').filter(famille=self.get_famille(), individu=individu, activite=periode_reservation.activite):
             if inscription.Is_inscription_in_periode(data["date_min"], data["date_max"]):
                 data['liste_inscriptions'].append(inscription)
 
@@ -221,7 +225,8 @@ class View(CustomView, TemplateView):
                           "{INDIVIDU_NOM}": individu.nom, "{INDIVIDU_PRENOM}": individu.prenom, "{INDIVIDU_NOM_COMPLET}": individu.Get_nom()}
 
         # Création du destinataire
-        destinataire = Destinataire.objects.create(categorie="famille", famille=self.request.user.famille, adresse=self.request.user.famille.mail, valeurs=json.dumps(valeurs_fusion))
+        famille = self.get_famille()
+        destinataire = Destinataire.objects.create(categorie="famille", famille=famille, adresse=famille.mail, valeurs=json.dumps(valeurs_fusion))
         mail.destinataires.add(destinataire)
 
         # Envoi du mail

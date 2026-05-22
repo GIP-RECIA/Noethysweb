@@ -20,14 +20,26 @@ class Formulaire(FormulaireBase, forms.Form):
         self.nom_page = "famille_questionnaire"
         famille = kwargs.pop("famille", None)
         instance = kwargs.pop("instance", None)
+        if not famille:
+            famille = instance
 
         super(Formulaire, self).__init__(*args, **kwargs)
+
+        if not famille and self.request:
+            user = self.request.user
+            if hasattr(user, "famille") and user.famille:
+                famille = user.famille
+            elif hasattr(user, "individu") and user.individu:
+                from core.models import Rattachement
+                rattachement = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1).first()
+                famille = rattachement.famille if rattachement else None
+
         self.helper = FormHelper()
         self.helper.form_id = 'famille_questionnaire_form'
         self.helper.form_method = 'post'
 
         # Importation des renseignements en attente de validation
-        renseignements = PortailRenseignement.objects.filter(categorie="famille_questionnaire", famille=self.request.user.famille, etat="ATTENTE", validation_auto=False).order_by("date")
+        renseignements = PortailRenseignement.objects.filter(categorie="famille_questionnaire", famille=famille, etat="ATTENTE", validation_auto=False).order_by("date") if famille else []
         dict_renseignements = {renseignement.code: json.loads(renseignement.nouvelle_valeur) for renseignement in renseignements}
 
         # Création des champs
@@ -37,7 +49,7 @@ class Formulaire(FormulaireBase, forms.Form):
                 self.fields[nom_controle] = ctrl
 
         # Importation des réponses
-        for reponse in QuestionnaireReponse.objects.filter(famille=self.request.user.famille, question__categorie="famille"):
+        for reponse in QuestionnaireReponse.objects.filter(famille=famille, question__categorie="famille") if famille else []:
             key = "question_%d" % reponse.question_id
             if key in self.fields:
                 self.fields[key].initial = reponse.Get_reponse_for_ctrl()

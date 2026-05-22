@@ -19,14 +19,6 @@ class Accueil(CustomView, TemplateView):
     template_name = "portail/accueil.html"
     menu_code = "portail_accueil"
 
-    def get_famille(self):
-        """Retourne la famille de l'utilisateur (ou None si individu)"""
-        if self.request.user.categorie == "famille":
-            return self.request.user.famille
-        # Pour un individu, on pourrait retourner sa famille principale
-        # mais pour l'instant on retourne None
-        return None
-
     def get_context_data(self, **kwargs):
         context = super(Accueil, self).get_context_data(**kwargs)
         context['page_titre'] = _("Accueil")
