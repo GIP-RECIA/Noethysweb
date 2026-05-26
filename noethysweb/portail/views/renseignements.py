@@ -140,7 +140,8 @@ class View(Page):
             if coche:
                 if code.startswith("unite_"):
                     # format : unite_{fam_pk}_{unite_pk}
-                    _, fam_pk, unite_pk = code.split("_")
+                    parts = code.split("_")
+                    fam_pk, unite_pk = parts[1], parts[2]
                     Consentement.objects.create(famille_id=int(fam_pk), unite_consentement_id=int(unite_pk))
                     nbre_coches += 1
                 elif code.startswith("rattachement_"):
