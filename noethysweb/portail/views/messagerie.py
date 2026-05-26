@@ -10,7 +10,7 @@ from django.template.defaultfilters import truncatechars, striptags
 from django.utils.translation import gettext as _
 from django.http import Http404
 from core.views import crud
-from core.models import Famille, PortailMessage, Structure, Mail, Destinataire, Rattachement
+from core.models import Famille, PortailMessage, Structure, Mail, Destinataire
 from core.utils import utils_portail
 from outils.utils import utils_email
 from portail.forms.messagerie import Formulaire
@@ -20,22 +20,6 @@ from portail.views.base import CustomView
 class Page(CustomView):
     model = PortailMessage
     menu_code = "portail_contact"
-
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
 
     def get_context_data(self, **kwargs):
         context = super(Page, self).get_context_data(**kwargs)

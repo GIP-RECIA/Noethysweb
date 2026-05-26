@@ -18,26 +18,7 @@ from portail.forms.approbations import Formulaire
 from portail.utils import utils_champs
 
 
-class Page(CustomView, crud.Modifier):
-
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
-
-
-class View(Page):
+class View(CustomView, crud.Modifier):
     menu_code = "portail_renseignements"
     form_class = Formulaire
     template_name = "portail/renseignements.html"

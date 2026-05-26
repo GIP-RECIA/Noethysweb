@@ -8,32 +8,13 @@ logger = logging.getLogger(__name__)
 from django.db.models import Q
 from django.views.generic import TemplateView
 from django.utils.translation import gettext as _
-from core.models import Inscription, PortailPeriode, Rattachement
+from core.models import Inscription, PortailPeriode
 from individus.utils import utils_familles
 from portail.views.base import CustomView
 from portail.utils import utils_approbations
 
 
-class Page(CustomView, TemplateView):
-
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
-
-
-class View(Page):
+class View(CustomView, TemplateView):
     menu_code = "portail_reservations"
     template_name = "portail/reservations.html"
 

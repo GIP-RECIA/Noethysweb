@@ -54,22 +54,6 @@ class View(CustomView, TemplateView):
     menu_code = "portail_reglements"
     template_name = "portail/reglements.html"
 
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
-
     def get_context_data(self, **kwargs):
         context = super(View, self).get_context_data(**kwargs)
         context['page_titre'] = _("Règlements")

@@ -16,7 +16,7 @@ from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
 from portail.views.base import CustomView, get_famille_from_request
-from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat, Rattachement
+from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
 ETATS_PAIEMENTS = {1: "RECEIVED", 2: "ACCEPTED", 3: "PAID", 4: "DENIED", 5: "CANCELLED", 6: "WAITING", 99: "ERROR"}
@@ -427,26 +427,7 @@ def imprimer_facture(request):
     return JsonResponse({"nom_fichier": resultat["nom_fichier"]})
 
 
-class Page(CustomView, TemplateView):
-
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
-
-
-class View(Page):
+class View(CustomView, TemplateView):
     menu_code = "portail_facturation"
     template_name = "portail/facturation.html"
 
