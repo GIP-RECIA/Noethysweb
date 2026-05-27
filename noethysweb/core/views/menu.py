@@ -8,8 +8,8 @@ from django.urls import reverse_lazy
 from django.conf import settings
 
 
-def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None, force_permissions=False):
-    parametres_generaux = parametres_generaux or {}  # Fallback to an empty dictionary
+def GetMenuPrincipal(configuration_globale=None, organisateur=None, user=None, force_permissions=False):
+    configuration_globale = configuration_globale or {}  # Fallback to an empty dictionary
 
     menu = Menu(titre="Menu principal",  user=user, force_permissions=force_permissions)
 
@@ -25,7 +25,7 @@ def GetMenuPrincipal(parametres_generaux=None, organisateur=None, user=None, for
     else:
         menu_structure.Add(code="organisateur_ajouter", titre="Organisateur", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="structures_liste", titre="Structures", icone="file-text-o", compatible_demo=False)
-    menu_structure.Add(code="parametres_generaux", titre="Paramètres généraux", icone="file-text-o")
+    menu_structure.Add(code="configuration_globale", titre="Configuration globale", icone="file-text-o")
 
     # Activités
     menu_activites = menu_parametrage.Add(titre="Activités")

@@ -14,7 +14,7 @@ from core.models import Individu, Famille, Note, Rattachement, Inscription
 from core.utils import utils_texte, utils_dates
 from fiche_individu.utils.utils_individu import LISTE_ONGLETS
 from core.constants import TYPE_COMPTE_FAMILLE, TYPE_COMPTE_INDIVIDU
-from core.utils.utils_parametres_generaux import Get_dict_parametres
+from core.utils.utils_configuration_globale import Get_dict_parametres
 
 
 class Page(crud.Page):

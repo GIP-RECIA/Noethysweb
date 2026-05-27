@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.views.generic import TemplateView
 from django.http import HttpResponseRedirect
 from core.views.base import CustomView
-from parametrage.forms.parametres_generaux import Formulaire
+from parametrage.forms.configuration_globale import Formulaire
 import django.contrib.messages
 from core.models import PortailParametre
 from core.constants import TYPE_COMPTE_FAMILLE
@@ -19,8 +19,8 @@ class Modifier(CustomView, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super(Modifier, self).get_context_data(**kwargs)
-        context['page_titre'] = "Paramètres Généraux"
-        context['box_titre'] = "Paramètres"
+        context['page_titre'] = "Configuration globale"
+        context['box_titre'] = "Configuration globale"
         context['box_introduction'] = "Ajustez les paramètres de Portail utilisateur et cliquez sur le bouton Enregistrer."
         context['form'] = Formulaire()
         return context

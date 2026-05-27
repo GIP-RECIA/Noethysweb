@@ -20,7 +20,7 @@ from fiche_individu.forms.individu import Formulaire
 from fiche_famille.utils.utils_famille import LISTE_ONGLETS
 from core.constants import TYPE_COMPTE_FAMILLE
 from cotisations.utils import utils_cotisations_manquantes
-from core.utils.utils_parametres_generaux import Get_dict_parametres
+from core.utils.utils_configuration_globale import Get_dict_parametres
 
 
 def Definir_titulaire(request):
