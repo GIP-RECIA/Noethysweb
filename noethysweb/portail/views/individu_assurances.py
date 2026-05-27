@@ -143,12 +143,12 @@ class Importer(Page, TemplateView):
         context = super(Importer, self).get_context_data(**kwargs)
         context['box_titre'] = _("Importer les assurances d'une autre fiche")
         context['box_introduction'] = _("Cochez la ou les assurances à importer et cliquez sur le bouton Importer.")
-        context['form'] = Formulaire_importer(idfamille=self.get_famille().pk, idindividu=self.get_individu().pk, idrattachement=self.get_rattachement().pk, request=self.request)
+        context['form'] = Formulaire_importer(idfamille=self.get_rattachement().famille.pk, idindividu=self.get_individu().pk, idrattachement=self.get_rattachement().pk, request=self.request)
         return context
 
     def post(self, request, **kwargs):
         # Validation du form
-        form = Formulaire_importer(request.POST, idfamille=self.get_famille().pk, idindividu=self.get_individu().pk, idrattachement=self.get_rattachement().pk, request=self.request)
+        form = Formulaire_importer(request.POST, idfamille=self.get_rattachement().famille.pk, idindividu=self.get_individu().pk, idrattachement=self.get_rattachement().pk, request=self.request)
         if form.is_valid() == False:
             return self.render_to_response(self.get_context_data(form=form))
 
@@ -159,6 +159,7 @@ class Importer(Page, TemplateView):
             for assurance in Assurance.objects.filter(pk__in=[int(idassurance) for idassurance in liste_idassurance]):
                 assurance.pk = None
                 assurance.individu_id = self.get_individu().pk
+                assurance.famille = self.get_rattachement().famille
                 assurance.save()
 
                 # Mémorisation du renseignement
