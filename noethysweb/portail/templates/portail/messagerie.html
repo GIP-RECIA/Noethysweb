@@ -19,7 +19,7 @@
 
     {# Lien de retour vers la page contact #}
 	<div class="d-print-none" style="margin-bottom: 10px;">
-        <a href="{% if discussion_famille %}{% url 'portail_messagerie' idstructure=structure.pk %}{% else %}{% url 'portail_contact' %}{% endif %}"><i class="fa fa-arrow-circle-o-left"></i> {% blocktrans %}Revenir à la page contact{% endblocktrans %}</a>
+        <a href="{% if discussion_famille and familles|length > 1 %}{% url 'portail_messagerie' idstructure=structure.pk %}{% else %}{% url 'portail_contact' %}{% endif %}"><i class="fa fa-arrow-circle-o-left"></i> {% blocktrans %}Revenir à la page contact{% endblocktrans %}</a>
 	</div>
 
 
