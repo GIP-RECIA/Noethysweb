@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
-from portail.views.base import CustomView, get_famille_from_request
+from portail.views.base import CustomView, get_famille_from_request, get_familles_from_request
 from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
@@ -74,16 +74,25 @@ def effectuer_paiement_en_ligne(request):
     if montant_reglement < decimal.Decimal(parametres_portail.get("paiement_ligne_montant_minimal", 0.0)):
         return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % parametres_portail.paiement_ligne_montant_minimal}, status=401)
 
-    # Vérifie que la famille a une adresse mail
-    famille = get_famille_from_request(request)
-    if not famille or not famille.mail:
-        return JsonResponse({"erreur": _("Aucune adresse mail n'a été renseignée sur votre dossier. Le paiement en ligne est impossible sans cette information.")}, status=401)
-
     # Mémorise les numéros de factures et la ventilation
     dict_ventilation = {"facture": {}, "periode": {}, "cotisation": {}}
     for texte in liste_impayes:
         type_impaye, ID, solde = texte.split("##")
         dict_ventilation[type_impaye][int(ID)] = decimal.Decimal(solde)
+
+    # Détermine la famille depuis la première facture cochée
+    familles_utilisateur = get_familles_from_request(request)
+    famille = None
+    if dict_ventilation["facture"]:
+        premiere_facture = Facture.objects.select_related("famille").get(pk=list(dict_ventilation["facture"].keys())[0])
+        if premiere_facture.famille in familles_utilisateur:
+            famille = premiere_facture.famille
+    if not famille:
+        famille = next((f for f in familles_utilisateur if f.mail), None)
+
+    # Vérifie que la famille a une adresse mail
+    if not famille or not famille.mail:
+        return JsonResponse({"erreur": _("Aucune adresse mail n'a été renseignée sur votre dossier. Le paiement en ligne est impossible sans cette information.")}, status=401)
 
     # Importation des factures
     liste_factures = Facture.objects.select_related("regie").filter(pk__in=dict_ventilation["facture"].keys()).all().order_by("date_debut")
@@ -174,7 +183,7 @@ def effectuer_paiement_en_ligne(request):
         else:
             vads_payment_config = "SINGLE"
         requete = p.request(amount=montant_reglement, email=famille.mail, vads_payment_config=vads_payment_config)
-        transaction_id, _, form = requete
+        transaction_id, _ignored, form = requete
 
         logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE PAYZEN (Famille %s) : IDtransaction=%s montant=%s ventilation_str=%s", famille, transaction_id, str(montant_reglement), ventilation_str)
 
@@ -394,7 +403,7 @@ def get_detail_facture(request):
 
     # Importation de la facture
     facture = Facture.objects.get(pk=idfacture)
-    if facture.famille != get_famille_from_request(request):
+    if facture.famille not in get_familles_from_request(request):
         return JsonResponse({"texte": "Accès interdit"}, status=401)
 
     # Importation des prestations
