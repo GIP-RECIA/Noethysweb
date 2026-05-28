@@ -15,6 +15,7 @@ from crispy_forms.bootstrap import Field
 from core.models import Activite, Rattachement, Groupe, PortailRenseignement
 from core.utils.utils_commandes import Commandes
 from portail.forms.fiche import FormulaireBase
+from portail.views.base import get_familles_from_request
 from individus.utils import utils_pieces_manquantes
 
 
@@ -90,18 +91,31 @@ class Formulaire(FormulaireBase, ModelForm):
         self.helper.use_custom_control = False
         self.helper.attrs = {'enctype': 'multipart/form-data'}
 
-        # Individu
-        rattachements = Rattachement.objects.select_related("individu").filter(famille=self.request.user.famille).exclude(individu__in=self.request.user.famille.individus_masques.all()).order_by("categorie")
-        self.fields["individu"].choices = [(rattachement.individu_id, rattachement.individu.Get_nom()) for rattachement in rattachements]
+        # famille déterminée dans clean() selon l'individu choisi
+        self.fields["famille"].required = False
+
+        # Individu — toutes les familles du compte
+        self.familles = get_familles_from_request(self.request)
+        rattachements = Rattachement.objects.select_related("individu", "famille").filter(famille__in=self.familles).order_by("categorie")
+        individus_masques = set()
+        for f in self.familles:
+            individus_masques.update(f.individus_masques.values_list("pk", flat=True))
+        rattachements = rattachements.exclude(individu__in=individus_masques)
+        vus = set()
+        choices = []
+        for r in rattachements:
+            if r.individu_id not in vus:
+                vus.add(r.individu_id)
+                choices.append((r.individu_id, r.individu.Get_nom()))
+        self.fields["individu"].choices = choices
         self.fields["individu"].required = True
 
         # Activité
         conditions = (Q(portail_inscriptions_affichage="TOUJOURS") | (Q(portail_inscriptions_affichage="PERIODE") & Q(portail_inscriptions_date_debut__lte=datetime.datetime.now()) & Q(portail_inscriptions_date_fin__gte=datetime.datetime.now())))
         self.fields["activite"].queryset = Activite.objects.filter(conditions).order_by("-date_fin", "nom")
 
-        # Affichage
+        # Affichage — famille déterminée via clean() selon l'individu choisi
         self.helper.layout = Layout(
-            Hidden("famille", value=self.request.user.famille.pk),
             Hidden("etat", value="ATTENTE"),
             Hidden("categorie", value="activites"),
             Hidden("code", value="inscrire_activite"),
@@ -111,6 +125,15 @@ class Formulaire(FormulaireBase, ModelForm):
             HTML(EXTRA_SCRIPT),
             Commandes(enregistrer_label="<i class='fa fa-send margin-r-5'></i>%s" % _("Envoyer la demande d'inscription"), annuler_url="{% url 'portail_activites' %}", ajouter=False, aide=False, css_class="pull-right"),
         )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        individu = cleaned_data.get("individu")
+        if individu and self.familles:
+            rattachement = Rattachement.objects.filter(individu=individu, famille__in=self.familles).select_related("famille").first()
+            if rattachement:
+                cleaned_data["famille"] = rattachement.famille
+        return cleaned_data
 
 
 EXTRA_SCRIPT = """
@@ -130,6 +153,7 @@ function On_change_activite() {
 };
 $(document).ready(function() {
     $('#id_activite').change(On_change_activite);
+    $('#id_individu').change(On_change_activite);
     On_change_activite.call($('#id_activite').get(0));
 });
 

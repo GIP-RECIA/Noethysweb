@@ -16,7 +16,7 @@ from crispy_forms.utils import render_crispy_form
 from core.views import crud
 from core.models import PortailRenseignement, Piece, TypePiece, Inscription
 from portail.forms.inscrire_activite import Formulaire, Formulaire_extra
-from portail.views.base import CustomView, get_famille_from_request
+from portail.views.base import CustomView
 
 
 def Get_form_extra(request):
@@ -95,7 +95,7 @@ def Valid_form(request):
                                          date_debut=datetime.date.today(), date_fin=type_piece.Get_date_fin_validite())
 
             # Enregistrement du renseignement de portail
-            PortailRenseignement.objects.create(famille=get_famille_from_request(request), individu=individu, categorie="famille_pieces", code="Nouvelle pièce", validation_auto=True,
+            PortailRenseignement.objects.create(famille=form.cleaned_data["famille"], individu=individu, categorie="famille_pieces", code="Nouvelle pièce", validation_auto=True,
                                                 nouvelle_valeur=json.dumps(piece.Get_nom(), cls=DjangoJSONEncoder), idobjet=piece.pk)
 
     # Message de confirmation
