@@ -28,6 +28,17 @@ def get_famille_from_request(request):
     return None
 
 
+def get_familles_from_request(request):
+    """Retourne toutes les familles de l'utilisateur (compte famille ou individu multi-famille)."""
+    user = request.user
+    if hasattr(user, "famille") and user.famille:
+        return [user.famille]
+    if hasattr(user, "individu") and user.individu:
+        rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
+        return [r.famille for r in rattachements if r.famille]
+    return []
+
+
 class CustomView(LoginRequiredMixin, UserPassesTestMixin):
     """ Implémente les données de la page : menus..."""
     menu_code = ""
