@@ -157,25 +157,38 @@ $(document).ready(function() {
     On_change_activite.call($('#id_activite').get(0));
 });
 
+function Envoyer_demande_inscription(confirmer) {
+    var formData = new FormData($("#portail_inscrire_activite_form")[0]);
+    formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
+    if (confirmer) {
+        formData.append("confirmer", "true");
+    }
+    $.ajax({
+        type: "POST",
+        url: "{% url 'portail_ajax_inscrire_valid_form' %}",
+        data: formData,
+        contentType: false,
+        processData: false,
+        datatype: "json",
+        success: function(data){
+            if (data.avertissement) {
+                if (confirm(data.avertissement)) {
+                    Envoyer_demande_inscription(true);
+                }
+            } else {
+                window.location.href = data.url;
+            }
+        },
+        error: function(data) {
+            toastr.error(data.responseJSON.erreur);
+        }
+    });
+}
+
 $(document).ready(function() {
     $("#portail_inscrire_activite_form").on('submit', function (event) {
         event.preventDefault();
-        var formData = new FormData($("#portail_inscrire_activite_form")[0]);
-        formData.append("csrfmiddlewaretoken", "{{ csrf_token }}");
-        $.ajax({
-            type: "POST",
-            url: "{% url 'portail_ajax_inscrire_valid_form' %}",
-            data: formData,
-            contentType: false,
-            processData: false,
-            datatype: "json",
-            success: function(data){
-                window.location.href = data.url;
-            },
-            error: function(data) {
-                toastr.error(data.responseJSON.erreur);
-            }
-        });
+        Envoyer_demande_inscription(false);
     });
 })
     
