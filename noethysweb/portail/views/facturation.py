@@ -71,8 +71,9 @@ def effectuer_paiement_en_ligne(request):
         return JsonResponse({"erreur": _("Le montant doit être supérieur à zéro !")}, status=401)
 
     # Vérifie que le montant est supérieur au montant minimal fixé
-    if montant_reglement < decimal.Decimal(parametres_portail.get("paiement_ligne_montant_minimal", 0.0)):
-        return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % parametres_portail.paiement_ligne_montant_minimal}, status=401)
+    montant_minimal = decimal.Decimal(str(parametres_portail.get("paiement_ligne_montant_minimal", 0)))
+    if montant_reglement < montant_minimal:
+        return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % montant_minimal}, status=401)
 
     # Mémorise les numéros de factures et la ventilation
     dict_ventilation = {"facture": {}, "periode": {}, "cotisation": {}}
