@@ -7,7 +7,7 @@ from django.urls import reverse_lazy
 from django.http import JsonResponse, HttpResponseRedirect
 from django.contrib import messages
 from core.views import crud
-from core.models import Individu, Utilisateur
+from core.models import Individu, Famille, Utilisateur
 from fiche_individu.forms.individu_portail import Formulaire
 from fiche_individu.views.individu import Onglet
 from fiche_famille.utils import utils_internet
@@ -141,6 +141,8 @@ class Modifier(Consulter):
         individu.save()
 
         # Enregistrement des individus masqués
-        individu.individus_masques.set(individus_masques)
+        # individus_masques est un M2M sur Famille (pas sur Individu) -> utiliser famille.individus_masques
+        famille = Famille.objects.get(pk=self.kwargs['idfamille'])
+        famille.individus_masques.set(individus_masques)
 
         return HttpResponseRedirect(reverse_lazy("individu_portail", args=(self.kwargs['idfamille'],self.kwargs['idindividu'],)))

@@ -58,6 +58,10 @@ class Formulaire(FormulaireBase, ModelForm):
         # Individus masqués
         individus = [rattachement.individu_id for rattachement in Rattachement.objects.filter(famille_id=idfamille)]
         self.fields["individus_masques"].queryset = Individu.objects.filter(pk__in=individus).order_by("nom")
+        # pré-cocher les individus déjà masqués pour cette famille
+        # (individus_masques est sur Famille, pas sur Individu → Django ne le charge pas automatiquement)
+        from core.models import Famille
+        self.fields["individus_masques"].initial = Famille.objects.get(pk=idfamille).individus_masques.all()
 
         # Création des boutons de commande
         autres_commandes = [HTML("""
