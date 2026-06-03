@@ -46,25 +46,6 @@ class Onglet(CustomView):
         rattachement = self.get_rattachement()
         return rattachement.categorie if rattachement else None
 
-    def get_famille_object(self):
-        """Retourne la/les familles rattachées à l'utilisateur."""
-        user = self.request.user
-        if hasattr(user, "famille") and user.famille:
-            return [user.famille]
-        if hasattr(user, "individu") and user.individu:
-            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
-            familles = []
-            seen_ids = set()
-            for rattachement in rattachements:
-                if rattachement.famille and rattachement.famille_id not in seen_ids:
-                    familles.append(rattachement.famille)
-                    seen_ids.add(rattachement.famille_id)
-            return familles
-        return []
-
-    def get_famille(self):
-        familles = self.get_famille_object()
-        return familles[0] if familles else None
 
     def get_individu(self):
         rattachement = self.get_rattachement()
