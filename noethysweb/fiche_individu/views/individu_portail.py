@@ -91,14 +91,29 @@ class Modifier(Consulter):
         # Importation de l'individu
         individu = self.get_object()
         utilisateur = individu.utilisateur
-        if utilisateur is None:
-            messages.add_message(request, messages.ERROR, "Aucun compte utilisateur n'est associé à cet individu. Veuillez créer le compte portail avant de le modifier.")
-            return self.render_to_response(self.get_context_data(form=form))
 
         # Récupération des données
         internet_actif = form.cleaned_data.get("internet_actif")
         internet_identifiant = form.cleaned_data.get("internet_identifiant")
         mdp = form.cleaned_data.get("internet_mdp")
+
+        # Création du compte utilisateur s'il n'existe pas encore
+        if utilisateur is None:
+            if not internet_identifiant or not mdp:
+                messages.add_message(request, messages.ERROR, "Veuillez générer un identifiant et un mot de passe avant d'enregistrer.")
+                return self.render_to_response(self.get_context_data(form=form))
+            if Utilisateur.objects.filter(username__iexact=internet_identifiant).exists():
+                messages.add_message(request, messages.ERROR, "Cet identifiant a déjà été attribué à un autre utilisateur !")
+                return self.render_to_response(self.get_context_data(form=form))
+            date_expiration_mdp = form.cleaned_data.get("date_expiration_mdp")
+            utilisateur = Utilisateur(username=internet_identifiant, categorie="individu", force_reset_password=True, date_expiration_mdp=date_expiration_mdp)
+            utilisateur.set_password(mdp)
+            utilisateur.save()
+            individu.utilisateur = utilisateur
+            individu.internet_identifiant = internet_identifiant
+            individu.internet_mdp = mdp
+            individu.internet_actif = internet_actif
+            individu.save()
 
         internet_categorie = form.cleaned_data.get("internet_categorie")
         date_expiration_mdp = form.cleaned_data.get("date_expiration_mdp")

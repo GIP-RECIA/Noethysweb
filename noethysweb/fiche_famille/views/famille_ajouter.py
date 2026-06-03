@@ -137,26 +137,24 @@ class Ajouter(crud.Ajouter):
                         self.object.Maj_infos()
                         break
 
-            #  Fournir un identifiant et un mot de passe à l'individu créé lors de la création d'une famille.
+            # Fournir un identifiant et un mot de passe à l'individu créé lors de la création d'une famille.
+            # Garde : ne pas écraser le compte si l'individu est déjà titulaire dans une autre famille.
             individu = Individu.objects.get(pk=self.object.idindividu)
-            internet_identifiant_individu = utils_internet.CreationIdentifiantIndividu(IDindividu=individu.pk)
-            internet_mdp_individu, date_expiration_mdp_individu = utils_internet.CreationMDP()
-            individu.internet_identifiant = internet_identifiant_individu
-            individu.internet_mdp = internet_mdp_individu
-
-            # Vous pouvez aussi créer un utilisateur pour l'individu si nécessaire
-            utilisateur_individu = Utilisateur(
-                username=internet_identifiant_individu,
-                categorie="individu",  # Ou une autre catégorie, selon votre besoin
-                force_reset_password=True,
-                date_expiration_mdp=date_expiration_mdp_individu
-            )
-            utilisateur_individu.set_password(internet_mdp_individu)
-            utilisateur_individu.save()
-
-            # Association de l'utilisateur à l'individu
-            individu.utilisateur = utilisateur_individu
-            individu.save()
+            if not individu.utilisateur:
+                internet_identifiant_individu = utils_internet.CreationIdentifiantIndividu(IDindividu=individu.pk)
+                internet_mdp_individu, date_expiration_mdp_individu = utils_internet.CreationMDP()
+                individu.internet_identifiant = internet_identifiant_individu
+                individu.internet_mdp = internet_mdp_individu
+                utilisateur_individu = Utilisateur(
+                    username=internet_identifiant_individu,
+                    categorie="individu",
+                    force_reset_password=True,
+                    date_expiration_mdp=date_expiration_mdp_individu
+                )
+                utilisateur_individu.set_password(internet_mdp_individu)
+                utilisateur_individu.save()
+                individu.utilisateur = utilisateur_individu
+                individu.save()
             # Renvoie vers la fiche individuelle
             url_success = reverse_lazy("individu_resume", kwargs={'idindividu': self.object.idindividu, 'idfamille': famille.pk})
 
