@@ -471,7 +471,7 @@ class View(CustomView, TemplateView):
                     dict_paiements[type_impaye].setdefault(ID, decimal.Decimal(0))
                     dict_paiements[type_impaye][ID] += montant
 
-            # Affichage des notifications de paiements récents (sur la famille principale uniquement)
+            # Affichage des notifications de paiements récents
             if emit_notifications:
                 for paiement in Paiement.objects.filter(
                     famille=famille,
@@ -479,13 +479,13 @@ class View(CustomView, TemplateView):
                     horodatage__gt=datetime.datetime.now() - datetime.timedelta(hours=1),
                 ):
                     if paiement.resultat == "PAID":
-                        messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès" % paiement.montant)
+                        messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès (%s)" % (paiement.montant, famille.nom))
                     elif paiement.resultat == "DENIED":
-                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé" % paiement.montant)
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé (%s)" % (paiement.montant, famille.nom))
                     elif paiement.resultat == "CANCELLED":
-                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé" % paiement.montant)
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé (%s)" % (paiement.montant, famille.nom))
                     else:
-                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente." % paiement.montant)
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente. (%s)" % (paiement.montant, famille.nom))
                     paiement.notification = datetime.datetime.now()
                     paiement.save()
 
@@ -616,8 +616,8 @@ class View(CustomView, TemplateView):
         # Données par famille (multi-famille)
         # -----------------------------
         donnees_par_famille = []
-        for index, famille in enumerate(familles):
-            donnees_par_famille.append(_build_data_for_famille(famille, emit_notifications=(index == 0)))
+        for famille in familles:
+            donnees_par_famille.append(_build_data_for_famille(famille, emit_notifications=True))
         context["donnees_par_famille"] = donnees_par_famille
 
         # -----------------------------
