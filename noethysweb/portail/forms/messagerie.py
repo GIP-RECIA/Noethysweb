@@ -14,7 +14,7 @@ from core.utils.utils_commandes import Commandes
 from portail.forms.fiche import FormulaireBase
 from portail.utils.utils_summernote import SummernoteTextFormField
 
-from core.models import Famille
+from core.models import Famille, Rattachement
 
 
 class Formulaire(FormulaireBase, ModelForm):
@@ -44,7 +44,8 @@ class Formulaire(FormulaireBase, ModelForm):
         if hasattr(utilisateur, 'famille'):
             famille = utilisateur.famille
         elif hasattr(utilisateur, 'individu'):
-            famille = Famille.objects.filter(nom__icontains=utilisateur.individu).first()
+            rattachement = Rattachement.objects.filter(individu=utilisateur.individu, titulaire=1).first()
+            famille = rattachement.famille if rattachement else None
         else:
             famille = None  # Cas où l'utilisateur n'a ni famille ni individu
 
