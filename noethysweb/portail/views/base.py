@@ -17,16 +17,6 @@ from core.utils import utils_parametres, utils_portail, utils_historique
 from core.constants import TYPE_COMPTE_FAMILLE
 
 
-def get_famille_from_request(request):
-    """Retourne la famille principale de l'utilisateur (compte famille ou individu)."""
-    user = request.user
-    if hasattr(user, "famille") and user.famille:
-        return user.famille
-    if hasattr(user, "individu") and user.individu:
-        rattachement = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1).first()
-        return rattachement.famille if rattachement else None
-    return None
-
 
 def get_familles_from_request(request):
     """Retourne toutes les familles de l'utilisateur (compte famille ou individu multi-famille)."""

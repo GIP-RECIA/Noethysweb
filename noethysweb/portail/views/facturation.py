@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
-from portail.views.base import CustomView, get_famille_from_request, get_familles_from_request
+from portail.views.base import CustomView, get_familles_from_request
 from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
