@@ -620,32 +620,4 @@ class View(CustomView, TemplateView):
             donnees_par_famille.append(_build_data_for_famille(famille, emit_notifications=True))
         context["donnees_par_famille"] = donnees_par_famille
 
-        # -----------------------------
-        # Contexte historique (template actuel)
-        # -----------------------------
-        famille_principale = familles[0] if familles else None
-        if not famille_principale:
-            context["prelevement_actif"] = False
-            context['paiement_actif'] = False
-            context['liste_paiements'] = []
-            context['liste_factures_impayees'] = []
-            context['liste_factures'] = []
-            context["liste_periodes_prefacturation"] = []
-            context["liste_cotisations_prefacturation"] = []
-            context["texte_impayes"] = None
-            return context
-
-        # Injecte les clés historiques à partir des données de la famille principale
-        data_principale = donnees_par_famille[0]
-        context["prelevement_actif"] = data_principale.get("prelevement_actif", False)
-        context['paiement_actif'] = data_principale.get("paiement_actif", False)
-        context['liste_paiements'] = data_principale.get("liste_paiements", [])
-        context['liste_factures_impayees'] = data_principale.get("liste_factures_impayees", [])
-        context['liste_factures'] = data_principale.get("liste_factures", [])
-        context["liste_periodes_prefacturation"] = data_principale.get("liste_periodes_prefacturation", [])
-        context["liste_cotisations_prefacturation"] = data_principale.get("liste_cotisations_prefacturation", [])
-        context["texte_impayes"] = data_principale.get("texte_impayes")
-        if "solde_famille" in data_principale:
-            context["solde_famille"] = data_principale.get("solde_famille")
-
         return context

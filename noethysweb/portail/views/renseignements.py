@@ -85,19 +85,6 @@ class View(CustomView, crud.Modifier):
             donnees_par_famille.append(_build_data_for_famille(famille))
         context["donnees_par_famille"] = donnees_par_famille
 
-        # -----------------------------
-        # Contexte historique (template actuel)
-        # -----------------------------
-        famille_principale = familles[0] if familles else None
-        if not famille_principale:
-            context["rattachements"] = []
-            context["renseignements_manquants"] = {}
-            return context
-
-            
-        data_principale = donnees_par_famille[0]
-        context["rattachements"] = data_principale.get("rattachements", [])
-        context["renseignements_manquants"] = data_principale.get("renseignements_manquants", {})
         return context
 
     def get_object(self):

@@ -66,10 +66,4 @@ class View(CustomView, TemplateView):
             donnees_par_famille.append(data)
 
         context["donnees_par_famille"] = donnees_par_famille
-        #print(f"DEBUG: donnees_par_famille = {donnees_par_famille}")
-
-        # Contexte historique (template précédent)
-        data_principale = donnees_par_famille[0] if donnees_par_famille else {}
-        context["pieces_fournir"] = data_principale.get("pieces_fournir", [])
-
         return context
