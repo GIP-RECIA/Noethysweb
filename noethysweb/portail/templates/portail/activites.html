@@ -68,11 +68,6 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% for demande in data.demandes_inscriptions_attente %}
-                        {% if demande.individu_id == item.individu.pk %}
-                            demande={{ demande }}
-                        {% endif %}
-                    {% endfor %}
                 </div>
             </div>
 
