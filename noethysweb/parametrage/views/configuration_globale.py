@@ -22,7 +22,7 @@ class Modifier(CustomView, TemplateView):
         context['page_titre'] = "Configuration globale"
         context['box_titre'] = "Configuration globale"
         context['box_introduction'] = "Ajustez les paramètres de Portail utilisateur et cliquez sur le bouton Enregistrer."
-        context['form'] = Formulaire()
+        context['form'] = kwargs.get('form') or Formulaire()
         return context
 
     def post(self, request, **kwargs):
