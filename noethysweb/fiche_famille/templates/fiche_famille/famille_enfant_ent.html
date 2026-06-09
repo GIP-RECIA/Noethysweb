@@ -1,0 +1,238 @@
+{% extends "core/page.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block styles %}
+    {{ block.super }}
+    <style>
+        .family-card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid #e1e5e9;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        .family-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .family-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .card-body {
+            padding: 20px;
+            background: #fafbfc;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .section-title:first-child {
+            margin-top: 0;
+        }
+
+        .section-title i {
+            color: #667eea;
+            font-size: 16px;
+        }
+
+        .representant, .enfant {
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            transition: all 0.15s ease;
+        }
+
+        .representant:hover, .enfant:hover {
+            border-color: #cbd5e0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .representant {
+            border-left: 4px solid #48bb78;
+        }
+
+        .enfant {
+            border-left: 4px solid #4299e1;
+        }
+
+        .info-line {
+            font-size: 14px;
+            margin: 4px 0;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-line strong {
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        .info-line .emoji {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .text-muted {
+            color: #a0aec0 !important;
+            font-style: italic;
+            text-align: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e0;
+        }
+
+        .btn-back {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            color: #4a5568;
+            padding: 10px 16px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-back:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            color: #2d3748;
+            text-decoration: none;
+            transform: translateX(-2px);
+        }
+
+        .add-family-btn {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            border: none;
+            color: white;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3);
+        }
+
+        .add-family-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+            color: white;
+        }
+
+        .add-family-container {
+            text-align: center;
+            margin-top: 30px;
+            padding: 25px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border: 2px dashed #cbd5e0;
+        }
+    </style>
+{% endblock %}
+
+{% block contenu_page %}
+<div class="mb-4">
+    <a href="#" class="btn-back" onclick="history.back();">
+        <i class="fa fa-reply"></i>
+        Retour
+    </a>
+</div>
+
+{% if enfant %}
+    <div class="card family-card">
+        <div class="family-header">
+            <span>Famille de {{ enfant.civilite }} {{ enfant.prenom }} {{ enfant.nom }}</span>
+        </div>
+        <div class="card-body">
+            <!-- Section Enfant -->
+            <div class="section-title">
+                <i class="fa fa-graduation-cap"></i> Enfant
+            </div>
+            <div class="enfant">
+                <div class="info-line">
+                    <strong>{{ enfant.civilite }} {{ enfant.prenom }} {{ enfant.nom }}</strong>
+                </div>
+                {% if enfant.scolarite.ecole %}
+                <div class="info-line">
+                    <span class="emoji">🏫</span> {{ enfant.scolarite.ecole.nom }}
+                </div>
+                {% endif %}
+                {% if enfant.scolarite.classe %}
+                <div class="info-line">
+                    <span class="emoji">📘</span> Classe: {{ enfant.scolarite.classe.nom }}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Section Représentants -->
+            <div class="section-title">
+                <i class="fa fa-users"></i> Représentants
+            </div>
+            {% for representant in representants %}
+                <div class="representant">
+                    <div class="info-line">
+                        <strong>{{ representant.civilite }} {{ representant.prenom }} {{ representant.nom }}</strong>
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">📧</span> <strong>Email:</strong> {{ representant.email|default:"Non renseigné" }}
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">📞</span> <strong>Téléphone:</strong> {{ representant.telephone|default:"Non renseigné" }}
+                    </div>
+                </div>
+            {% empty %}
+                <div class="text-muted">Aucun représentant</div>
+            {% endfor %}
+
+            <!-- Bouton pour ajouter toute la famille -->
+            <div class="add-family-container">
+                <p class="mb-3" style="color: #4a5568; font-size: 15px;">
+                    Ajouter cette famille complète (représentants + enfant)
+                </p>
+                <form method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="add-family-btn">
+                        <i class="fa fa-plus-circle"></i> Ajouter cette famille
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="card family-card">
+        <div class="card-body">
+            <div class="text-muted">
+                <i class="fa fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i>
+                <p>Aucune famille trouvée pour cet enfant.</p>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock contenu_page %}

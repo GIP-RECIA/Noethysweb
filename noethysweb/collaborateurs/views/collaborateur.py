@@ -7,13 +7,15 @@ from django.urls import reverse_lazy, reverse
 from django.db.models import Q
 from django.views.generic.detail import DetailView
 from django.contrib import messages
-from core.views.mydatatableview import MyDatatable, columns, helpers
+from core.views.mydatatableview import MyDatatable, columns
 from core.views import crud
 from core.views.base import CustomView
-from core.models import Collaborateur, Note
+from core.models import Collaborateur, Note, Organisateur
 from collaborateurs.forms.collaborateur import Formulaire
 from collaborateurs.utils.utils_collaborateur import LISTE_ONGLETS
 from collaborateurs.utils import utils_pieces_manquantes
+from django.http import HttpResponseRedirect
+from core.utils.utils_ent import get_ent_collaborateur
 
 
 class Page(crud.Page):
@@ -80,6 +82,34 @@ class Liste(Page, crud.Liste):
 class Ajouter(Page, crud.Ajouter):
     form_class = Formulaire
 
+    def form_valid(self, form):
+        organisateur = Organisateur.objects.filter(pk=1).first()
+
+        if organisateur and organisateur.ent_active:
+            # ⚡ Appel API externe avec les données du formulaire
+            nom = form.cleaned_data.get("nom")
+            prenom = form.cleaned_data.get("prenom")
+            civilite = form.cleaned_data.get("civilite")
+            groupes = form.cleaned_data.get("groupes")
+            groupes_ids = list(groupes.values_list('idgroupe', flat=True)) if groupes else []
+            collaborateur_ent = get_ent_collaborateur(nom, prenom)
+
+            # Stocker le résultat dans la session (pour l’afficher après la redirection)
+            
+            self.request.session["collaborateurs_ent"] = collaborateur_ent
+            self.request.session["collaborateur_search_info"] = {
+                "nom": nom,
+                "prenom": prenom,
+                "civilite": civilite,
+                "groupes": groupes_ids
+            }
+            url_success = reverse_lazy("collaborateur_recherche_ent", kwargs={})
+            # Rediriger vers une page dédiée (sans ajouter le collaborateur)
+            return HttpResponseRedirect(url_success)
+
+            # Sinon, on garde le comportement classique (création du Collaborateur)
+        return super().form_valid(form)
+    
     def get_success_url(self):
         """ Renvoie vers la page résumé du collaborateur """
         messages.add_message(self.request, messages.SUCCESS, "Ajout enregistré")

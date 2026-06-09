@@ -27,7 +27,7 @@ from parametrage.views import organisateur, structures, \
     types_qualifications_collaborateurs, types_pieces_collaborateurs, types_evenements_collaborateurs, types_postes_collaborateurs, \
     modeles_plannings_collaborateurs, groupes_collaborateurs, modeles_aides, transports, compagnies, lignes, lieux, arrets, modeles_impressions, \
     modeles_word, releves_bancaires, sondages, achats_categories, achats_fournisseurs, modeles_commandes, modeles_commandes_colonnes, \
-    activites_evenements_categories, activites_import_export, api_particulier, parametres_generaux, outils_parametres_generaux
+    activites_evenements_categories, activites_import_export, api_particulier, parametres_generaux, outils_parametres_generaux, parametres_ent, ecole_ent
 
 
 urlpatterns = [
@@ -41,6 +41,7 @@ urlpatterns = [
 
     # Paramètres généraux
     path('parametrage/parametres_generaux/', parametres_generaux.Modifier.as_view(), name='parametres_generaux'),
+    path('parametrage/parametres_ent/', parametres_ent.Modifier.as_view(), name='parametres_ent'),
     # Structures
     path('parametrage/structures/liste', structures.Liste.as_view(), name='structures_liste'),
     path('parametrage/structures/ajouter', structures.Ajouter.as_view(), name='structures_ajouter'),
@@ -353,6 +354,8 @@ urlpatterns = [
     # Ecoles
     path('parametrage/ecoles/liste', ecoles.Liste.as_view(), name='ecoles_liste'),
     path('parametrage/ecoles/ajouter', ecoles.Ajouter.as_view(), name='ecoles_ajouter'),
+    path('parametrage/ecoles/ent/ajouter', ecoles.AjouterEnt.as_view(), name='ecoles_ajouter_ent'),
+    path('parametrage/ecoles/ent/liste', ecole_ent.EntEcole.as_view(), name='ecole_recherche_ent'),
     path('parametrage/ecoles/modifier/<int:pk>', ecoles.Modifier.as_view(), name='ecoles_modifier'),
     path('parametrage/ecoles/supprimer/<int:pk>', ecoles.Supprimer.as_view(), name='ecoles_supprimer'),
 

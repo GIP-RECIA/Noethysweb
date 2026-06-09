@@ -114,7 +114,25 @@ class Ajouter(crud.Ajouter):
         categorie = int(form.cleaned_data["categorie"])
         titulaire = form.cleaned_data["titulaire"]
         idfamille = int(self.request.POST["idfamille"])
-
+        if action == "CREER" and form.has_redirect_to_ent_liste():
+            # Sauvegarde temporaire des données du formulaire en session
+            self.request.session['ent_users_data'] = form.get_ent_users_data()
+            self.request.session['idfamille_temp'] = form.cleaned_data.get("idfamille", 0)
+            nom = form.cleaned_data.get("nom", "")
+            prenom = form.cleaned_data.get("prenom", "")
+            civilite = form.cleaned_data.get("civilite", "")
+            self.request.session["search_info"] = {
+                "nom": nom,
+                "prenom": prenom,
+                "categorie": categorie,
+                "civilite": civilite
+            }
+            if idfamille == 0:
+                url_success = reverse_lazy("ent_liste_familles", kwargs={})
+            else:
+                url_success = reverse_lazy("ent_liste_individus", kwargs={"idfamille": idfamille})
+            return HttpResponseRedirect(url_success)
+        
         if idfamille == 0:
             famille = self.Creation_famille()
         else:

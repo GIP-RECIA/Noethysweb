@@ -51,6 +51,36 @@ class Formulaire(FormulaireBase, ModelForm):
                 Field('tel'),
                 Field('fax'),
                 Field('mail'),
+                Field('uai'),
+            ),
+            Fieldset('Secteurs',
+                Field('secteurs'),
+            ),
+        )
+
+class FormulaireENT(FormulaireBase, ModelForm):
+    secteurs = forms.ModelMultipleChoiceField(label="Secteurs géographiques associés", widget=Select2MultipleWidget(), queryset=Secteur.objects.all(), required=False)
+
+    class Meta:
+        model = Ecole
+        fields = ["uai", "secteurs"]
+        widgets = {}
+
+    def __init__(self, *args, **kwargs):
+        super(FormulaireENT, self).__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_id = 'ecoles_form'
+        self.helper.form_method = 'post'
+
+        self.helper.form_class = 'form-horizontal'
+        self.helper.label_class = 'col-md-2'
+        self.helper.field_class = 'col-md-10'
+
+        # Affichage
+        self.helper.layout = Layout(
+            Commandes(annuler_url="{% url 'ecoles_liste' %}"),
+            Fieldset("Identification",
+                Field('uai'),
             ),
             Fieldset('Secteurs',
                 Field('secteurs'),

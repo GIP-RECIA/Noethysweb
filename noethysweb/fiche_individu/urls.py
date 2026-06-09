@@ -8,7 +8,7 @@ from core.decorators import secure_ajax
 from fiche_individu.views import individu_portail, individu, individu_identite, individu_coords, individu_questionnaire, individu_scolarite, individu_inscriptions, \
                                 individu_medical, individu_notes, individu_liens, individu_appliquer_forfait_date, individu_contacts, \
                                 individu_regimes_alimentaires, individu_assurances, individu_maladies, individu_transports, \
-                                individu_appliquer_forfait_date_choix
+                                individu_appliquer_forfait_date_choix, individu_ent
 
 urlpatterns = [
 
@@ -84,6 +84,9 @@ urlpatterns = [
     path('individus/individus/transports/ajouter_transport/<int:idfamille>/<int:idindividu>', individu_transports.Ajouter_transport.as_view(), name='individu_transports_ajouter'),
     path('individus/individus/transports/modifier_transport/<int:idfamille>/<int:idindividu>/<int:pk>', individu_transports.Modifier_transport.as_view(), name='individu_transports_modifier'),
     path('individus/individus/transports/supprimer_transport/<int:idfamille>/<int:idindividu>/<int:pk>', individu_transports.Supprimer_transport.as_view(), name='individu_transports_supprimer'),
+
+    path('individus/individus/maj_ent_individu/<int:idfamille>/<int:idindividu>', individu_ent.UpdateIndividu.as_view(), name='maj_ent_individu'),
+    path('individus/individus/maj__liste_ent/', individu_ent.SynchronisationMasseIndividus.as_view(), name='mettre_a_jour_liste_individu_ent'),
 
     # AJAX
     path('individus/get_classes', secure_ajax(individu_scolarite.Get_classes), name='ajax_get_classes'),

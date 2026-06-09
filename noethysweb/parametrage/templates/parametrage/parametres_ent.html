@@ -1,0 +1,49 @@
+{% extends "core/page.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{% load embed %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cogs me-2"></i>
+                        Paramètres ENT
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="parametres-form">
+                        {% csrf_token %}
+
+                        <!-- Checkbox with proper Bootstrap structure -->
+                        <div class="form-check mb-4">
+                            {{ form.activer_ent }}
+                            <label class="form-check-label fw-bold" for="{{ form.activer_ent.id_for_label }}">
+                                {{ form.activer_ent.label }}
+                            </label>
+                        </div>
+
+                        <!-- Display form errors if any -->
+                        {% if form.errors %}
+                            <div class="alert alert-danger">
+                                {{ form.errors }}
+                            </div>
+                        {% endif %}
+
+                        <!-- Submit buttons -->
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>
+                                Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
