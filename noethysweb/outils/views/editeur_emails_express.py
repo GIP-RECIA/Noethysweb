@@ -120,13 +120,16 @@ def Get_view_editeur_email(request):
             destinataire.documents.add(document_joint)
         mail.destinataires.add(destinataire)
 
-    else:
+    elif "adresse" in donnees:
         # Saisie libre (ex: restaurateur avec adresse uniquement)
-        destinataire = Destinataire.objects.create(categorie="saisie_libre", adresse=donnees.get("adresse", ""), valeurs=json.dumps(donnees["champs"]))
+        destinataire = Destinataire.objects.create(categorie="saisie_libre", adresse=donnees["adresse"], valeurs=json.dumps(donnees["champs"]))
         if "nom_fichier" in donnees:
             document_joint = DocumentJoint.objects.create(nom=donnees["label_fichier"], fichier=donnees["nom_fichier"])
             destinataire.documents.add(document_joint)
         mail.destinataires.add(destinataire)
+
+    else:
+        return JsonResponse({"erreur": "Aucun destinataire valide fourni."}, status=400)
 
     # Prépare le context
     context = {
