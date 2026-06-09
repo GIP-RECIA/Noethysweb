@@ -49,9 +49,8 @@ def secure_ajax_portail(function):
         # Vérifie que l'utilisateur est authentifié
         if not request.user.is_authenticated:
             return HttpResponseForbidden()
-        # Vérifie que c'est un user de type utilisateur
-        # et que la catégorie correspond au type de compte configuré
-        if request.user.categorie not in ["famille", "individu"] or request.user.categorie != type_compte:
+        # Vérifie que la catégorie correspond au type de compte configuré
+        if request.user.categorie != type_compte:
             return HttpResponseForbidden()
         return function(request, *args, **kwargs)
     return _function
