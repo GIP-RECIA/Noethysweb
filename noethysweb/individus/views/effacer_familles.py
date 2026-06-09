@@ -45,7 +45,8 @@ def Effacer(request):
         if famille.derniere_prestation and (today - famille.derniere_prestation).days < 60:
             liste_anomalies.append(famille)
         if famille.derniere_facture and (today - famille.derniere_facture).days < 60:
-            liste_anomalies.append(famille)
+            if famille not in liste_anomalies:
+                liste_anomalies.append(famille)
 
     if liste_anomalies:
         familles_str = ", ".join([famille.nom for famille in liste_anomalies])
