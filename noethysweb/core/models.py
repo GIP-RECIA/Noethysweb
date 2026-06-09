@@ -1720,7 +1720,7 @@ class Individu(models.Model):
     type_garde = models.IntegerField(verbose_name=_("Type de garde"), choices=type_garde_choix, blank=True, null=True)
     info_garde = models.TextField(verbose_name=_("Information sur la garde"), blank=True, null=True)
     # new attributs
-    internet_categorie = models.ForeignKey(CategorieCompteInternet, verbose_name="Catégorie",related_name="internet_categorie", on_delete=models.PROTECT, blank=True,null=True)
+    internet_categorie = models.ForeignKey(CategorieCompteInternet, verbose_name="Catégorie",related_name="internet_categori", on_delete=models.PROTECT, blank=True,null=True)
     internet_actif = models.BooleanField(verbose_name="Compte internet activé", default=True)
     internet_identifiant = encrypt(models.CharField(verbose_name="Identifiant", max_length=200, blank=True, null=True))
     internet_mdp = encrypt(models.CharField(verbose_name="Mot de passe", max_length=200, blank=True, null=True))
