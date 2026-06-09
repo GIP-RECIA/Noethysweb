@@ -23,13 +23,8 @@ def Effacer_attributs(objet=None, attributs=None):
     for attribut in attributs:
         try:
             setattr(objet, attribut, None)
-        except Exception as e:
-            # Loggez l'erreur ici si nécessaire
-            print(f"Erreur lors de l'effacement de l'attribut {attribut} : {e}")
-    try:
-        objet.save()  # Assurez-vous que l'objet est sauvegardé après l'effacement
-    except Exception as e:
-        print(f"Erreur lors de l'enregistrement de l'objet {objet}: {e}")
+        except Exception:
+            logger.exception("Erreur lors de l'effacement de l'attribut %s sur %s", attribut, objet)
 
 
 def Effacer(request):
