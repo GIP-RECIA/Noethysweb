@@ -1801,9 +1801,6 @@ class Individu(models.Model):
             self.ville_resid = dict_adresse["ville"]
             self.secteur = dict_adresse["secteur"]
             self.save()
-    def save_individu(sender, instance, **kwargs):
-        if hasattr(instance, 'individu'):
-            instance.individu.save()
 
 
 class Scolarite(models.Model):
