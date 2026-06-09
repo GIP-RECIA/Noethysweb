@@ -93,22 +93,20 @@ def Purge_mdp_expires():
             getattr(utilisateur, objet).save()
 
     # Purge pour les familles
-    if Utilisateur.objects.select_related("famille"):
-        utilisateurs = Utilisateur.objects.select_related("famille").filter(
-            categorie="famille", 
-            date_expiration_mdp__lte=datetime.datetime.now() - datetime.timedelta(days=3)
-        )
-        for utilisateur in utilisateurs:
-            _purge_mdp_utilisateur(utilisateur, "famille")
+    utilisateurs = Utilisateur.objects.select_related("famille").filter(
+        categorie="famille",
+        date_expiration_mdp__lte=datetime.datetime.now() - datetime.timedelta(days=3)
+    )
+    for utilisateur in utilisateurs:
+        _purge_mdp_utilisateur(utilisateur, "famille")
 
     # Purge pour les individus
-    if Utilisateur.objects.select_related("individu"):
-        utilisateurs = Utilisateur.objects.select_related("individu").filter(
-            categorie="individu", 
-            date_expiration_mdp__lte=datetime.datetime.now() - datetime.timedelta(days=3)
-        )
-        for utilisateur in utilisateurs:
-            _purge_mdp_utilisateur(utilisateur, "individu")
+    utilisateurs = Utilisateur.objects.select_related("individu").filter(
+        categorie="individu",
+        date_expiration_mdp__lte=datetime.datetime.now() - datetime.timedelta(days=3)
+    )
+    for utilisateur in utilisateurs:
+        _purge_mdp_utilisateur(utilisateur, "individu")
 
 
 def Fix_dates_expiration_mdp():
