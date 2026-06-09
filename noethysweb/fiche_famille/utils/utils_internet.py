@@ -73,14 +73,12 @@ def ReinitTousMdp():
         objet.save()
 
     # Réinitialisation pour les familles
-    if Famille.objects.select_related("utilisateur"):
-        for famille in Famille.objects.select_related("utilisateur").all():
-            _reinit_mdp_objet(famille, "famille")
+    for famille in Famille.objects.select_related("utilisateur").all():
+        _reinit_mdp_objet(famille, "famille")
 
     # Réinitialisation pour les individus
-    if Individu.objects.select_related("utilisateur"):
-        for individu in Individu.objects.select_related("utilisateur").all():
-            _reinit_mdp_objet(individu, "individu")
+    for individu in Individu.objects.select_related("utilisateur").all():
+        _reinit_mdp_objet(individu, "individu")
 
 
 def Purge_mdp_expires():
