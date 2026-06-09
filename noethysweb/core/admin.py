@@ -154,16 +154,16 @@ class IndividuAdmin(UserAdmin):
     )
 
     def get_queryset(self, request):
-        """ Affiche uniquement les utilisateurs de type famille """
+        """ Affiche uniquement les utilisateurs de type individu """
         qs = super().get_queryset(request)
         return qs.filter(categorie="individu")
 
     def has_add_permission(self, request):
-        """ Empêche l'ajout d'un utilisateur famille """
+        """ Empêche l'ajout d'un utilisateur individu """
         return False
 
     def has_delete_permission(self, request, obj=None):
-        """ Empêche la suppression d'un utilisateur famille """
+        """ Empêche la suppression d'un utilisateur individu """
         return False
 
 
@@ -171,3 +171,7 @@ class Utilisateur_Individu(Utilisateur):
     class Meta:
         proxy = True
         verbose_name = "Individu"
+        verbose_name_plural = "Individus"
+
+
+# admin.site.register(Utilisateur_Individu, IndividuAdmin)
