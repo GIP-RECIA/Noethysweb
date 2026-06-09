@@ -45,6 +45,7 @@ class Modifier(CustomView, TemplateView):
         # Stocker le type de compte dans la session
         request.session['type_compte'] = form.cleaned_data.get("type_compte", TYPE_COMPTE_FAMILLE)
         cache.delete("parametres_portail")
+        cache.delete("configuration_globale")
 
         django.contrib.messages.success(request, 'Paramètres enregistrés')
         return HttpResponseRedirect(reverse_lazy("parametrage_toc"))
