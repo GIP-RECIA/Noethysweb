@@ -125,7 +125,7 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin): #, PermissionRequired
         configuration_globale = cache.get('configuration_globale')
         if not configuration_globale:
             configuration_globale = utils_configuration_globale.Get_dict_parametres()
-            cache.set('configuration_globale', configuration_globale, 1)
+            cache.set('configuration_globale', configuration_globale)
         context['configuration_globale'] = configuration_globale
 
         # Options d'interface
