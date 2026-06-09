@@ -17,7 +17,9 @@ from core.models import Mandat, Payeur, Historique, Lien, Destinataire, ContactU
 from core.utils import utils_texte
 
 
-def Effacer_attributs(objet=None, attributs=[]):
+def Effacer_attributs(objet=None, attributs=None):
+    if attributs is None:
+        attributs = []
     for attribut in attributs:
         try:
             setattr(objet, attribut, None)
