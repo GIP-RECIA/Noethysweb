@@ -41,8 +41,8 @@ class View(CustomView, TemplateView):
         if hasattr(self.request.user, 'famille'):
             return self.request.user.famille
         elif hasattr(self.request.user, 'individu'):
-            rattachement = Rattachement.objects.filter(individu=self.request.user.individu).first()
-            if rattachement.famille and rattachement.titulaire == 1:
+            rattachement = Rattachement.objects.filter(individu=self.request.user.individu, titulaire=1).first()
+            if rattachement and rattachement.famille:
                 return rattachement.famille
 
         return None
