@@ -621,6 +621,12 @@ class Organisateur(models.Model):
     logo = ResizedImageField(verbose_name="Logo", upload_to=get_uuid_path, blank=True, null=True)
     gps = models.CharField(verbose_name="GPS", max_length=200, blank=True, null=True)
     logo_update = models.DateTimeField(verbose_name="Date MAJ Logo", max_length=200, blank=True, null=True)
+    ent_active = models.BooleanField(verbose_name="ENT activé", default=False)
+    ent_url = models.CharField(verbose_name="URL de l'ENT", max_length=500, blank=True, null=True)
+    ent_client_id = models.CharField(verbose_name="Client ID", max_length=200, blank=True, null=True)
+    ent_client_secret = encrypt(models.CharField(verbose_name="Client secret", max_length=200, blank=True, null=True))
+    ent_username = models.CharField(verbose_name="Nom d'utilisateur", max_length=200, blank=True, null=True)
+    ent_password = encrypt(models.CharField(verbose_name="Mot de passe", max_length=200, blank=True, null=True))
 
     class Meta:
         db_table = 'organisateur'

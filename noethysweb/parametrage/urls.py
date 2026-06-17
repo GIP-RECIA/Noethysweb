@@ -27,7 +27,7 @@ from parametrage.views import organisateur, structures, \
     types_qualifications_collaborateurs, types_pieces_collaborateurs, types_evenements_collaborateurs, types_postes_collaborateurs, \
     modeles_plannings_collaborateurs, groupes_collaborateurs, modeles_aides, transports, compagnies, lignes, lieux, arrets, modeles_impressions, \
     modeles_word, releves_bancaires, sondages, achats_categories, achats_fournisseurs, modeles_commandes, modeles_commandes_colonnes, \
-    activites_evenements_categories, activites_import_export, api_particulier, configuration_globale
+    activites_evenements_categories, activites_import_export, api_particulier, configuration_globale, parametres_ent
 
 
 urlpatterns = [
@@ -41,6 +41,7 @@ urlpatterns = [
 
     # Paramètres généraux
     path('parametrage/configuration_globale/', configuration_globale.Modifier.as_view(), name='configuration_globale'),
+    path('parametrage/parametres_ent/', parametres_ent.Modifier.as_view(), name='parametres_ent'),
     # Structures
     path('parametrage/structures/liste', structures.Liste.as_view(), name='structures_liste'),
     path('parametrage/structures/ajouter', structures.Ajouter.as_view(), name='structures_ajouter'),
