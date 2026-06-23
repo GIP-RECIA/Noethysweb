@@ -30,6 +30,18 @@ def _convertir_civilite(valeur):
     return mapping.get(valeur, 1)
 
 
+def _adresses_differentes(parent1_data, parent2_data):
+    def normaliser(data):
+        rue = (data.get("address") or "").strip().lower()
+        cp = (data.get("zipCode") or "").strip().lower()
+        return f"{rue}|{cp}"
+    adr1 = normaliser(parent1_data)
+    adr2 = normaliser(parent2_data)
+    if not adr1.replace("|", "").strip() or not adr2.replace("|", "").strip():
+        return False
+    return adr1 != adr2
+
+
 def _normaliser_enfant(data):
     """Ajoute ecole_nom et classe_nom selon le format retourné (admin/list ou get_user)."""
     # Ecole : admin/list -> structures[0].name | get_user -> structureNodes[0].name
@@ -168,6 +180,11 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                     parents_details.append(parent_data)
             enfant["parents_details"] = parents_details
 
+            if len(parents_details) >= 2:
+                enfant["adresses_differentes"] = _adresses_differentes(parents_details[0], parents_details[1])
+            else:
+                enfant["adresses_differentes"] = False
+
             resultats.append(enfant)
 
         request.session["ent_resultats"] = resultats
@@ -179,22 +196,16 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             messages.error(request, "Données manquantes.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        # Vérifier si déjà importé
         if Individu.objects.filter(ent_id=eleve_ent_id).exists():
             messages.warning(request, "Cet élève a déjà été importé.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        # Récupérer les données de l'élève
         eleve_data = get_user(eleve_ent_id)
         if not eleve_data:
             messages.error(request, "Impossible de récupérer les données de l'élève depuis l'ENT.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        # Créer la famille
-        famille = Famille()
-        famille.save()
-
-        # Créer l'élève
+        # Créer l'élève (une seule fois)
         eleve = Individu(
             nom=eleve_data.get("lastName", ""),
             prenom=eleve_data.get("firstName", ""),
@@ -209,36 +220,80 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             ent_id=eleve_ent_id,
         )
         eleve.save()
-        Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
 
-        # Créer les parents
+        # Récupérer les données des parents
+        parents_data = []
         for parent_info in eleve_data.get("parents", []):
             parent_data = get_user(parent_info["id"])
-            if not parent_data:
-                continue
+            if parent_data:
+                parents_data.append((parent_info["id"], parent_data))
 
-            # Vérifier si ce parent existe déjà
-            parent = Individu.objects.filter(ent_id=parent_info["id"]).first()
-            if not parent:
-                parent = Individu(
-                    nom=parent_data.get("lastName", ""),
-                    prenom=parent_data.get("firstName", ""),
-                    civilite=_convertir_civilite(parent_data.get("title")),
-                    date_naiss=_parse_date(parent_data.get("birthDate")),
-                    mail=parent_data.get("email") or None,
-                    tel_domicile=parent_data.get("phone") or None,
-                    tel_mobile=parent_data.get("mobile") or None,
-                    rue_resid=parent_data.get("address") or None,
-                    cp_resid=parent_data.get("zipCode") or None,
-                    ville_resid=parent_data.get("city") or None,
-                    ent_id=parent_info["id"],
-                )
-                parent.save()
+        # Détecter si les parents ont des adresses différentes
+        separes = (
+            len(parents_data) >= 2 and
+            _adresses_differentes(parents_data[0][1], parents_data[1][1])
+        )
 
-            Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        if separes:
+            # Créer une famille séparée par parent
+            premiere_famille_id = None
+            for ent_id_parent, parent_data in parents_data:
+                famille = Famille()
+                famille.mode_separation = "automatique"
+                famille.save()
 
-        # Mettre à jour le nom de la famille
-        famille.Maj_infos()
+                if premiere_famille_id is None:
+                    premiere_famille_id = famille.pk
 
-        messages.success(request, f"Famille importée avec succès.")
-        return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": famille.pk}))
+                parent = Individu.objects.filter(ent_id=ent_id_parent).first()
+                if not parent:
+                    parent = Individu(
+                        nom=parent_data.get("lastName", ""),
+                        prenom=parent_data.get("firstName", ""),
+                        civilite=_convertir_civilite(parent_data.get("title")),
+                        date_naiss=_parse_date(parent_data.get("birthDate")),
+                        mail=parent_data.get("email") or None,
+                        tel_domicile=parent_data.get("phone") or None,
+                        tel_mobile=parent_data.get("mobile") or None,
+                        rue_resid=parent_data.get("address") or None,
+                        cp_resid=parent_data.get("zipCode") or None,
+                        ville_resid=parent_data.get("city") or None,
+                        ent_id=ent_id_parent,
+                    )
+                    parent.save()
+
+                Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+                Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
+                famille.Maj_infos()
+
+            messages.success(request, "Deux familles séparées ont été créées automatiquement (adresses différentes).")
+            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": premiere_famille_id}))
+
+        else:
+            # Famille unique
+            famille = Famille()
+            famille.save()
+            Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
+
+            for ent_id_parent, parent_data in parents_data:
+                parent = Individu.objects.filter(ent_id=ent_id_parent).first()
+                if not parent:
+                    parent = Individu(
+                        nom=parent_data.get("lastName", ""),
+                        prenom=parent_data.get("firstName", ""),
+                        civilite=_convertir_civilite(parent_data.get("title")),
+                        date_naiss=_parse_date(parent_data.get("birthDate")),
+                        mail=parent_data.get("email") or None,
+                        tel_domicile=parent_data.get("phone") or None,
+                        tel_mobile=parent_data.get("mobile") or None,
+                        rue_resid=parent_data.get("address") or None,
+                        cp_resid=parent_data.get("zipCode") or None,
+                        ville_resid=parent_data.get("city") or None,
+                        ent_id=ent_id_parent,
+                    )
+                    parent.save()
+                Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+            famille.Maj_infos()
+            messages.success(request, "Famille importée avec succès.")
+            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": famille.pk}))

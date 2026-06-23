@@ -109,6 +109,12 @@
                             <p class="text-muted">Aucun parent trouvé dans l'ENT.</p>
                         {% endif %}
 
+                        {% if eleve.adresses_differentes %}
+                            <div class="alert alert-warning mt-2">
+                                <i class="fa fa-exclamation-triangle"></i> Les deux parents ont des adresses différentes. Deux familles séparées seront créées automatiquement.
+                            </div>
+                        {% endif %}
+
                         {% if eleve.deja_importe %}
                             <div class="alert alert-info">
                                 <i class="fa fa-info-circle"></i> Cet élève a déjà été importé.
