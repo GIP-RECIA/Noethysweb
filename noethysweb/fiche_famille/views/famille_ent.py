@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from core.views.base import CustomView
 from core.models import Individu, Famille, Rattachement
 from core.utils.utils_ent import search_by_name, get_user
+from django.shortcuts import get_object_or_404
 
 # pour formater les dates de naissnace 
 def _parse_date(valeur):
@@ -297,3 +298,63 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             famille.Maj_infos()
             messages.success(request, "Famille importée avec succès.")
             return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": famille.pk}))
+
+
+class FusionnerFamilles(CustomView, TemplateView):
+    template_name = "fiche_famille/famille_ent_fusionner.html"
+    menu_code = "famille_liste"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        idfamille = self.kwargs["idfamille"]
+        famille = get_object_or_404(Famille, pk=idfamille)
+
+        # Trouver les familles candidates : celles qui partagent au moins un enfant
+        enfants_ids = Rattachement.objects.filter(famille=famille, categorie=2).values_list("individu_id", flat=True)
+        familles_candidates = Famille.objects.filter(
+            rattachement__individu_id__in=enfants_ids,
+            rattachement__categorie=2,
+        ).exclude(pk=idfamille).distinct()
+
+        context["page_titre"] = "Fusionner des familles"
+        context["box_titre"] = "Fusion de familles"
+        context["box_introduction"] = "Sélectionnez la famille avec laquelle fusionner."
+        context["famille"] = famille
+        context["idfamille"] = idfamille
+        context["familles_candidates"] = familles_candidates
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return self.render_to_response(self.get_context_data())
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        idfamille = self.kwargs["idfamille"]
+        idfamille_source = request.POST.get("idfamille_source")
+
+        if not idfamille_source:
+            messages.error(request, "Veuillez sélectionner une famille.")
+            return HttpResponseRedirect(reverse("famille_fusionner", kwargs={"idfamille": idfamille}))
+
+        famille_cible = get_object_or_404(Famille, pk=idfamille)
+        famille_source = get_object_or_404(Famille, pk=idfamille_source)
+
+        # Déplacer tous les rattachements de la famille source vers la cible (sans doublons)
+        for ratt in Rattachement.objects.filter(famille=famille_source):
+            deja_present = Rattachement.objects.filter(famille=famille_cible, individu=ratt.individu).exists()
+            if not deja_present:
+                ratt.famille = famille_cible
+                ratt.save()
+            else:
+                ratt.delete()
+
+        # Supprimer la famille source
+        famille_source.delete()
+
+        # Réinitialiser le mode_separation
+        famille_cible.mode_separation = None
+        famille_cible.save()
+        famille_cible.Maj_infos()
+
+        messages.success(request, "Les deux familles ont été fusionnées avec succès.")
+        return HttpResponseRedirect(reverse("famille_resume", kwargs={"idfamille": idfamille}))

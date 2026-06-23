@@ -8,6 +8,17 @@
 {% block detail_famille %}
     <div class="col-md-9">
 
+        {% if famille.mode_separation %}
+        <div class="alert alert-warning">
+            <i class="fa fa-exclamation-triangle"></i>
+            Cette famille a été créée suite à une séparation
+            {% if famille.mode_separation == "automatique" %}<strong>automatique</strong> (adresses différentes détectées){% else %}<strong>manuelle</strong>{% endif %}.
+            <a href="{% url 'famille_fusionner' idfamille=idfamille %}" class="btn btn-sm btn-warning ml-3">
+                <i class="fa fa-compress"></i> Fusionner avec une autre famille
+            </a>
+        </div>
+        {% endif %}
+
         {# Caractéristiques #}
         {% embed 'core/box.html' %}
             {% block box_theme %}card-outline card-lightblue{% endblock %}
