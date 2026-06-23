@@ -128,6 +128,22 @@ def search_students_by_name(last_name, first_name, structure_id=None):
     return result if result is not None else []
 
 
+def search_by_name(last_name, first_name):
+    """
+    Recherche par prénom ET nom, tous profils confondus (Student ET Relative).
+    Retourne None si la connexion échoue, liste vide si aucun résultat.
+    """
+    base_url = _get_base_url()
+    if not get_headers() or not base_url:
+        return None
+
+    params = {"firstName": first_name, "lastName": last_name}
+    result = _api_get(f"{base_url}/directory/user/admin/list", params=params)
+    return result if result is not None else []
+
+
+
+
 def get_user(ent_id):
     """
     GET /directory/user/:userid

@@ -1736,6 +1736,7 @@ class Individu(models.Model):
     utilisateur = models.OneToOneField(Utilisateur, on_delete=models.CASCADE, null=True)
     certification_date = models.DateTimeField(verbose_name="Date de certification", blank=True, null=True)
     blocage_impayes_off = models.BooleanField(verbose_name="Ne jamais appliquer le blocage des réservations si impayés",default=False,help_text="En cochant cette case, vous permettez à cette famille d'accéder aux réservations du portail même s'il y a des impayés et que le paramètre 'blocage si impayés' a été activé dans les paramètres généraux du portail.")
+    ent_id = models.CharField(verbose_name="ID ENT", max_length=200, blank=True, null=True)
 
     class Meta:
         db_table = 'individus'

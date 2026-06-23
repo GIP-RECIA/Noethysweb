@@ -1,0 +1,140 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    {# Formulaire de recherche #}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rechercher">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Prénom de l'enfant / parent *</label>
+                    <input type="text" name="first_name" class="form-control" value="{{ first_name }}" placeholder="Ex: Layla" required>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Nom de l'enfant / parent *</label>
+                    <input type="text" name="last_name" class="form-control" value="{{ last_name }}" placeholder="Ex: KING" required>
+                </div>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-search"></i> Rechercher
+                    </button>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted small"><i class="fa fa-info-circle"></i> La recherche est partielle : vous pouvez saisir uniquement les premières lettres. Ex: "La" + "K" trouvera "Layla KING".</p>
+    </form>
+
+    {# Message d'erreur #}
+    {% if erreur %}
+        <div class="alert alert-warning mt-3">
+            <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
+        </div>
+        {% if "Aucun résultat" in erreur or "Aucune famille" in erreur %}
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle"></i> Vous pouvez créer cette famille manuellement.
+                <a href="{% url 'famille_ajouter' %}" class="btn btn-sm btn-primary ml-2">
+                    <i class="fa fa-plus"></i> Ajouter une famille manuellement
+                </a>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    {# Résultats #}
+    {% if resultats is not None %}
+        {% if resultats %}
+            <hr>
+            <h5>{{ resultats|length }} résultat{{ resultats|length|pluralize }} trouvé{{ resultats|length|pluralize }}</h5>
+
+            {% for eleve in resultats %}
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <strong><i class="fa fa-child"></i> Élève : {{ eleve.firstName }} {{ eleve.lastName }}</strong>
+                    </div>
+                    <div class="card-body">
+
+                        <table class="table table-sm table-borderless mb-3">
+                            <tr>
+                                <td width="150"><strong>École :</strong></td>
+                                <td>{{ eleve.ecole_nom|default:"Non renseignée" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Classe :</strong></td>
+                                <td>{{ eleve.classe_nom|default:"Non renseignée" }}</td>
+                            </tr>
+                        </table>
+
+                        {% if eleve.parents_details %}
+                            <p><strong><i class="fa fa-users"></i> Parents :</strong></p>
+                            {% for parent in eleve.parents_details %}
+                                <table class="table table-sm table-bordered mb-2">
+                                    <thead class="thead-light">
+                                        <tr><th colspan="2">{{ parent.firstName }} {{ parent.lastName }}</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="width:25%"><strong>Email :</strong></td>
+                                            <td>{{ parent.email|default:"<span class='text-muted'>Non renseigné</span>" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width:25%"><strong>Téléphone :</strong></td>
+                                            <td>{{ parent.mobile|default:"<span class='text-muted'>Non renseigné</span>" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="width:25%"><strong>Adresse :</strong></td>
+                                            <td>
+                                                {% if parent.address %}
+                                                    {{ parent.address }}{% if parent.zipCode %}, {{ parent.zipCode }}{% endif %} {{ parent.city }}
+                                                {% else %}
+                                                    <span class="text-muted">Non renseignée</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Aucun parent trouvé dans l'ENT.</p>
+                        {% endif %}
+
+                        {% if eleve.deja_importe %}
+                            <div class="alert alert-info">
+                                <i class="fa fa-info-circle"></i> Cet élève a déjà été importé.
+                                {% if eleve.famille_id %}
+                                    <a href="{% url 'famille_resume' idfamille=eleve.famille_id %}" class="btn btn-sm btn-primary ml-2">
+                                        <i class="fa fa-eye"></i> Voir la fiche famille
+                                    </a>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="importer">
+                                <input type="hidden" name="eleve_ent_id" value="{{ eleve.id }}">
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fa fa-download"></i> Importer cette famille
+                                </button>
+                            </form>
+                        {% endif %}
+
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endif %}
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}
