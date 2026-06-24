@@ -24,6 +24,7 @@ urlpatterns = [
     path('individus/familles/ajouter', famille_ajouter.Creer_famille.as_view(), name='famille_ajouter'),
     path('individus/familles/ent/importer', famille_ent.ImporterFamilleEnt.as_view(), name='ent_import_famille'),
     path('individus/familles/fusionner/<int:idfamille>', famille_ent.FusionnerFamilles.as_view(), name='famille_fusionner'),
+    path('individus/familles/separer/<int:idfamille>', famille_ent.SeparerFamille.as_view(), name='famille_separer'),
     path('individus/familles/supprimer/<int:idfamille>', famille.Supprimer_famille.as_view(), name='famille_supprimer'),
     path('individus/familles/resume/<int:idfamille>', famille.Resume.as_view(), name='famille_resume'),
 

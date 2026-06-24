@@ -24,6 +24,9 @@
             {% block box_theme %}card-outline card-lightblue{% endblock %}
             {% block box_titre %}Composition de la famille{% endblock %}
             {% block box_outils %}
+                {% if nb_representants >= 2 and not famille.mode_separation %}
+                <a type="button" class="btn btn-warning btn-xs" style="margin-right: 10px;" title="Séparer cette famille" href="{% url 'famille_separer' idfamille=idfamille %}"><i class="fa fa-scissors"></i> Séparer</a>
+                {% endif %}
                 <a type="button" class="btn btn-success btn-xs" style="margin-right: 10px;" title="Ajouter un individu" href="{% url 'individu_ajouter' idfamille=idfamille %}"><i class="fa fa-plus"></i> Ajouter</a>
             {% endblock %}
             {% block card_body_classe %}

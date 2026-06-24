@@ -358,3 +358,66 @@ class FusionnerFamilles(CustomView, TemplateView):
 
         messages.success(request, "Les deux familles ont été fusionnées avec succès.")
         return HttpResponseRedirect(reverse("famille_resume", kwargs={"idfamille": idfamille}))
+
+
+class SeparerFamille(CustomView, TemplateView):
+    template_name = "fiche_famille/famille_ent_separer.html"
+    menu_code = "famille_liste"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        idfamille = self.kwargs["idfamille"]
+        famille = get_object_or_404(Famille, pk=idfamille)
+
+        representants = Rattachement.objects.filter(famille=famille, categorie=1).select_related("individu")
+
+        context["page_titre"] = "Séparer une famille"
+        context["box_titre"] = "Séparation manuelle"
+        context["box_introduction"] = "Sélectionnez le parent à déplacer vers une nouvelle famille."
+        context["famille"] = famille
+        context["idfamille"] = idfamille
+        context["representants"] = representants
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return self.render_to_response(self.get_context_data())
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        idfamille = self.kwargs["idfamille"]
+        id_parent = request.POST.get("id_parent")
+
+        if not id_parent:
+            messages.error(request, "Veuillez sélectionner un parent.")
+            return HttpResponseRedirect(reverse("famille_separer", kwargs={"idfamille": idfamille}))
+
+        famille_origine = get_object_or_404(Famille, pk=idfamille)
+        parent = get_object_or_404(Individu, pk=id_parent)
+
+        # Créer la nouvelle famille
+        nouvelle_famille = Famille()
+        nouvelle_famille.mode_separation = "force"
+        nouvelle_famille.save()
+
+        # Déplacer le parent vers la nouvelle famille
+        Rattachement.objects.filter(famille=famille_origine, individu=parent).delete()
+        Rattachement.objects.create(individu=parent, famille=nouvelle_famille, categorie=1, titulaire=True)
+
+        # Copier les enfants dans la nouvelle famille
+        enfants = Rattachement.objects.filter(famille=famille_origine, categorie=2)
+        for ratt_enfant in enfants:
+            Rattachement.objects.create(
+                individu=ratt_enfant.individu,
+                famille=nouvelle_famille,
+                categorie=2,
+                titulaire=False,
+            )
+
+        # Marquer les deux familles
+        famille_origine.mode_separation = "force"
+        famille_origine.save()
+        famille_origine.Maj_infos()
+        nouvelle_famille.Maj_infos()
+
+        messages.success(request, f"Famille séparée. Nouvelle famille créée pour {parent.prenom} {parent.nom}.")
+        return HttpResponseRedirect(reverse("famille_resume", kwargs={"idfamille": nouvelle_famille.pk}))

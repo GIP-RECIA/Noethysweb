@@ -223,6 +223,7 @@ class Resume(Onglet, DetailView):
         context['page_titre'] = "Fiche famille"
         context['box_introduction'] = ""
         context['onglet_actif'] = "resume"
+        context['nb_representants'] = Rattachement.objects.filter(famille_id=idfamille, categorie=1).count()
         context['nbre_messages_non_lus'] = PortailMessage.objects.filter(famille=context['famille'], utilisateur__isnull=False, date_lecture__isnull=True).count()
 
         # Alertes
