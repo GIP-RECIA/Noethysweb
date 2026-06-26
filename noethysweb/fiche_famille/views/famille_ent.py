@@ -186,6 +186,28 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             else:
                 enfant["adresses_differentes"] = False
 
+            # Vérifier si les parents existent déjà dans Noethysweb
+            enfant["parents_existants"] = False
+            enfant["parents_existants_msg"] = None
+            if not enfant["deja_importe"]:
+                parents_en_base = []
+                for parent in enfant.get("parents", []):
+                    if parent.get("id"):
+                        p = Individu.objects.filter(ent_id=parent["id"]).first()
+                        if p:
+                            parents_en_base.append(p)
+                if parents_en_base:
+                    enfant["parents_existants"] = True
+                    noms = " et ".join([f"{p.prenom} {p.nom}" for p in parents_en_base])
+                    familles_parents = Rattachement.objects.filter(
+                        individu__in=parents_en_base, categorie=1
+                    ).select_related("famille").values_list("famille__nom", flat=True).distinct()
+                    noms_familles = ", ".join(familles_parents)
+                    if len(familles_parents) > 1:
+                        enfant["parents_existants_msg"] = f"Les parents {noms} existent déjà (familles séparées). {enfant.get('firstName', '')} sera ajouté aux familles {noms_familles}."
+                    else:
+                        enfant["parents_existants_msg"] = f"Les parents {noms} existent déjà. {enfant.get('firstName', '')} sera ajouté à la famille {noms_familles}."
+
             resultats.append(enfant)
 
         request.session["ent_resultats"] = resultats
@@ -229,6 +251,31 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             if parent_data:
                 parents_data.append((parent_info["id"], parent_data))
 
+        # Vérifier si les parents existent déjà dans Noethysweb
+        parents_existants = []
+        for ent_id_parent, parent_data in parents_data:
+            parent = Individu.objects.filter(ent_id=ent_id_parent).first()
+            if parent:
+                parents_existants.append(parent)
+
+        if parents_existants:
+            # Au moins un parent existe déjà — ajouter l'enfant à ses familles
+            familles_ajoutees = set()
+            for parent in parents_existants:
+                for ratt in Rattachement.objects.filter(individu=parent, categorie=1):
+                    if ratt.famille_id not in familles_ajoutees:
+                        Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
+                        ratt.famille.Maj_infos()
+                        familles_ajoutees.add(ratt.famille_id)
+
+            premiere_famille_id = list(familles_ajoutees)[0]
+            noms_parents = " et ".join([f"{p.prenom} {p.nom}" for p in parents_existants])
+            if len(familles_ajoutees) > 1:
+                messages.success(request, f"{eleve.prenom} a été ajouté aux {len(familles_ajoutees)} familles de {noms_parents}.")
+            else:
+                messages.success(request, f"{eleve.prenom} a été ajouté à la famille existante de {noms_parents}.")
+            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": premiere_famille_id}))
+
         # Détecter si les parents ont des adresses différentes
         separes = (
             len(parents_data) >= 2 and
@@ -246,22 +293,20 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                 if premiere_famille_id is None:
                     premiere_famille_id = famille.pk
 
-                parent = Individu.objects.filter(ent_id=ent_id_parent).first()
-                if not parent:
-                    parent = Individu(
-                        nom=parent_data.get("lastName", ""),
-                        prenom=parent_data.get("firstName", ""),
-                        civilite=_convertir_civilite(parent_data.get("title")),
-                        date_naiss=_parse_date(parent_data.get("birthDate")),
-                        mail=parent_data.get("email") or None,
-                        tel_domicile=parent_data.get("phone") or None,
-                        tel_mobile=parent_data.get("mobile") or None,
-                        rue_resid=parent_data.get("address") or None,
-                        cp_resid=parent_data.get("zipCode") or None,
-                        ville_resid=parent_data.get("city") or None,
-                        ent_id=ent_id_parent,
-                    )
-                    parent.save()
+                parent = Individu(
+                    nom=parent_data.get("lastName", ""),
+                    prenom=parent_data.get("firstName", ""),
+                    civilite=_convertir_civilite(parent_data.get("title")),
+                    date_naiss=_parse_date(parent_data.get("birthDate")),
+                    mail=parent_data.get("email") or None,
+                    tel_domicile=parent_data.get("phone") or None,
+                    tel_mobile=parent_data.get("mobile") or None,
+                    rue_resid=parent_data.get("address") or None,
+                    cp_resid=parent_data.get("zipCode") or None,
+                    ville_resid=parent_data.get("city") or None,
+                    ent_id=ent_id_parent,
+                )
+                parent.save()
 
                 Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
                 Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
@@ -277,22 +322,20 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
 
             for ent_id_parent, parent_data in parents_data:
-                parent = Individu.objects.filter(ent_id=ent_id_parent).first()
-                if not parent:
-                    parent = Individu(
-                        nom=parent_data.get("lastName", ""),
-                        prenom=parent_data.get("firstName", ""),
-                        civilite=_convertir_civilite(parent_data.get("title")),
-                        date_naiss=_parse_date(parent_data.get("birthDate")),
-                        mail=parent_data.get("email") or None,
-                        tel_domicile=parent_data.get("phone") or None,
-                        tel_mobile=parent_data.get("mobile") or None,
-                        rue_resid=parent_data.get("address") or None,
-                        cp_resid=parent_data.get("zipCode") or None,
-                        ville_resid=parent_data.get("city") or None,
-                        ent_id=ent_id_parent,
-                    )
-                    parent.save()
+                parent = Individu(
+                    nom=parent_data.get("lastName", ""),
+                    prenom=parent_data.get("firstName", ""),
+                    civilite=_convertir_civilite(parent_data.get("title")),
+                    date_naiss=_parse_date(parent_data.get("birthDate")),
+                    mail=parent_data.get("email") or None,
+                    tel_domicile=parent_data.get("phone") or None,
+                    tel_mobile=parent_data.get("mobile") or None,
+                    rue_resid=parent_data.get("address") or None,
+                    cp_resid=parent_data.get("zipCode") or None,
+                    ville_resid=parent_data.get("city") or None,
+                    ent_id=ent_id_parent,
+                )
+                parent.save()
                 Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
 
             famille.Maj_infos()
