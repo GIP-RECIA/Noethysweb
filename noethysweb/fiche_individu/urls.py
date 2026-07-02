@@ -8,7 +8,7 @@ from core.decorators import secure_ajax
 from fiche_individu.views import individu_portail, individu, individu_identite, individu_coords, individu_questionnaire, individu_scolarite, individu_inscriptions, \
                                 individu_medical, individu_notes, individu_liens, individu_appliquer_forfait_date, individu_contacts, \
                                 individu_regimes_alimentaires, individu_assurances, individu_maladies, individu_transports, \
-                                individu_appliquer_forfait_date_choix
+                                individu_appliquer_forfait_date_choix, individu_ent
 
 urlpatterns = [
 
@@ -98,6 +98,9 @@ urlpatterns = [
     path('individus/ajouter_maladie', secure_ajax(individu_maladies.Ajouter_maladie), name='ajax_ajouter_maladie'),
     path('individus/ajouter_assureur', secure_ajax(individu_assurances.Ajouter_assureur), name='ajax_ajouter_assureur'),
     path('individus/get_info_transport', secure_ajax(individu_transports.Get_info_transport), name='ajax_get_info_transport'),
+    # ENT
+    path('individus/individus/ent/synchro/<int:idfamille>/<int:idindividu>', individu_ent.SynchroniserIndividu.as_view(), name='individu_ent_synchro'),
+
     # portail
     path('individus/individus/portail/<int:idfamille>/<int:idindividu>', individu_portail.Consulter.as_view(), name='individu_portail'),
     path('individus/individus/portail/modifier/<int:idfamille>/<int:idindividu>', individu_portail.Modifier.as_view(),name='individu_portail_modifier'),

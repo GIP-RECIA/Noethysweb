@@ -1,0 +1,86 @@
+{% extends "fiche_individu/individu.html" %}
+{% load static %}
+{% load embed %}
+
+{% block detail_individu %}
+<div class="col-md-9">
+    {% embed 'core/box.html' %}
+        {% block box_theme %}card-outline card-lightblue{% endblock %}
+        {% block box_titre %}Synchronisation ENT{% endblock %}
+        {% block box_contenu %}
+
+        {% if erreur %}
+            <div class="alert alert-warning">
+                <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
+            </div>
+        {% else %}
+            <p class="text-muted">
+                <i class="fa fa-info-circle"></i>
+                Cochez les champs que vous souhaitez mettre à jour avec les données de l'ENT, puis cliquez sur <strong>Synchroniser</strong>.
+                Les champs surlignés en jaune sont différents entre Noethysweb et l'ENT.
+            </p>
+
+            <form method="post">
+                {% csrf_token %}
+                <table class="table table-bordered table-sm">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width:30px;">
+                                <input type="checkbox" id="select_all" title="Tout sélectionner">
+                            </th>
+                            <th>Champ</th>
+                            <th>Noethysweb</th>
+                            <th>ENT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr {% if ligne.different %}style="background-color: #fff9c4;"{% endif %}>
+                            <td class="text-center">
+                                {% if ligne.val_ent %}
+                                    <input type="checkbox" name="champs" value="{{ ligne.code }}"
+                                        {% if ligne.different and ligne.val_ent %}checked{% endif %}>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ ligne.label }}</strong></td>
+                            <td>{{ ligne.val_noethys|default:"<span class='text-muted'>Vide</span>" }}</td>
+                            <td>
+                                {% if ligne.val_ent %}
+                                    {{ ligne.val_ent }}
+                                    {% if ligne.different %}
+                                        <i class="fa fa-exclamation-circle text-warning ml-1" title="Différent de Noethysweb"></i>
+                                    {% else %}
+                                        <i class="fa fa-check text-green ml-1" title="Identique"></i>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Non disponible dans l'ENT</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-refresh"></i> Synchroniser les champs sélectionnés
+                    </button>
+                    <a href="{% url 'individu_resume' idfamille=idfamille idindividu=idindividu %}" class="btn btn-default ml-2">
+                        <i class="fa fa-times"></i> Annuler
+                    </a>
+                </div>
+            </form>
+        {% endif %}
+
+        {% endblock %}
+    {% endembed %}
+</div>
+
+<script>
+    document.getElementById('select_all').addEventListener('change', function() {
+        document.querySelectorAll('input[name="champs"]').forEach(function(cb) {
+            cb.checked = document.getElementById('select_all').checked;
+        });
+    });
+</script>
+{% endblock %}
