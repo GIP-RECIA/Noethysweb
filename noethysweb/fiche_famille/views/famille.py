@@ -100,6 +100,16 @@ class Page(crud.Page):
     boutons_liste = [
         {"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(url_ajouter), "icone": "fa fa-plus"},
         {"label": "Depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_famille"), "icone": "fa fa-cloud-download"},
+        {"label": "Synchronisation ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_synchro_masse"), "icone": "fa fa-refresh",
+         "onclick": (
+             "(function(el){"
+             "var original=el.innerHTML;"
+             "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+             "window.addEventListener('pageshow', function(e){"
+             "if(e.persisted){el.innerHTML=original;}"
+             "});"
+             "})(this)"
+         )},
     ]
 
 

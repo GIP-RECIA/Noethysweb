@@ -22,6 +22,22 @@ CHAMPS_SYNC = [
 ]
 
 
+def Get_lignes_comparaison(individu, data_ent):
+    """ Retourne la liste des champs comparés entre Noethysweb et l'ENT pour un individu. """
+    lignes = []
+    for champ in CHAMPS_SYNC:
+        val_noethys = getattr(individu, champ["code"]) or ""
+        val_ent = data_ent.get(champ["ent_key"]) or ""
+        lignes.append({
+            "code": champ["code"],
+            "label": champ["label"],
+            "val_noethys": val_noethys,
+            "val_ent": val_ent,
+            "different": str(val_noethys).strip() != str(val_ent).strip(),
+        })
+    return lignes
+
+
 class SynchroniserIndividu(Onglet, TemplateView):
     menu_code = "individus_toc"
     template_name = "fiche_individu/individu_ent_synchro.html"
@@ -42,19 +58,7 @@ class SynchroniserIndividu(Onglet, TemplateView):
             context['erreur'] = "Impossible de récupérer les données depuis l'ENT. Vérifiez la connexion."
             return context
 
-        lignes = []
-        for champ in CHAMPS_SYNC:
-            val_noethys = getattr(individu, champ["code"]) or ""
-            val_ent = data_ent.get(champ["ent_key"]) or ""
-            lignes.append({
-                "code": champ["code"],
-                "label": champ["label"],
-                "val_noethys": val_noethys,
-                "val_ent": val_ent,
-                "different": str(val_noethys).strip() != str(val_ent).strip(),
-            })
-
-        context['lignes'] = lignes
+        context['lignes'] = Get_lignes_comparaison(individu, data_ent)
         return context
 
     @transaction.atomic

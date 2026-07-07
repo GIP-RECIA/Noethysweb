@@ -1,0 +1,136 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    {% if lignes %}
+        <form method="post" id="form_synchro">
+            {% csrf_token %}
+            <div class="d-flex align-items-center mb-3">
+                <button type="submit" class="btn btn-primary mr-3" id="btn_synchro">
+                    <i class="fa fa-refresh"></i> Synchroniser les champs sélectionnés
+                </button>
+                <label class="mb-0">
+                    <input type="checkbox" id="select_all_global"> Tout sélectionner (tous les individus, tous les champs différents)
+                </label>
+            </div>
+
+            <div id="accordion_ent">
+                {% for ligne in lignes %}
+                <div class="card mb-2">
+                    <div class="card-header p-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                {% if not ligne.erreur %}
+                                    <input type="checkbox" class="select_all_individu mr-2" data-individu="{{ ligne.individu.pk }}"
+                                        {% if ligne.nb_diff > 0 %}checked{% endif %}>
+                                {% endif %}
+                                <a href="#" style="cursor:pointer;" data-toggle="collapse" data-target="#collapse_{{ ligne.individu.pk }}">
+                                    <i class="fa fa-chevron-down mr-2"></i>
+                                    <strong>{{ ligne.individu.nom }} {{ ligne.individu.prenom }}</strong>
+                                </a>
+                            </div>
+                            <div>
+                                {% if ligne.erreur %}
+                                    <span class="text-muted"><i class="fa fa-exclamation-triangle"></i> Introuvable dans l'ENT</span>
+                                {% elif ligne.nb_diff > 0 %}
+                                    <span class="badge badge-warning">{{ ligne.nb_diff }} champ{{ ligne.nb_diff|pluralize }} différent{{ ligne.nb_diff|pluralize }}</span>
+                                {% else %}
+                                    <span class="badge badge-success">A jour</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if not ligne.erreur %}
+                    <div id="collapse_{{ ligne.individu.pk }}" class="collapse">
+                        <div class="card-body p-2">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th style="width:30px;"></th>
+                                        <th>Champ</th>
+                                        <th>Noethysweb</th>
+                                        <th>ENT</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for champ in ligne.champs %}
+                                    <tr {% if champ.different and champ.val_ent %}style="background-color: #fff9c4;"{% endif %}>
+                                        <td class="text-center">
+                                            {% if champ.val_ent %}
+                                                <input type="checkbox" name="champs_{{ ligne.individu.pk }}" value="{{ champ.code }}"
+                                                    class="case_champ case_champ_{{ ligne.individu.pk }}"
+                                                    {% if champ.different %}checked{% endif %}>
+                                            {% endif %}
+                                        </td>
+                                        <td><strong>{{ champ.label }}</strong></td>
+                                        <td>{{ champ.val_noethys|default:"<span class='text-muted'>Vide</span>" }}</td>
+                                        <td>
+                                            {% if champ.val_ent %}
+                                                {{ champ.val_ent }}
+                                                {% if champ.different %}
+                                                    <i class="fa fa-exclamation-circle text-warning ml-1"></i>
+                                                {% else %}
+                                                    <i class="fa fa-check text-green ml-1"></i>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">Non disponible dans l'ENT</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </form>
+
+        <script>
+            document.getElementById('form_synchro').addEventListener('submit', function() {
+                document.querySelectorAll('#btn_synchro, button[type=submit]').forEach(function(btn) {
+                    btn.disabled = true;
+                });
+                document.getElementById('btn_synchro').innerHTML = '<i class="fa fa-spinner fa-spin"></i> Synchronisation en cours...';
+            });
+
+            // Case à cocher par individu (dans l'en-tête, fonctionne même replié)
+            document.querySelectorAll('.select_all_individu').forEach(function(master) {
+                master.addEventListener('change', function() {
+                    var individuId = master.getAttribute('data-individu');
+                    document.querySelectorAll('.case_champ_' + individuId).forEach(function(cb) {
+                        cb.checked = master.checked;
+                    });
+                });
+            });
+
+            // Case globale : tout sélectionner
+            document.getElementById('select_all_global').addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.select_all_individu').forEach(function(cb) {
+                    cb.checked = checked;
+                });
+                document.querySelectorAll('.case_champ').forEach(function(cb) {
+                    cb.checked = checked;
+                });
+            });
+        </script>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Aucun individu importé depuis l'ENT n'a été trouvé.
+        </div>
+    {% endif %}
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}
