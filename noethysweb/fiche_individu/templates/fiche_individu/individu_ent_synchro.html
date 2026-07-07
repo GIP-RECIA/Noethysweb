@@ -20,7 +20,7 @@
                 Les champs surlignés en jaune sont différents entre Noethysweb et l'ENT.
             </p>
 
-            <form method="post">
+            <form method="post" id="form_synchro_individu">
                 {% csrf_token %}
                 <table class="table table-bordered table-sm">
                     <thead class="thead-light">
@@ -62,7 +62,7 @@
                 </table>
 
                 <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary" id="btn_synchro_individu">
                         <i class="fa fa-refresh"></i> Synchroniser les champs sélectionnés
                     </button>
                     <a href="{% url 'individu_resume' idfamille=idfamille idindividu=idindividu %}" class="btn btn-default ml-2">
@@ -82,5 +82,21 @@
             cb.checked = document.getElementById('select_all').checked;
         });
     });
+
+    var form_synchro_individu = document.getElementById('form_synchro_individu');
+    if (form_synchro_individu) {
+        form_synchro_individu.addEventListener('submit', function() {
+            var btn = document.getElementById('btn_synchro_individu');
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Synchronisation en cours...';
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }
+            });
+        });
+    }
 </script>
 {% endblock %}

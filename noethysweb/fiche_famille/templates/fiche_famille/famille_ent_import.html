@@ -10,7 +10,7 @@
     {% block box_contenu %}
 
     {# Formulaire de recherche #}
-    <form method="post">
+    <form method="post" class="form_spinner">
         {% csrf_token %}
         <input type="hidden" name="action" value="rechercher">
         <div class="row">
@@ -28,7 +28,7 @@
             </div>
             <div class="col-md-4 d-flex align-items-end">
                 <div class="form-group">
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary btn_spinner">
                         <i class="fa fa-search"></i> Rechercher
                     </button>
                 </div>
@@ -131,11 +131,11 @@
                                 {% endif %}
                             </div>
                         {% else %}
-                            <form method="post">
+                            <form method="post" class="form_spinner">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="importer">
                                 <input type="hidden" name="eleve_ent_id" value="{{ eleve.id }}">
-                                <button type="submit" class="btn btn-success">
+                                <button type="submit" class="btn btn-success btn_spinner">
                                     <i class="fa fa-download"></i> Importer cette famille
                                 </button>
                             </form>
@@ -149,4 +149,21 @@
 
     {% endblock %}
 {% endembed %}
+
+<script>
+    document.querySelectorAll('.form_spinner').forEach(function(form) {
+        form.addEventListener('submit', function() {
+            var btn = form.querySelector('.btn_spinner');
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }
+            });
+        });
+    });
+</script>
 {% endblock %}
