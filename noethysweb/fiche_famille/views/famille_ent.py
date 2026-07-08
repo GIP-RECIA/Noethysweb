@@ -1,4 +1,5 @@
 from datetime import date
+from concurrent.futures import ThreadPoolExecutor
 from django.views.generic import TemplateView
 from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy, reverse
@@ -10,6 +11,18 @@ from core.views.base import CustomView
 from core.models import Individu, Famille, Rattachement
 from core.utils.utils_ent import search_by_name, get_user
 from django.shortcuts import get_object_or_404
+
+MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
+
+
+def _get_users_parallel(ent_ids):
+    """ Récupère plusieurs utilisateurs ENT en parallèle. Retourne {ent_id: data ou None}. """
+    ent_ids = list(dict.fromkeys(ent_ids))  # dédoublonne en gardant l'ordre
+    if not ent_ids:
+        return {}
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        resultats = executor.map(lambda ent_id: (ent_id, get_user(ent_id)), ent_ids)
+    return dict(resultats)
 
 # pour formater les dates de naissnace 
 def _parse_date(valeur):
@@ -132,32 +145,46 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         # Construire une liste de familles centrées sur l'enfant, sans doublons
         familles = {}  # clé = ent_id de l'enfant
 
+        # Phase 1 : récupère en parallèle le détail de chaque résultat de recherche
+        ids_a_recuperer = [user["id"] for user in resultats_bruts if user.get("id")]
+        donnees_users = _get_users_parallel(ids_a_recuperer)
+
+        ids_enfants_a_recuperer = []
         for user in resultats_bruts:
             # L'endpoint /admin/list retourne le profil dans "type", pas "profiles"
             user_type = user.get("type") or ""
+            user_data = donnees_users.get(user.get("id"))
+            if not user_data:
+                continue
 
             if "Student" in user_type:
                 # Résultat direct : c'est un élève
-                enfant_data = get_user(user["id"])
-                if enfant_data:
-                    familles[enfant_data["id"]] = _normaliser_enfant(enfant_data)
+                familles[user_data["id"]] = _normaliser_enfant(user_data)
 
             elif "Relative" in user_type:
-                # C'est un parent : on récupère ses enfants
-                parent_data = get_user(user["id"])
-                if not parent_data:
-                    continue
-                for child in parent_data.get("children", []):
-                    if not child.get("id"):
-                        continue
-                    if child["id"] not in familles:
-                        enfant_data = get_user(child["id"])
-                        if enfant_data:
-                            familles[enfant_data["id"]] = _normaliser_enfant(enfant_data)
+                # C'est un parent : on mémorise ses enfants pour la phase 2
+                for child in user_data.get("children", []):
+                    if child.get("id") and child["id"] not in familles:
+                        ids_enfants_a_recuperer.append(child["id"])
+
+        # Phase 2 : récupère en parallèle les enfants des parents trouvés
+        if ids_enfants_a_recuperer:
+            donnees_enfants = _get_users_parallel(ids_enfants_a_recuperer)
+            for enfant_data in donnees_enfants.values():
+                if enfant_data and enfant_data["id"] not in familles:
+                    familles[enfant_data["id"]] = _normaliser_enfant(enfant_data)
 
         if not familles:
             request.session["ent_erreur"] = f"Aucune famille trouvée pour « {first_name} {last_name} » dans l'ENT."
             return
+
+        # Phase 3 : récupère en parallèle le détail de tous les parents de tous les enfants trouvés
+        ids_parents_a_recuperer = []
+        for enfant in familles.values():
+            for parent in enfant.get("parents", []):
+                if parent.get("id"):
+                    ids_parents_a_recuperer.append(parent["id"])
+        donnees_parents = _get_users_parallel(ids_parents_a_recuperer)
 
         resultats = []
         for enfant in familles.values():
@@ -171,12 +198,12 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                 enfant["deja_importe"] = False
                 enfant["famille_id"] = None
 
-            # Récupérer les détails des parents
+            # Récupérer les détails des parents (déjà récupérés en parallèle à la phase 3)
             parents_details = []
             for parent in enfant.get("parents", []):
                 if not parent.get("id"):
                     continue
-                parent_data = get_user(parent["id"])
+                parent_data = donnees_parents.get(parent["id"])
                 if parent_data:
                     parents_details.append(parent_data)
             enfant["parents_details"] = parents_details

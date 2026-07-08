@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from concurrent.futures import ThreadPoolExecutor
+
 from django.views.generic import TemplateView
 from django.contrib import messages
 from django.shortcuts import redirect
@@ -9,6 +11,15 @@ from core.views.base import CustomView
 from core.models import Individu
 from core.utils.utils_ent import get_user
 from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison
+
+MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
+
+
+def _recuperer_donnees_ent(individus):
+    """ Récupère les données ENT de plusieurs individus en parallèle. Retourne {individu.pk: data_ent ou None}. """
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        resultats = executor.map(lambda individu: (individu.pk, get_user(individu.ent_id)), individus)
+    return dict(resultats)
 
 
 class ListeSynchro(CustomView, TemplateView):
@@ -21,11 +32,12 @@ class ListeSynchro(CustomView, TemplateView):
         context['box_titre'] = "Synchronisation en masse"
         context['box_introduction'] = "Dépliez un individu pour voir le détail des champs, cochez ceux à synchroniser avec l'ENT, puis cliquez sur Synchroniser."
 
-        individus = Individu.objects.exclude(ent_id=None).exclude(ent_id="").order_by("nom", "prenom")
+        individus = list(Individu.objects.exclude(ent_id=None).exclude(ent_id="").order_by("nom", "prenom"))
+        donnees_ent = _recuperer_donnees_ent(individus)
 
         lignes = []
         for individu in individus:
-            data_ent = get_user(individu.ent_id)
+            data_ent = donnees_ent.get(individu.pk)
             if not data_ent:
                 lignes.append({"individu": individu, "erreur": True, "nb_diff": 0, "champs": []})
                 continue
@@ -39,17 +51,19 @@ class ListeSynchro(CustomView, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        individus = Individu.objects.exclude(ent_id=None).exclude(ent_id="")
+        individus = list(Individu.objects.exclude(ent_id=None).exclude(ent_id=""))
+
+        # Ne récupère les données ENT que pour les individus ayant au moins un champ coché
+        individus_a_synchroniser = [i for i in individus if request.POST.getlist(f"champs_{i.pk}")]
+        donnees_ent = _recuperer_donnees_ent(individus_a_synchroniser)
 
         nb_individus_maj = 0
         nb_champs_maj = 0
 
-        for individu in individus:
+        for individu in individus_a_synchroniser:
             champs_selectionnes = request.POST.getlist(f"champs_{individu.pk}")
-            if not champs_selectionnes:
-                continue
 
-            data_ent = get_user(individu.ent_id)
+            data_ent = donnees_ent.get(individu.pk)
             if not data_ent:
                 continue
 
