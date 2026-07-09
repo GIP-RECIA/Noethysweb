@@ -8,7 +8,7 @@ from django.db import transaction
 from urllib.parse import urlencode
 
 from core.views.base import CustomView
-from core.models import Individu, Famille, Rattachement
+from core.models import Individu, Famille, Rattachement, Prestation, Inscription
 from core.utils.utils_ent import search_by_name, get_user
 from django.shortcuts import get_object_or_404
 
@@ -464,6 +464,11 @@ class SeparerFamille(CustomView, TemplateView):
         famille_origine = get_object_or_404(Famille, pk=idfamille)
         parent = get_object_or_404(Individu, pk=id_parent)
 
+        # Détermine s'il y a un titulaire unique parmi les représentants, avant séparation
+        ratt_representants = list(Rattachement.objects.filter(famille=famille_origine, categorie=1))
+        ids_titulaires = [r.individu_id for r in ratt_representants if r.titulaire]
+        titulaire_unique_id = ids_titulaires[0] if len(ids_titulaires) == 1 else None
+
         # Créer la nouvelle famille
         nouvelle_famille = Famille()
         nouvelle_famille.mode_separation = "force"
@@ -475,6 +480,7 @@ class SeparerFamille(CustomView, TemplateView):
 
         # Copier les enfants dans la nouvelle famille
         enfants = Rattachement.objects.filter(famille=famille_origine, categorie=2)
+        ids_enfants = []
         for ratt_enfant in enfants:
             Rattachement.objects.create(
                 individu=ratt_enfant.individu,
@@ -482,6 +488,34 @@ class SeparerFamille(CustomView, TemplateView):
                 categorie=2,
                 titulaire=False,
             )
+            ids_enfants.append(ratt_enfant.individu_id)
+
+        # Migration des prestations non facturées : suivent le parent qui part si c'est lui
+        # le bénéficiaire direct, ou si c'est un enfant partagé dont le parent qui part est
+        # l'unique titulaire du dossier. Sinon (ambigu), la prestation reste dans l'ancienne
+        # famille par défaut - à réattribuer manuellement par l'agent si besoin.
+        nb_prestations_migrees = 0
+        prestations_non_facturees = Prestation.objects.filter(famille=famille_origine, facture__isnull=True)
+        for prestation in prestations_non_facturees:
+            migrer = False
+            if prestation.individu_id == parent.pk:
+                migrer = True
+            elif prestation.individu_id in ids_enfants and titulaire_unique_id == parent.pk:
+                migrer = True
+
+            if migrer:
+                prestation.famille = nouvelle_famille
+                prestation.save()
+                nb_prestations_migrees += 1
+
+        # Migration des inscriptions du parent qui part, pour que ses futures réservations
+        # soient bien rattachées à sa nouvelle famille
+        Inscription.objects.filter(famille=famille_origine, individu=parent).update(famille=nouvelle_famille)
+
+        # Si plus aucun titulaire ne reste dans l'ancienne famille (le parent qui part
+        # était l'unique titulaire), on promeut automatiquement les représentants restants
+        if not Rattachement.objects.filter(famille=famille_origine, categorie=1, titulaire=True).exists():
+            Rattachement.objects.filter(famille=famille_origine, categorie=1).update(titulaire=True)
 
         # Marquer les deux familles
         famille_origine.mode_separation = "force"
@@ -489,5 +523,8 @@ class SeparerFamille(CustomView, TemplateView):
         famille_origine.Maj_infos()
         nouvelle_famille.Maj_infos()
 
-        messages.success(request, f"Famille séparée. Nouvelle famille créée pour {parent.prenom} {parent.nom}.")
+        message = f"Famille séparée. Nouvelle famille créée pour {parent.prenom} {parent.nom}."
+        if nb_prestations_migrees:
+            message += f" {nb_prestations_migrees} prestation(s) non facturée(s) migrée(s) vers la nouvelle famille."
+        messages.success(request, message)
         return HttpResponseRedirect(reverse("famille_resume", kwargs={"idfamille": nouvelle_famille.pk}))
