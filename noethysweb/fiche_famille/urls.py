@@ -80,6 +80,7 @@ urlpatterns = [
     path('individus/familles/prestations/modifier/<int:idfamille>/<int:pk>', famille_prestations.Modifier.as_view(), name='famille_prestations_modifier'),
     path('individus/familles/prestations/supprimer/<int:idfamille>/<int:pk>', famille_prestations.Supprimer.as_view(), name='famille_prestations_supprimer'),
     path('individus/familles/prestations/supprimer_plusieurs/<int:idfamille>/<str:listepk>', famille_prestations.Supprimer_plusieurs.as_view(), name='famille_prestations_supprimer_plusieurs'),
+    path('individus/familles/prestations/reattribuer/<int:idfamille>/<int:pk>', famille_prestations.ReattribuerPrestation.as_view(), name='famille_prestations_reattribuer'),
 
     path('individus/familles/factures/liste/<int:idfamille>', famille_factures.Liste.as_view(), name='famille_factures_liste'),
     path('individus/familles/factures/ajouter/<int:idfamille>', famille_factures.Ajouter.as_view(), name='famille_factures_ajouter'),
