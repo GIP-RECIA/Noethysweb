@@ -35,7 +35,7 @@
                     </thead>
                     <tbody>
                         {% for ligne in lignes %}
-                        <tr {% if ligne.different %}style="background-color: #fff9c4;"{% endif %}>
+                        <tr {% if ligne.different and ligne.val_ent %}style="background-color: #fff9c4;"{% endif %}>
                             <td class="text-center">
                                 {% if ligne.val_ent %}
                                     <input type="checkbox" name="champs" value="{{ ligne.code }}"
