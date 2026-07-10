@@ -95,9 +95,8 @@ def search_users(profile=None, structure_id=None):
     Retourne tous les utilisateurs d'un profil, filtrés optionnellement par école.
     profile : 'Student', 'Relative', 'Teacher', 'Personnel'
     """
-    headers = get_headers()
     base_url = _get_base_url()
-    if not headers or not base_url:
+    if not base_url:
         return []
 
     params = {}
@@ -115,9 +114,8 @@ def search_students_by_name(last_name, first_name, structure_id=None):
     Recherche des élèves par prénom ET nom (obligatoires tous les deux).
     L'API exige les deux ensemble — un seul retourne 404.
     """
-    headers = get_headers()
     base_url = _get_base_url()
-    if not headers or not base_url:
+    if not base_url:
         return []
 
     params = {"firstName": first_name, "lastName": last_name}
@@ -134,7 +132,7 @@ def search_by_name(last_name, first_name):
     Retourne None si la connexion échoue, liste vide si aucun résultat.
     """
     base_url = _get_base_url()
-    if not get_headers() or not base_url:
+    if not base_url:
         return None
 
     params = {"firstName": first_name, "lastName": last_name}
@@ -149,9 +147,8 @@ def get_user(ent_id):
     GET /directory/user/:userid
     Retourne les données complètes d'un utilisateur (adresse, email, enfants, parents...).
     """
-    headers = get_headers()
     base_url = _get_base_url()
-    if not headers or not base_url:
+    if not base_url:
         return None
 
     return _api_get(f"{base_url}/directory/user/{ent_id}")
@@ -162,9 +159,8 @@ def get_school(school_id):
     GET /directory/school/:schoolid
     Retourne les infos d'un établissement (nom, UAI, adresse...).
     """
-    headers = get_headers()
     base_url = _get_base_url()
-    if not headers or not base_url:
+    if not base_url:
         return None
 
     return _api_get(f"{base_url}/directory/school/{school_id}")
@@ -175,9 +171,8 @@ def get_classes(structure_id):
     GET /directory/class/admin/list
     Retourne les classes d'un établissement.
     """
-    headers = get_headers()
     base_url = _get_base_url()
-    if not headers or not base_url:
+    if not base_url:
         return []
 
     result = _api_get(f"{base_url}/directory/class/admin/list", params={"structureId": structure_id})
