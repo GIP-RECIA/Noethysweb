@@ -418,6 +418,18 @@ class FusionnerFamilles(CustomView, TemplateView):
             else:
                 ratt.delete()
 
+        # Migrer toutes les autres données liées à la famille source (factures, prestations,
+        # règlements, messages du portail, historique...) vers la famille cible. Sans ça, la
+        # suppression ci-dessous plante dès que la famille source a la moindre activité, ou
+        # supprime silencieusement certaines données (tables en on_delete=CASCADE).
+        # On se base sur Famille._meta.related_objects plutôt qu'une liste figée de modèles,
+        # pour que ça reste correct même si un nouveau modèle lié à Famille est ajouté plus tard.
+        for related in Famille._meta.related_objects:
+            if related.related_model is Rattachement:
+                continue  # déjà géré ci-dessus
+            champ = related.field.name
+            related.related_model.objects.filter(**{champ: famille_source}).update(**{champ: famille_cible})
+
         # Supprimer la famille source
         famille_source.delete()
 
