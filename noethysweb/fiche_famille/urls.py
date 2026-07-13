@@ -23,6 +23,7 @@ urlpatterns = [
     path('individus/familles/liste', famille.Liste.as_view(), name='famille_liste'),
     path('individus/familles/ajouter', famille_ajouter.Creer_famille.as_view(), name='famille_ajouter'),
     path('individus/familles/ent/importer', famille_ent.ImporterFamilleEnt.as_view(), name='ent_import_famille'),
+    path('individus/familles/ent/importer_masse', famille_ent.ImporterEnMasseEnt.as_view(), name='ent_import_masse'),
     path('individus/familles/fusionner/<int:idfamille>', famille_ent.FusionnerFamilles.as_view(), name='famille_fusionner'),
     path('individus/familles/separer/<int:idfamille>', famille_ent.SeparerFamille.as_view(), name='famille_separer'),
     path('individus/familles/ent/synchronisation', famille_ent_synchro.ListeSynchro.as_view(), name='ent_synchro_masse'),

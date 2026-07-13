@@ -13,7 +13,7 @@ from core.models import (
     Note, Piece, Historique, Destinataire, DestinataireSMS, QuestionnaireReponse,
     PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
 )
-from core.utils.utils_ent import search_by_name, get_user
+from core.utils.utils_ent import search_by_name, search_users, get_user
 from django.shortcuts import get_object_or_404
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
@@ -82,6 +82,132 @@ def _normaliser_enfant(data):
     else:
         data["classe_nom"] = None
     return data
+
+
+def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
+    """
+    Importe un élève et sa famille depuis l'ENT (logique partagée entre l'import unitaire
+    et l'import en masse). `eleve_data` et `parents_cache` peuvent être fournis pré-chargés
+    (récupérés en parallèle en amont) pour éviter de refaire les appels API un par un.
+    Retourne un dict {"statut": "importe"|"deja_importe"|"erreur", "message": str, "famille_id": int|None,
+    "type": "famille_existante"|"nouvelle_famille"|"nouvelle_famille_separee"|None}. Le champ "type" précise,
+    quand statut="importe", si l'élève a rejoint une famille déjà créée (frère/soeur) ou si une nouvelle
+    famille a été créée pour lui — utile pour ne pas confondre "élèves importés" et "familles créées"
+    dans un résumé d'import en masse.
+    """
+    if Individu.objects.filter(ent_id=eleve_ent_id).exists():
+        return {"statut": "deja_importe", "message": "Élève déjà importé.", "famille_id": None, "type": None}
+
+    if eleve_data is None:
+        eleve_data = get_user(eleve_ent_id)
+    if not eleve_data:
+        return {"statut": "erreur", "message": "Impossible de récupérer les données depuis l'ENT.", "famille_id": None, "type": None}
+
+    def Get_parent_data(parent_id):
+        if parents_cache is not None and parent_id in parents_cache:
+            return parents_cache[parent_id]
+        return get_user(parent_id)
+
+    try:
+        with transaction.atomic():
+            eleve = Individu(
+                nom=eleve_data.get("lastName", ""),
+                prenom=eleve_data.get("firstName", ""),
+                civilite=_convertir_civilite(eleve_data.get("title")),
+                date_naiss=_parse_date(eleve_data.get("birthDate")),
+                mail=eleve_data.get("email") or None,
+                tel_domicile=eleve_data.get("phone") or None,
+                tel_mobile=eleve_data.get("mobile") or None,
+                rue_resid=eleve_data.get("address") or None,
+                cp_resid=eleve_data.get("zipCode") or None,
+                ville_resid=eleve_data.get("city") or None,
+                ent_id=eleve_ent_id,
+            )
+            eleve.save()
+
+            parents_data = []
+            for parent_info in eleve_data.get("parents", []):
+                parent_data = Get_parent_data(parent_info["id"])
+                if parent_data:
+                    parents_data.append((parent_info["id"], parent_data))
+
+            parents_existants = []
+            for ent_id_parent, parent_data in parents_data:
+                parent = Individu.objects.filter(ent_id=ent_id_parent).first()
+                if parent:
+                    parents_existants.append(parent)
+
+            if parents_existants:
+                # Au moins un parent existe déjà — ajouter l'enfant à ses familles
+                familles_ajoutees = set()
+                for parent in parents_existants:
+                    for ratt in Rattachement.objects.filter(individu=parent, categorie=1):
+                        if ratt.famille_id not in familles_ajoutees:
+                            Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
+                            ratt.famille.Maj_infos()
+                            familles_ajoutees.add(ratt.famille_id)
+                famille_id = list(familles_ajoutees)[0]
+                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} ajouté(e) à une famille existante.", "famille_id": famille_id, "type": "famille_existante"}
+
+            # Détecter si les parents ont des adresses différentes
+            separes = (
+                len(parents_data) >= 2 and
+                _adresses_differentes(parents_data[0][1], parents_data[1][1])
+            )
+
+            if separes:
+                # Créer une famille séparée par parent
+                premiere_famille_id = None
+                for ent_id_parent, parent_data in parents_data:
+                    famille = Famille()
+                    famille.mode_separation = "automatique"
+                    famille.save()
+                    if premiere_famille_id is None:
+                        premiere_famille_id = famille.pk
+                    parent = Individu(
+                        nom=parent_data.get("lastName", ""),
+                        prenom=parent_data.get("firstName", ""),
+                        civilite=_convertir_civilite(parent_data.get("title")),
+                        date_naiss=_parse_date(parent_data.get("birthDate")),
+                        mail=parent_data.get("email") or None,
+                        tel_domicile=parent_data.get("phone") or None,
+                        tel_mobile=parent_data.get("mobile") or None,
+                        rue_resid=parent_data.get("address") or None,
+                        cp_resid=parent_data.get("zipCode") or None,
+                        ville_resid=parent_data.get("city") or None,
+                        ent_id=ent_id_parent,
+                    )
+                    parent.save()
+                    Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+                    Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
+                    famille.Maj_infos()
+                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e), 2 familles séparées créées.", "famille_id": premiere_famille_id, "type": "nouvelle_famille_separee"}
+
+            else:
+                # Famille unique
+                famille = Famille()
+                famille.save()
+                Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
+                for ent_id_parent, parent_data in parents_data:
+                    parent = Individu(
+                        nom=parent_data.get("lastName", ""),
+                        prenom=parent_data.get("firstName", ""),
+                        civilite=_convertir_civilite(parent_data.get("title")),
+                        date_naiss=_parse_date(parent_data.get("birthDate")),
+                        mail=parent_data.get("email") or None,
+                        tel_domicile=parent_data.get("phone") or None,
+                        tel_mobile=parent_data.get("mobile") or None,
+                        rue_resid=parent_data.get("address") or None,
+                        cp_resid=parent_data.get("zipCode") or None,
+                        ville_resid=parent_data.get("city") or None,
+                        ent_id=ent_id_parent,
+                    )
+                    parent.save()
+                    Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+                famille.Maj_infos()
+                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e).", "famille_id": famille.pk, "type": "nouvelle_famille"}
+    except Exception as e:
+        return {"statut": "erreur", "message": str(e), "famille_id": None, "type": None}
 
 
 class ImporterFamilleEnt(CustomView, TemplateView):
@@ -243,135 +369,103 @@ class ImporterFamilleEnt(CustomView, TemplateView):
 
         request.session["ent_resultats"] = resultats
 
-    @transaction.atomic
     def _importer(self, request):
         eleve_ent_id = request.POST.get("eleve_ent_id")
         if not eleve_ent_id:
             messages.error(request, "Données manquantes.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        if Individu.objects.filter(ent_id=eleve_ent_id).exists():
+        resultat = _importer_eleve_ent(eleve_ent_id)
+
+        if resultat["statut"] == "deja_importe":
             messages.warning(request, "Cet élève a déjà été importé.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
-
-        eleve_data = get_user(eleve_ent_id)
-        if not eleve_data:
-            messages.error(request, "Impossible de récupérer les données de l'élève depuis l'ENT.")
+        elif resultat["statut"] == "erreur":
+            messages.error(request, resultat["message"])
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
-
-        # Créer l'élève (une seule fois)
-        eleve = Individu(
-            nom=eleve_data.get("lastName", ""),
-            prenom=eleve_data.get("firstName", ""),
-            civilite=_convertir_civilite(eleve_data.get("title")),
-            date_naiss=_parse_date(eleve_data.get("birthDate")),
-            mail=eleve_data.get("email") or None,
-            tel_domicile=eleve_data.get("phone") or None,
-            tel_mobile=eleve_data.get("mobile") or None,
-            rue_resid=eleve_data.get("address") or None,
-            cp_resid=eleve_data.get("zipCode") or None,
-            ville_resid=eleve_data.get("city") or None,
-            ent_id=eleve_ent_id,
-        )
-        eleve.save()
-
-        # Récupérer les données des parents
-        parents_data = []
-        for parent_info in eleve_data.get("parents", []):
-            parent_data = get_user(parent_info["id"])
-            if parent_data:
-                parents_data.append((parent_info["id"], parent_data))
-
-        # Vérifier si les parents existent déjà dans Noethysweb
-        parents_existants = []
-        for ent_id_parent, parent_data in parents_data:
-            parent = Individu.objects.filter(ent_id=ent_id_parent).first()
-            if parent:
-                parents_existants.append(parent)
-
-        if parents_existants:
-            # Au moins un parent existe déjà — ajouter l'enfant à ses familles
-            familles_ajoutees = set()
-            for parent in parents_existants:
-                for ratt in Rattachement.objects.filter(individu=parent, categorie=1):
-                    if ratt.famille_id not in familles_ajoutees:
-                        Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
-                        ratt.famille.Maj_infos()
-                        familles_ajoutees.add(ratt.famille_id)
-
-            premiere_famille_id = list(familles_ajoutees)[0]
-            noms_parents = " et ".join([f"{p.prenom} {p.nom}" for p in parents_existants])
-            if len(familles_ajoutees) > 1:
-                messages.success(request, f"{eleve.prenom} a été ajouté aux {len(familles_ajoutees)} familles de {noms_parents}.")
-            else:
-                messages.success(request, f"{eleve.prenom} a été ajouté à la famille existante de {noms_parents}.")
-            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": premiere_famille_id}))
-
-        # Détecter si les parents ont des adresses différentes
-        separes = (
-            len(parents_data) >= 2 and
-            _adresses_differentes(parents_data[0][1], parents_data[1][1])
-        )
-
-        if separes:
-            # Créer une famille séparée par parent
-            premiere_famille_id = None
-            for ent_id_parent, parent_data in parents_data:
-                famille = Famille()
-                famille.mode_separation = "automatique"
-                famille.save()
-
-                if premiere_famille_id is None:
-                    premiere_famille_id = famille.pk
-
-                parent = Individu(
-                    nom=parent_data.get("lastName", ""),
-                    prenom=parent_data.get("firstName", ""),
-                    civilite=_convertir_civilite(parent_data.get("title")),
-                    date_naiss=_parse_date(parent_data.get("birthDate")),
-                    mail=parent_data.get("email") or None,
-                    tel_domicile=parent_data.get("phone") or None,
-                    tel_mobile=parent_data.get("mobile") or None,
-                    rue_resid=parent_data.get("address") or None,
-                    cp_resid=parent_data.get("zipCode") or None,
-                    ville_resid=parent_data.get("city") or None,
-                    ent_id=ent_id_parent,
-                )
-                parent.save()
-
-                Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
-                Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
-                famille.Maj_infos()
-
-            messages.success(request, "Deux familles séparées ont été créées automatiquement (adresses différentes).")
-            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": premiere_famille_id}))
-
         else:
-            # Famille unique
-            famille = Famille()
-            famille.save()
-            Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
+            messages.success(request, resultat["message"])
+            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": resultat["famille_id"]}))
 
-            for ent_id_parent, parent_data in parents_data:
-                parent = Individu(
-                    nom=parent_data.get("lastName", ""),
-                    prenom=parent_data.get("firstName", ""),
-                    civilite=_convertir_civilite(parent_data.get("title")),
-                    date_naiss=_parse_date(parent_data.get("birthDate")),
-                    mail=parent_data.get("email") or None,
-                    tel_domicile=parent_data.get("phone") or None,
-                    tel_mobile=parent_data.get("mobile") or None,
-                    rue_resid=parent_data.get("address") or None,
-                    cp_resid=parent_data.get("zipCode") or None,
-                    ville_resid=parent_data.get("city") or None,
-                    ent_id=ent_id_parent,
-                )
-                parent.save()
-                Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
 
-            famille.Maj_infos()
-            messages.success(request, "Famille importée avec succès.")
-            return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": famille.pk}))
+class ImporterEnMasseEnt(CustomView, TemplateView):
+    template_name = "fiche_famille/famille_ent_import_masse.html"
+    menu_code = "famille_liste"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_titre"] = "Importer en masse depuis l'ENT"
+        context["box_titre"] = "Import en masse"
+        context["box_introduction"] = "Sélectionnez les élèves à importer depuis l'ENT, puis cliquez sur Importer."
+
+        eleves_bruts = search_users(profile="Student")
+        eleves = []
+        for eleve_data in eleves_bruts:
+            eleve_data = _normaliser_enfant(dict(eleve_data))
+            individu_existant = Individu.objects.filter(ent_id=eleve_data.get("id")).first()
+            eleve_data["deja_importe"] = individu_existant is not None
+            if individu_existant:
+                ratt = Rattachement.objects.filter(individu=individu_existant, categorie=2).first()
+                eleve_data["famille_id"] = ratt.famille_id if ratt else None
+            else:
+                eleve_data["famille_id"] = None
+            eleves.append(eleve_data)
+
+        context["eleves"] = eleves
+        context["nb_a_importer"] = sum(1 for e in eleves if not e["deja_importe"])
+        return context
+
+    def get(self, request, *args, **kwargs):
+        context = self.get_context_data()
+        context["resume"] = request.session.pop("ent_import_masse_resume", None)
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        ids_selectionnes = request.POST.getlist("eleves_ent_id")
+        if not ids_selectionnes:
+            messages.error(request, "Aucun élève sélectionné.")
+            return HttpResponseRedirect(reverse("ent_import_masse"))
+
+        # Phase 1 : récupère en parallèle le détail de chaque élève sélectionné
+        eleves_data = _get_users_parallel(ids_selectionnes)
+
+        # Phase 2 : récupère en parallèle le détail de tous les parents concernés
+        ids_parents = []
+        for eleve_data in eleves_data.values():
+            if eleve_data:
+                for parent_info in eleve_data.get("parents", []):
+                    if parent_info.get("id"):
+                        ids_parents.append(parent_info["id"])
+        parents_cache = _get_users_parallel(ids_parents)
+
+        nb_eleves_importes, nb_ignores, nb_erreurs = 0, 0, 0
+        nb_nouvelles_familles, nb_familles_existantes = 0, 0
+        erreurs_detail = []
+        for eleve_ent_id in ids_selectionnes:
+            resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleves_data.get(eleve_ent_id), parents_cache=parents_cache)
+            if resultat["statut"] == "importe":
+                nb_eleves_importes += 1
+                if resultat["type"] == "famille_existante":
+                    nb_familles_existantes += 1
+                elif resultat["type"] == "nouvelle_famille_separee":
+                    nb_nouvelles_familles += 2  # 2 fiches créées (parents séparés)
+                else:
+                    nb_nouvelles_familles += 1
+            elif resultat["statut"] == "deja_importe":
+                nb_ignores += 1
+            else:
+                nb_erreurs += 1
+                erreurs_detail.append(resultat["message"])
+
+        request.session["ent_import_masse_resume"] = {
+            "nb_eleves_importes": nb_eleves_importes,
+            "nb_nouvelles_familles": nb_nouvelles_familles,
+            "nb_familles_existantes": nb_familles_existantes,
+            "nb_ignores": nb_ignores,
+            "nb_erreurs": nb_erreurs,
+            "erreurs_detail": erreurs_detail,
+        }
+        return HttpResponseRedirect(reverse("ent_import_masse"))
 
 
 class FusionnerFamilles(CustomView, TemplateView):

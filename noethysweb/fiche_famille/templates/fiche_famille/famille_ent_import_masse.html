@@ -1,0 +1,106 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    {% if resume %}
+        <div class="alert {% if resume.nb_erreurs %}alert-warning{% else %}alert-success{% endif %} mt-2">
+            <i class="fa fa-info-circle"></i>
+            <strong>{{ resume.nb_eleves_importes }}</strong> élève{{ resume.nb_eleves_importes|pluralize }} importé{{ resume.nb_eleves_importes|pluralize }},
+            <strong>{{ resume.nb_ignores }}</strong> ignoré{{ resume.nb_ignores|pluralize }} (élève{{ resume.nb_ignores|pluralize }} déjà importé{{ resume.nb_ignores|pluralize }} précédemment),
+            <strong>{{ resume.nb_erreurs }}</strong> erreur{{ resume.nb_erreurs|pluralize }}.
+        </div>
+        {% if resume.erreurs_detail %}
+        <div class="alert alert-danger">
+            <strong>Détail des erreurs :</strong>
+            <ul class="mb-0">
+                {% for erreur in resume.erreurs_detail %}
+                    <li>{{ erreur }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <hr>
+    {% endif %}
+
+    {% if eleves %}
+        <form method="post" id="form_import_masse" class="form_spinner">
+            {% csrf_token %}
+            <div class="d-flex align-items-center mb-3">
+                <button type="submit" class="btn btn-success mr-3 btn_spinner">
+                    <i class="fa fa-download"></i> Importer les élèves sélectionnés
+                </button>
+                <label class="mb-0">
+                    <input type="checkbox" id="select_all_global"> Tout sélectionner ({{ nb_a_importer }} élève{{ nb_a_importer|pluralize }} à importer)
+                </label>
+            </div>
+
+            <table class="table table-bordered table-sm">
+                <thead class="thead-light">
+                    <tr>
+                        <th style="width:30px;"></th>
+                        <th>Élève</th>
+                        <th>École</th>
+                        <th>Classe</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve in eleves %}
+                    <tr>
+                        <td class="text-center">
+                            {% if not eleve.deja_importe %}
+                                <input type="checkbox" name="eleves_ent_id" value="{{ eleve.id }}" class="case_eleve">
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if eleve.deja_importe and eleve.famille_id %}
+                                <a href="{% url 'famille_resume' idfamille=eleve.famille_id %}" target="_blank">{{ eleve.firstName }} {{ eleve.lastName }}</a>
+                            {% else %}
+                                {{ eleve.firstName }} {{ eleve.lastName }}
+                            {% endif %}
+                        </td>
+                        <td>{{ eleve.ecole_nom|default:"Non renseignée" }}</td>
+                        <td>{{ eleve.classe_nom|default:"Non renseignée" }}</td>
+                        <td>
+                            {% if eleve.deja_importe %}
+                                <span class="badge badge-success">Déjà importé</span>
+                            {% else %}
+                                <span class="badge badge-secondary">À importer</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </form>
+
+        <script>
+            document.getElementById('form_import_masse').addEventListener('submit', function() {
+                var btn = document.querySelector('.btn_spinner');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Import en cours, merci de patienter...';
+            });
+
+            document.getElementById('select_all_global').addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.case_eleve').forEach(function(cb) {
+                    cb.checked = checked;
+                });
+            });
+        </script>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Aucun élève trouvé dans l'ENT.
+        </div>
+    {% endif %}
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}
