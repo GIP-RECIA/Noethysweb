@@ -8,7 +8,11 @@ from django.db import transaction
 from urllib.parse import urlencode
 
 from core.views.base import CustomView
-from core.models import Individu, Famille, Rattachement, Prestation, Inscription
+from core.models import (
+    Individu, Famille, Rattachement, Prestation, Inscription, Deduction,
+    Note, Piece, Historique, Destinataire, DestinataireSMS, QuestionnaireReponse,
+    PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
+)
 from core.utils.utils_ent import search_by_name, get_user
 from django.shortcuts import get_object_or_404
 
@@ -442,6 +446,27 @@ class FusionnerFamilles(CustomView, TemplateView):
         return HttpResponseRedirect(reverse("famille_resume", kwargs={"idfamille": idfamille}))
 
 
+# Tables liées à un individu précis qui doivent suivre la même règle que les Prestations
+# lors d'une séparation manuelle (contrairement aux tables liées uniquement à la famille
+# dans son ensemble, comme Facture ou Quotient, qui ne migrent jamais).
+MODELES_A_MIGRER_PAR_INDIVIDU = [
+    Note, Piece, Historique, Destinataire, DestinataireSMS, QuestionnaireReponse,
+    PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
+]
+
+
+def _migrer_donnees_individu(model, famille_origine, nouvelle_famille, parent, ids_enfants, titulaire_unique_id):
+    """
+    Migre vers la nouvelle famille les lignes de `model` qui concernent soit le parent qui
+    part, soit un enfant partagé si le parent qui part était l'unique titulaire du dossier.
+    Les lignes sans individu renseigné (données générales à la famille) ne migrent jamais.
+    """
+    nb = model.objects.filter(famille=famille_origine, individu=parent).update(famille=nouvelle_famille)
+    if titulaire_unique_id == parent.pk and ids_enfants:
+        nb += model.objects.filter(famille=famille_origine, individu_id__in=ids_enfants).update(famille=nouvelle_famille)
+    return nb
+
+
 class SeparerFamille(CustomView, TemplateView):
     template_name = "fiche_famille/famille_ent_separer.html"
     menu_code = "famille_liste"
@@ -507,6 +532,7 @@ class SeparerFamille(CustomView, TemplateView):
         # l'unique titulaire du dossier. Sinon (ambigu), la prestation reste dans l'ancienne
         # famille par défaut - à réattribuer manuellement par l'agent si besoin.
         nb_prestations_migrees = 0
+        ids_prestations_migrees = []
         prestations_non_facturees = Prestation.objects.filter(famille=famille_origine, facture__isnull=True)
         for prestation in prestations_non_facturees:
             migrer = False
@@ -519,10 +545,20 @@ class SeparerFamille(CustomView, TemplateView):
                 prestation.famille = nouvelle_famille
                 prestation.save()
                 nb_prestations_migrees += 1
+                ids_prestations_migrees.append(prestation.pk)
+
+        # Les déductions suivent automatiquement la prestation à laquelle elles sont attachées
+        if ids_prestations_migrees:
+            Deduction.objects.filter(prestation_id__in=ids_prestations_migrees).update(famille=nouvelle_famille)
 
         # Migration des inscriptions du parent qui part, pour que ses futures réservations
         # soient bien rattachées à sa nouvelle famille
         Inscription.objects.filter(famille=famille_origine, individu=parent).update(famille=nouvelle_famille)
+
+        # Migration des données liées à un individu précis (notes, contacts d'urgence, mandats,
+        # assurances...) : même règle que pour les prestations.
+        for model in MODELES_A_MIGRER_PAR_INDIVIDU:
+            _migrer_donnees_individu(model, famille_origine, nouvelle_famille, parent, ids_enfants, titulaire_unique_id)
 
         # Si plus aucun titulaire ne reste dans l'ancienne famille (le parent qui part
         # était l'unique titulaire), on promeut automatiquement les représentants restants
