@@ -10,7 +10,7 @@ from django.urls import reverse
 from core.views.base import CustomView
 from core.models import Individu
 from core.utils.utils_ent import get_user, get_headers
-from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison
+from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison, Appliquer_sync_ecole_classe
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
 
@@ -79,6 +79,11 @@ class ListeSynchro(CustomView, TemplateView):
                 if champ["code"] in champs_selectionnes:
                     val_ent = data_ent.get(champ["ent_key"]) or ""
                     setattr(individu, champ["code"], val_ent or None)
+                    nb_champs_maj += 1
+                    modifie = True
+
+            if "ecole_classe" in champs_selectionnes:
+                if Appliquer_sync_ecole_classe(individu, data_ent):
                     nb_champs_maj += 1
                     modifie = True
 
