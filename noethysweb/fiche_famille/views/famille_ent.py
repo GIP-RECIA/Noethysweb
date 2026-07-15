@@ -200,6 +200,11 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
             )
             eleve.save()
 
+            # Enregistre la scolarité (école/classe) de l'élève, indépendamment de la
+            # situation familiale déterminée plus bas.
+            eleve_data = _normaliser_enfant(eleve_data)
+            _creer_scolarite(eleve, eleve_data)
+
             parents_data = []
             for parent_info in eleve_data.get("parents", []):
                 parent_data = Get_parent_data(parent_info["id"])
