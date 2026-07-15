@@ -29,7 +29,11 @@
         <hr>
     {% endif %}
 
-    {% if eleves %}
+    {% if erreur_connexion %}
+        <div class="alert alert-danger">
+            <i class="fa fa-exclamation-triangle"></i> Impossible de se connecter à l'ENT. Vérifiez dans le paramétrage que la connexion ENT est active et que les identifiants sont corrects, puis réessayez.
+        </div>
+    {% elif eleves %}
         <form method="post" id="form_import_masse" class="form_spinner">
             {% csrf_token %}
             <div class="d-flex align-items-center mb-3">

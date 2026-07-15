@@ -13,7 +13,7 @@ from core.models import (
     Note, Piece, Historique, Destinataire, DestinataireSMS, QuestionnaireReponse,
     PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
 )
-from core.utils.utils_ent import search_by_name, search_users, get_user
+from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers
 from django.shortcuts import get_object_or_404
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
@@ -262,6 +262,14 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         request.session["ent_last_name"] = last_name
         request.session["ent_first_name"] = first_name
 
+        # Vérifie la connexion avant la recherche : search_by_name() renvoie une liste vide
+        # aussi bien quand la recherche ne trouve rien que quand la connexion échoue
+        # (identifiants incorrects, ENT désactivé...) - sans ce test, l'agent verrait
+        # "Aucun résultat" dans les deux cas sans savoir qu'il y a un vrai problème.
+        if get_headers() is None:
+            request.session["ent_erreur"] = "Impossible de se connecter à l'ENT. Vérifiez dans le paramétrage que la connexion ENT est active et que les identifiants sont corrects."
+            return
+
         resultats_bruts = search_by_name(last_name=last_name, first_name=first_name)
 
         if resultats_bruts is None:
@@ -398,18 +406,25 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         context["box_titre"] = "Import en masse"
         context["box_introduction"] = "Sélectionnez les élèves à importer depuis l'ENT, puis cliquez sur Importer."
 
-        eleves_bruts = search_users(profile="Student")
+        # Vérifie la connexion avant d'interroger l'ENT : search_users() renvoie [] aussi bien
+        # quand l'ENT n'a réellement aucun élève que quand la connexion échoue (identifiants
+        # incorrects, ENT désactivé, panne...). Sans cette vérification, l'agent verrait le même
+        # message "Aucun élève trouvé" dans les deux cas, sans savoir qu'il y a un vrai problème.
+        context["erreur_connexion"] = get_headers() is None
+
         eleves = []
-        for eleve_data in eleves_bruts:
-            eleve_data = _normaliser_enfant(dict(eleve_data))
-            individu_existant = Individu.objects.filter(ent_id=eleve_data.get("id")).first()
-            eleve_data["deja_importe"] = individu_existant is not None
-            if individu_existant:
-                ratt = Rattachement.objects.filter(individu=individu_existant, categorie=2).first()
-                eleve_data["famille_id"] = ratt.famille_id if ratt else None
-            else:
-                eleve_data["famille_id"] = None
-            eleves.append(eleve_data)
+        if not context["erreur_connexion"]:
+            eleves_bruts = search_users(profile="Student")
+            for eleve_data in eleves_bruts:
+                eleve_data = _normaliser_enfant(dict(eleve_data))
+                individu_existant = Individu.objects.filter(ent_id=eleve_data.get("id")).first()
+                eleve_data["deja_importe"] = individu_existant is not None
+                if individu_existant:
+                    ratt = Rattachement.objects.filter(individu=individu_existant, categorie=2).first()
+                    eleve_data["famille_id"] = ratt.famille_id if ratt else None
+                else:
+                    eleve_data["famille_id"] = None
+                eleves.append(eleve_data)
 
         context["eleves"] = eleves
         context["nb_a_importer"] = sum(1 for e in eleves if not e["deja_importe"])

@@ -9,7 +9,7 @@ from django.urls import reverse
 
 from core.views.base import CustomView
 from core.models import Individu
-from core.utils.utils_ent import get_user
+from core.utils.utils_ent import get_user, get_headers
 from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
@@ -32,20 +32,27 @@ class ListeSynchro(CustomView, TemplateView):
         context['box_titre'] = "Synchronisation en masse"
         context['box_introduction'] = "Dépliez un individu pour voir le détail des champs, cochez ceux à synchroniser avec l'ENT, puis cliquez sur Synchroniser."
 
-        individus = list(Individu.objects.exclude(ent_id=None).exclude(ent_id="").order_by("nom", "prenom"))
-        donnees_ent = _recuperer_donnees_ent(individus)
+        # Vérifie la connexion avant d'interroger l'ENT : si elle échoue pour tout le monde
+        # (identifiants incorrects, ENT désactivé...), chaque individu se retrouverait marqué
+        # "Introuvable dans l'ENT" comme s'il avait été supprimé côté ENT, alors que c'est en
+        # fait une panne de connexion générale - deux situations très différentes à ne pas confondre.
+        context['erreur_connexion'] = get_headers() is None
 
         lignes = []
-        for individu in individus:
-            data_ent = donnees_ent.get(individu.pk)
-            if not data_ent:
-                lignes.append({"individu": individu, "erreur": True, "nb_diff": 0, "champs": []})
-                continue
+        if not context['erreur_connexion']:
+            individus = list(Individu.objects.exclude(ent_id=None).exclude(ent_id="").order_by("nom", "prenom"))
+            donnees_ent = _recuperer_donnees_ent(individus)
 
-            champs = Get_lignes_comparaison(individu, data_ent)
-            nb_diff = len([c for c in champs if c["different"] and c["val_ent"]])
+            for individu in individus:
+                data_ent = donnees_ent.get(individu.pk)
+                if not data_ent:
+                    lignes.append({"individu": individu, "erreur": True, "nb_diff": 0, "champs": []})
+                    continue
 
-            lignes.append({"individu": individu, "erreur": False, "nb_diff": nb_diff, "champs": champs})
+                champs = Get_lignes_comparaison(individu, data_ent)
+                nb_diff = len([c for c in champs if c["different"] and c["val_ent"]])
+
+                lignes.append({"individu": individu, "erreur": False, "nb_diff": nb_diff, "champs": champs})
 
         context['lignes'] = lignes
         return context
