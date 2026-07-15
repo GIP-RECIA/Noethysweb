@@ -40,13 +40,23 @@ def _parse_date(valeur):
 
 
 def _convertir_civilite(valeur):
-    """Convertit la civilité ENT (texte) en ID Noethysweb."""
+    """Convertit la civilité ENT (texte) en ID Noethysweb (catégorie adulte : Monsieur/Mademoiselle/Madame)."""
     mapping = {
         "M.": 1, "M": 1, "Mr": 1, "Monsieur": 1,
         "Mme": 3, "Madame": 3,
         "Melle": 2, "Mlle": 2, "Mademoiselle": 2,
     }
     return mapping.get(valeur, 1)
+
+
+def _civilite_enfant_defaut():
+    """
+    Civilité par défaut pour un élève importé (catégorie enfant : Garçon/Fille). L'ENT ne
+    fournit jamais le sexe de l'élève (champ "title" toujours vide, vérifié sur plusieurs
+    élèves réels) - valeur arbitraire, toujours combinée à civilite_a_verifier=True pour
+    qu'un agent la confirme.
+    """
+    return 4  # Garçon
 
 
 def _adresses_differentes(parent1_data, parent2_data):
@@ -188,7 +198,8 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
             eleve = Individu(
                 nom=eleve_data.get("lastName", ""),
                 prenom=eleve_data.get("firstName", ""),
-                civilite=_convertir_civilite(eleve_data.get("title")),
+                civilite=_civilite_enfant_defaut(),
+                civilite_a_verifier=True,
                 date_naiss=_parse_date(eleve_data.get("birthDate")),
                 mail=eleve_data.get("email") or None,
                 tel_domicile=eleve_data.get("phone") or None,
@@ -248,6 +259,7 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
                         nom=parent_data.get("lastName", ""),
                         prenom=parent_data.get("firstName", ""),
                         civilite=_convertir_civilite(parent_data.get("title")),
+                        civilite_a_verifier=True,
                         date_naiss=_parse_date(parent_data.get("birthDate")),
                         mail=parent_data.get("email") or None,
                         tel_domicile=parent_data.get("phone") or None,
@@ -273,6 +285,7 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
                         nom=parent_data.get("lastName", ""),
                         prenom=parent_data.get("firstName", ""),
                         civilite=_convertir_civilite(parent_data.get("title")),
+                        civilite_a_verifier=True,
                         date_naiss=_parse_date(parent_data.get("birthDate")),
                         mail=parent_data.get("email") or None,
                         tel_domicile=parent_data.get("phone") or None,

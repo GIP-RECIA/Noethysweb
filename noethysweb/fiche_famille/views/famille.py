@@ -120,6 +120,7 @@ class Page(crud.Page):
              "});"
              "})(this)"
          )},
+        {"label": "Civilités à vérifier", "classe": "btn btn-warning", "href": reverse_lazy("civilites_a_verifier"), "icone": "fa fa-question-circle"},
     ]
 
 

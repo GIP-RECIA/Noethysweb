@@ -1682,6 +1682,7 @@ class CategorieCompteInternet(models.Model):
 class Individu(models.Model):
     idindividu = models.AutoField(verbose_name="ID", db_column='IDindividu', primary_key=True)
     civilite = models.IntegerField(verbose_name=_("Civilité"), db_column='IDcivilite', choices=data_civilites.GetListeCivilitesForModels(), default=1)
+    civilite_a_verifier = models.BooleanField(verbose_name="Civilité à vérifier", default=False, help_text="Coché automatiquement lors d'un import ENT, quand la civilité réelle n'est pas connue et doit être confirmée par un agent.")
     nom = models.CharField(verbose_name=_("Nom"), max_length=200)
     nom_jfille = models.CharField(verbose_name=_("Nom de naissance"), max_length=200, blank=True, null=True)
     prenom = models.CharField(verbose_name=_("Prénom"), max_length=200, blank=True, null=True)
