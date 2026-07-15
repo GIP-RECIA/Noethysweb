@@ -347,7 +347,7 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         # (identifiants incorrects, ENT désactivé...) - sans ce test, l'agent verrait
         # "Aucun résultat" dans les deux cas sans savoir qu'il y a un vrai problème.
         if get_headers() is None:
-            request.session["ent_erreur"] = "Impossible de se connecter à l'ENT. Vérifiez dans le paramétrage que la connexion ENT est active et que les identifiants sont corrects."
+            request.session["ent_erreur"] = "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
             return
 
         resultats_bruts = search_by_name(last_name=last_name, first_name=first_name)

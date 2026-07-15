@@ -31,7 +31,7 @@
 
     {% if erreur_connexion %}
         <div class="alert alert-danger">
-            <i class="fa fa-exclamation-triangle"></i> Impossible de se connecter à l'ENT. Vérifiez dans le paramétrage que la connexion ENT est active et que les identifiants sont corrects, puis réessayez.
+            <i class="fa fa-exclamation-triangle"></i> Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible).
         </div>
     {% elif eleves %}
         <form method="post" id="form_import_masse" class="form_spinner">
