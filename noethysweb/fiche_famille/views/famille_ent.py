@@ -12,6 +12,7 @@ from core.models import (
     Individu, Famille, Rattachement, Prestation, Inscription, Deduction,
     Note, Piece, Historique, Destinataire, DestinataireSMS, QuestionnaireReponse,
     PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
+    Ecole, Classe, Scolarite,
 )
 from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers
 from django.shortcuts import get_object_or_404
@@ -61,16 +62,19 @@ def _adresses_differentes(parent1_data, parent2_data):
 
 
 def _normaliser_enfant(data):
-    """Ajoute ecole_nom et classe_nom selon le format retourné (admin/list ou get_user)."""
-    # Ecole : admin/list -> structures[0].name | get_user -> structureNodes[0].name
+    """Ajoute ecole_nom, ecole_uai et classe_nom selon le format retourné (admin/list ou get_user)."""
+    # Ecole : admin/list -> structures[0].name/uai | get_user -> structureNodes[0].name/UAI
     structures = data.get("structures") or []
     struct_nodes = data.get("structureNodes") or []
     if structures and isinstance(structures[0], dict):
         data["ecole_nom"] = structures[0].get("name")
+        data["ecole_uai"] = structures[0].get("uai")
     elif struct_nodes and isinstance(struct_nodes[0], dict):
         data["ecole_nom"] = struct_nodes[0].get("name")
+        data["ecole_uai"] = struct_nodes[0].get("UAI")
     else:
         data["ecole_nom"] = None
+        data["ecole_uai"] = None
 
     # Classe : admin/list -> allClasses[0].name | get_user -> classes[0] = "id$NomClasse"
     all_classes = data.get("allClasses") or []
@@ -82,6 +86,77 @@ def _normaliser_enfant(data):
     else:
         data["classe_nom"] = None
     return data
+
+
+def _get_ou_creer_ecole(ecole_nom, uai):
+    """
+    Retrouve l'École Noethys correspondant à cette école ENT (par code UAI, l'identifiant
+    officiel et stable de l'établissement), ou la crée si elle n'existe pas encore.
+    """
+    if not ecole_nom:
+        return None
+    if uai:
+        ecole = Ecole.objects.filter(uai=uai).first()
+        if ecole:
+            return ecole
+    return Ecole.objects.create(nom=ecole_nom, uai=uai or None)
+
+
+def _get_annee_scolaire_par_defaut():
+    """
+    Retourne (date_debut, date_fin) de l'année scolaire en cours (1er septembre -> 31 août),
+    à utiliser quand l'ENT ne fournit pas de dates de scolarité (observé systématiquement
+    dans les données de recette : startDateClasses/endDateClasses toujours vides).
+    """
+    aujourdhui = date.today()
+    annee_debut = aujourdhui.year if aujourdhui.month >= 8 else aujourdhui.year - 1
+    return date(annee_debut, 9, 1), date(annee_debut + 1, 8, 31)
+
+
+def _get_ou_creer_classe(ecole, classe_nom, date_debut_ent, date_fin_ent):
+    """
+    Retrouve la Classe Noethys correspondante dans cette école (par nom), ou la crée si elle
+    n'existe pas encore. Utilise les dates fournies par l'ENT si elles existent, sinon une
+    année scolaire par défaut.
+    """
+    if not ecole or not classe_nom:
+        return None
+    classe = Classe.objects.filter(ecole=ecole, nom=classe_nom).first()
+    if classe:
+        return classe
+    date_debut_defaut, date_fin_defaut = _get_annee_scolaire_par_defaut()
+    return Classe.objects.create(
+        ecole=ecole,
+        nom=classe_nom,
+        date_debut=_parse_date(date_debut_ent) or date_debut_defaut,
+        date_fin=_parse_date(date_fin_ent) or date_fin_defaut,
+    )
+
+
+def _creer_scolarite(individu, eleve_data):
+    """
+    Crée la ligne Scolarité (école + classe) d'un individu à partir des données ENT de
+    l'élève. `eleve_data` doit avoir été passé par `_normaliser_enfant()` au préalable.
+    Ne fait rien si l'ENT ne donne aucune école pour cet élève.
+    """
+    ecole_nom = eleve_data.get("ecole_nom")
+    if not ecole_nom:
+        return None
+
+    ecole = _get_ou_creer_ecole(ecole_nom, eleve_data.get("ecole_uai"))
+    classe = _get_ou_creer_classe(
+        ecole, eleve_data.get("classe_nom"),
+        eleve_data.get("startDateClasses"), eleve_data.get("endDateClasses"),
+    )
+
+    date_debut_defaut, date_fin_defaut = _get_annee_scolaire_par_defaut()
+    return Scolarite.objects.create(
+        individu=individu,
+        ecole=ecole,
+        classe=classe,
+        date_debut=_parse_date(eleve_data.get("startDateClasses")) or date_debut_defaut,
+        date_fin=_parse_date(eleve_data.get("endDateClasses")) or date_fin_defaut,
+    )
 
 
 def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
