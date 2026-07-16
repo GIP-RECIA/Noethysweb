@@ -1,0 +1,125 @@
+{% extends "fiche_individu/individu.html" %}
+{% load static %}
+{% load embed %}
+
+{% block detail_individu %}
+<div class="col-md-9">
+    {% embed 'core/box.html' %}
+        {% block box_theme %}card-outline card-lightblue{% endblock %}
+        {% block box_titre %}Lier à un compte ENT{% endblock %}
+        {% block box_contenu %}
+
+        <p class="text-muted">
+            <i class="fa fa-info-circle"></i>
+            Cet individu n'est pas encore lié à un compte ENT. La recherche ci-dessous a été
+            lancée automatiquement avec son prénom et son nom déjà enregistrés dans Noethysweb.
+            Vous pouvez les modifier et relancer la recherche si nécessaire (accent, orthographe
+            différente dans l'ENT...).
+        </p>
+
+        <form method="post" class="form_spinner">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="rechercher">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>Prénom *</label>
+                        <input type="text" name="prenom" class="form-control" value="{{ prenom_recherche }}" required>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>Nom *</label>
+                        <input type="text" name="nom" class="form-control" value="{{ nom_recherche }}" required>
+                    </div>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="form-group">
+                        <button type="submit" class="btn btn-primary btn_spinner">
+                            <i class="fa fa-search"></i> Rechercher
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        {% if erreur %}
+            <div class="alert alert-warning mt-3">
+                <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
+            </div>
+        {% endif %}
+
+        {% if resultats %}
+            <hr>
+            <h5>{{ resultats|length }} résultat{{ resultats|length|pluralize }} trouvé{{ resultats|length|pluralize }}</h5>
+
+            {% for personne in resultats %}
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <strong>{{ personne.firstName }} {{ personne.lastName }}</strong>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm table-borderless mb-3">
+                            <tr>
+                                <td width="150"><strong>Date de naissance :</strong></td>
+                                <td>{{ personne.birthDate|default:"Non renseignée" }}</td>
+                            </tr>
+                        </table>
+
+                        {% if personne.parents_enrichis %}
+                            <p class="mb-1"><strong>Parents dans l'ENT :</strong></p>
+                            <ul class="mb-3">
+                                {% for parent in personne.parents_enrichis %}
+                                    <li>
+                                        {{ parent.ent.firstName }} {{ parent.ent.lastName }}
+                                        {% if parent.echec %}
+                                            <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} (Noethys) - vérifiez sa fiche</span>
+                                        {% elif parent.deja_lie %}
+                                            <span class="badge badge-secondary">Déjà lié à {{ parent.individu_correspondant }} (Noethys)</span>
+                                        {% elif parent.individu_correspondant %}
+                                            <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }} (Noethys) - cochez ci-dessous pour la lier</span>
+                                        {% else %}
+                                            <span class="badge badge-warning">Aucune correspondance trouvée dans Noethys pour cette famille</span>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+
+                        <form method="post" class="form_spinner">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="lier">
+                            <input type="hidden" name="ent_id" value="{{ personne.id }}">
+                            {% for parent in personne.parents_enrichis %}
+                                {% if parent.individu_correspondant and not parent.deja_lie and not parent.echec %}
+                                    <div class="form-check mb-2">
+                                        <input type="checkbox" class="form-check-input" name="parent_lier_{{ parent.individu_correspondant.pk }}" value="{{ parent.ent.id }}" id="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}" checked>
+                                        <label class="form-check-label" for="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}">
+                                            Lier aussi {{ parent.individu_correspondant }} en même temps
+                                        </label>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            <button type="submit" class="btn btn-success btn_spinner">
+                                <i class="fa fa-link"></i> Lier ce compte
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% endblock %}
+    {% endembed %}
+</div>
+
+<script>
+    document.querySelectorAll('.form_spinner').forEach(function(form) {
+        form.addEventListener('submit', function() {
+            var btn = form.querySelector('.btn_spinner');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+        });
+    });
+</script>
+{% endblock %}

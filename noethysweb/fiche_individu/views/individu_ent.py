@@ -7,9 +7,9 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.db import transaction
-from core.models import Individu, Scolarite
+from core.models import Individu, Scolarite, Rattachement
 from core.views.base import CustomView
-from core.utils.utils_ent import get_user
+from core.utils.utils_ent import get_user, get_headers, search_by_name
 from fiche_individu.views.individu import Onglet
 
 
@@ -165,3 +165,134 @@ class SynchroniserIndividu(Onglet, TemplateView):
             messages.info(request, "Aucun champ sélectionné.")
 
         return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+
+class LierCompteEnt(Onglet, TemplateView):
+    """
+    Permet de lier un individu déjà présent dans Noethys (saisi à la main, sans ent_id) à son
+    compte ENT correspondant - sans créer de doublon. Une fois lié, l'individu est reconnu par
+    l'import en masse (détection de fratrie) et par la synchronisation, comme s'il avait été
+    importé depuis le début.
+    """
+    menu_code = "individus_toc"
+    template_name = "fiche_individu/individu_ent_lier.html"
+
+    def _rechercher(self, nom, prenom, idfamille, idindividu_exclu):
+        """ Retourne (resultats, erreur) - un seul des deux est renseigné. """
+        if not nom or not prenom:
+            return None, "Veuillez saisir le prénom ET le nom."
+        if get_headers() is None:
+            return None, "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
+        resultats = search_by_name(last_name=nom, first_name=prenom)
+        if not resultats:
+            return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
+
+        # Pour chaque résultat, regarde si ses parents (donnés par l'ENT) correspondent à des
+        # individus déjà présents dans cette même famille sur Noethys - pour rassurer l'agent
+        # que c'est bien la bonne famille, et lui permettre de les lier en même temps.
+        membres_famille = list(Rattachement.objects.filter(famille_id=idfamille).exclude(individu_id=idindividu_exclu).select_related('individu'))
+        for resultat in resultats:
+            parents_enrichis = []
+            for parent_ent in resultat.get('parents', []):
+                match = None
+                for ratt in membres_famille:
+                    if (ratt.individu.nom.strip().lower() == (parent_ent.get('lastName') or '').strip().lower()
+                            and (ratt.individu.prenom or '').strip().lower() == (parent_ent.get('firstName') or '').strip().lower()):
+                        match = ratt.individu
+                        break
+                parents_enrichis.append({
+                    "ent": parent_ent,
+                    "individu_correspondant": match,
+                    "deja_lie": bool(match and match.ent_id),
+                })
+            resultat['parents_enrichis'] = parents_enrichis
+        return resultats, None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['box_titre'] = "Lier à un compte ENT"
+        return context
+
+    def get(self, request, *args, **kwargs):
+        idfamille = self.kwargs['idfamille']
+        idindividu = self.kwargs['idindividu']
+        context = self.get_context_data()
+        individu = context['individu']
+
+        # Recherche automatique avec le nom déjà connu dans Noethys, pour éviter à l'agent
+        # de le retaper - le formulaire ci-dessous reste modifiable en cas d'échec (accent,
+        # orthographe différente, nom de naissance...).
+        context['nom_recherche'] = individu.nom
+        context['prenom_recherche'] = individu.prenom or ""
+        context['resultats'], context['erreur'] = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+        context['recherche_auto'] = True
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        idfamille = self.kwargs['idfamille']
+        idindividu = self.kwargs['idindividu']
+        action = request.POST.get('action', 'rechercher')
+
+        if action == 'rechercher':
+            nom = request.POST.get('nom', '').strip()
+            prenom = request.POST.get('prenom', '').strip()
+            resultats, erreur = self._rechercher(nom, prenom, idfamille, idindividu)
+
+            context = self.get_context_data()
+            context['nom_recherche'] = nom
+            context['prenom_recherche'] = prenom
+            context['resultats'] = resultats
+            context['erreur'] = erreur
+            context['recherche_auto'] = False
+            return self.render_to_response(context)
+
+        elif action == 'lier':
+            ent_id = request.POST.get('ent_id')
+            if not ent_id:
+                messages.error(request, "Donnée manquante.")
+            elif Individu.objects.filter(ent_id=ent_id).exists():
+                messages.error(request, "Ce compte ENT est déjà lié à un autre individu dans Noethys.")
+            else:
+                individu = Individu.objects.get(pk=idindividu)
+                individu.ent_id = ent_id
+                individu.save()
+                nb_lies = 1
+                echecs = {}  # {idindividu (str): raison}
+
+                # Lie aussi les parents cochés (correspondances trouvées dans la même famille)
+                for cle, valeur in request.POST.items():
+                    if cle.startswith('parent_lier_') and valeur:
+                        autre_id = cle.replace('parent_lier_', '')
+                        autre_individu = Individu.objects.filter(pk=autre_id).first()
+                        deja_utilise_par = Individu.objects.filter(ent_id=valeur).first()
+                        if deja_utilise_par:
+                            if autre_individu:
+                                echecs[autre_id] = deja_utilise_par
+                        elif autre_individu:
+                            autre_individu.ent_id = valeur
+                            autre_individu.save()
+                            nb_lies += 1
+
+                if nb_lies > 1:
+                    messages.success(request, f"{nb_lies} comptes ENT liés avec succès (individu + parent(s)). Ils seront désormais reconnus lors des prochains imports/synchronisations.")
+                else:
+                    messages.success(request, "Compte ENT lié avec succès. Cet individu sera désormais reconnu lors des prochains imports/synchronisations.")
+
+                if echecs:
+                    # Un message flash seul serait trop facile a manquer/oublier - on reste sur la
+                    # page et on affiche l'echec directement a cote du parent concerne, en clair.
+                    context = self.get_context_data()
+                    context['nom_recherche'] = individu.nom
+                    context['prenom_recherche'] = individu.prenom or ""
+                    context['resultats'], context['erreur'] = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+                    context['recherche_auto'] = False
+                    for resultat in (context['resultats'] or []):
+                        for parent in resultat.get('parents_enrichis', []):
+                            correspondant = parent['individu_correspondant']
+                            if correspondant and str(correspondant.pk) in echecs:
+                                parent['echec'] = echecs[str(correspondant.pk)]
+                    return self.render_to_response(context)
+
+                return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+            return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))

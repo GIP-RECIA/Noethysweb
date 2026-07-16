@@ -100,6 +100,7 @@ urlpatterns = [
     path('individus/get_info_transport', secure_ajax(individu_transports.Get_info_transport), name='ajax_get_info_transport'),
     # ENT
     path('individus/individus/ent/synchro/<int:idfamille>/<int:idindividu>', individu_ent.SynchroniserIndividu.as_view(), name='individu_ent_synchro'),
+    path('individus/individus/ent/lier/<int:idfamille>/<int:idindividu>', individu_ent.LierCompteEnt.as_view(), name='individu_ent_lier'),
 
     # portail
     path('individus/individus/portail/<int:idfamille>/<int:idindividu>', individu_portail.Consulter.as_view(), name='individu_portail'),

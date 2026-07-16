@@ -27,6 +27,13 @@
                                 <i class="fa fa-refresh"></i> Synchroniser avec l'ENT
                             </a>
                         </dd>
+                    {% else %}
+                        <dt class="col-sm-4">ENT</dt>
+                        <dd class="col-sm-8">
+                            <a href="{% url 'individu_ent_lier' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-warning">
+                                <i class="fa fa-link"></i> Lier à un compte ENT
+                            </a>
+                        </dd>
                     {% endif %}
                     {% if individu.deces %}
                         <dt class="col-sm-4">Décès</dt><dd class="col-sm-8 text-bold text-red">{% if individu.annee_deces %}Individu décédé en {{ individu.annee_deces }}{% else %}Individu décédé{% endif %}</dd>
