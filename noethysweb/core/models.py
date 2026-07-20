@@ -813,6 +813,7 @@ class Ecole(models.Model):
     idecole = models.AutoField(verbose_name="ID", db_column='IDecole', primary_key=True)
     nom = models.CharField(verbose_name="Nom", max_length=300)
     uai = models.CharField(verbose_name="Code UAI", max_length=20, blank=True, null=True, help_text="Identifiant officiel de l'établissement, utilisé pour faire correspondre l'école à celle de l'ENT lors d'un import.")
+    ent_id = models.CharField(verbose_name="ID ENT", max_length=200, blank=True, null=True, help_text="Identifiant interne de l'établissement dans l'ENT, plus fiable que l'UAI (toujours présent, contrairement à l'UAI parfois absent).")
     rue = models.CharField(verbose_name="Rue", max_length=200, blank=True, null=True)
     cp = models.CharField(verbose_name="Code postal", max_length=50, blank=True, null=True)
     ville = models.CharField(verbose_name="Ville", max_length=200, blank=True, null=True)

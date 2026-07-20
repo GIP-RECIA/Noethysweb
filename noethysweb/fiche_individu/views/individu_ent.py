@@ -100,7 +100,7 @@ def Appliquer_sync_ecole_classe(individu, data_ent):
 
     scolarite = Get_scolarite_actuelle(individu)
     if scolarite:
-        scolarite.ecole = _get_ou_creer_ecole(data_ent.get("ecole_nom"), data_ent.get("ecole_uai"))
+        scolarite.ecole = _get_ou_creer_ecole(data_ent.get("ecole_nom"), data_ent.get("ecole_uai"), data_ent.get("ecole_ent_id"))
         scolarite.classe = _get_ou_creer_classe(
             scolarite.ecole, data_ent.get("classe_nom"),
             data_ent.get("startDateClasses"), data_ent.get("endDateClasses"),

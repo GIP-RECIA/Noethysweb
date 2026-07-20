@@ -72,19 +72,25 @@ def _adresses_differentes(parent1_data, parent2_data):
 
 
 def _normaliser_enfant(data):
-    """Ajoute ecole_nom, ecole_uai et classe_nom selon le format retourné (admin/list ou get_user)."""
-    # Ecole : admin/list -> structures[0].name/uai | get_user -> structureNodes[0].name/UAI
+    """Ajoute ecole_nom, ecole_uai, ecole_ent_id et classe_nom selon le format retourné (admin/list ou get_user)."""
+    # Ecole : admin/list -> structures[0].name/uai/id | get_user -> structureNodes[0].name/UAI/id
+    # L'identifiant ENT (id) est capturé en plus du nom/UAI car il est toujours présent, alors
+    # que l'UAI est parfois absent selon les établissements (observé en pratique) - utile pour
+    # reconnaître une école de façon fiable même sans UAI.
     structures = data.get("structures") or []
     struct_nodes = data.get("structureNodes") or []
     if structures and isinstance(structures[0], dict):
         data["ecole_nom"] = structures[0].get("name")
         data["ecole_uai"] = structures[0].get("uai")
+        data["ecole_ent_id"] = structures[0].get("id")
     elif struct_nodes and isinstance(struct_nodes[0], dict):
         data["ecole_nom"] = struct_nodes[0].get("name")
         data["ecole_uai"] = struct_nodes[0].get("UAI")
+        data["ecole_ent_id"] = struct_nodes[0].get("id")
     else:
         data["ecole_nom"] = None
         data["ecole_uai"] = None
+        data["ecole_ent_id"] = None
 
     # Classe : admin/list -> allClasses[0].name | get_user -> classes[0] = "id$NomClasse"
     all_classes = data.get("allClasses") or []
@@ -98,10 +104,11 @@ def _normaliser_enfant(data):
     return data
 
 
-def _get_ou_creer_ecole(ecole_nom, uai):
+def _get_ou_creer_ecole(ecole_nom, uai, ent_id=None):
     """
-    Retrouve l'École Noethys correspondant à cette école ENT (par code UAI en priorité, sinon
-    par nom exact), ou la crée si elle n'existe vraiment pas encore.
+    Retrouve l'École Noethys correspondant à cette école ENT (par identifiant ENT en priorité -
+    toujours présent -, puis par UAI, puis par nom exact), ou la crée si elle n'existe vraiment
+    pas encore.
 
     Le repli par nom est nécessaire car l'ENT ne fournit pas toujours un UAI par élève (observé
     en pratique) - sans lui, une école déjà créée serait sinon dupliquée à chaque import. Mesure
@@ -109,14 +116,23 @@ def _get_ou_creer_ecole(ecole_nom, uai):
     """
     if not ecole_nom:
         return None
+    if ent_id:
+        ecole = Ecole.objects.filter(ent_id=ent_id).first()
+        if ecole:
+            return ecole
     if uai:
         ecole = Ecole.objects.filter(uai=uai).first()
         if ecole:
             return ecole
     ecole = Ecole.objects.filter(nom=ecole_nom).first()
     if ecole:
+        # Complète l'école déjà connue avec l'identifiant ENT si elle ne l'avait pas encore,
+        # pour fiabiliser les prochaines correspondances.
+        if ent_id and not ecole.ent_id:
+            ecole.ent_id = ent_id
+            ecole.save()
         return ecole
-    return Ecole.objects.create(nom=ecole_nom, uai=uai or None)
+    return Ecole.objects.create(nom=ecole_nom, uai=uai or None, ent_id=ent_id or None)
 
 
 def _get_annee_scolaire_par_defaut():
@@ -160,7 +176,7 @@ def _creer_scolarite(individu, eleve_data):
     if not ecole_nom:
         return None
 
-    ecole = _get_ou_creer_ecole(ecole_nom, eleve_data.get("ecole_uai"))
+    ecole = _get_ou_creer_ecole(ecole_nom, eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id"))
     classe = _get_ou_creer_classe(
         ecole, eleve_data.get("classe_nom"),
         eleve_data.get("startDateClasses"), eleve_data.get("endDateClasses"),
