@@ -512,6 +512,133 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             return HttpResponseRedirect(reverse_lazy("famille_resume", kwargs={"idfamille": resultat["famille_id"]}))
 
 
+class PreLiaisonEnt(CustomView, TemplateView):
+    """
+    A utiliser avant l'import en masse : pour chaque enfant déjà présent dans Noethys mais pas
+    encore lié à l'ENT, relance la même recherche que l'outil "Lier à un compte ENT" (par nom,
+    avec comparaison des parents dans la même famille). Une fois les correspondances trouvées
+    confirmées par l'agent, l'import en masse (inchangé) reconnaît automatiquement la famille
+    existante et ses membres déjà connus, au lieu d'en créer des doublons.
+
+    Part des individus déjà présents dans Noethys (pas de tout l'ENT) : bien plus rapide (un
+    appel par enfant à lier, pas par élève de tout l'ENT), et réutilise une logique de
+    comparaison déjà testée plutôt que d'en réécrire une nouvelle.
+
+    La recherche (coûteuse - un appel ENT par enfant non lié) n'est lancée que sur demande
+    explicite, et son résultat est gardé en session : confirmer une liaison ne fait que retirer
+    la ligne correspondante de cette liste déjà connue, sans jamais relancer de recherche.
+    """
+    template_name = "fiche_famille/famille_ent_preliaison.html"
+    menu_code = "famille_liste"
+    SESSION_KEY = "ent_preliaison_groupes"
+
+    def _rechercher_toutes_correspondances(self):
+        """
+        Lance la recherche complète et renvoie une liste de groupes ne contenant que des types
+        simples (str/int) - pas d'objets Django - pour pouvoir être stockée en session.
+        """
+        from fiche_individu.views.individu_ent import LierCompteEnt
+        chercheur = LierCompteEnt()
+
+        groupes_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "lignes":[...], "cles":{...}}}
+        enfants = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
+
+        for enfant in enfants:
+            ratt = Rattachement.objects.filter(individu=enfant, categorie=2).select_related("famille").first()
+            if not ratt:
+                continue
+            famille = ratt.famille
+
+            resultats, erreur = chercheur._rechercher(enfant.nom, enfant.prenom, famille.pk, enfant.pk)
+            if erreur or not resultats or len(resultats) != 1:
+                # Aucun résultat, ou plusieurs élèves du même nom dans l'ENT : ambigu, on
+                # n'affiche rien - l'agent pourra le faire à la main si besoin.
+                continue
+
+            resultat = resultats[0]
+            lignes = [{
+                "cle": f"{resultat['id']}|{enfant.pk}",
+                "nom_ent": f"{resultat.get('firstName', '')} {resultat.get('lastName', '')}",
+                "nom_individu": str(enfant),
+            }]
+            for parent in resultat.get("parents_enrichis", []):
+                if parent["individu_correspondant"] and not parent["deja_lie"]:
+                    lignes.append({
+                        "cle": f"{parent['ent']['id']}|{parent['individu_correspondant'].pk}",
+                        "nom_ent": f"{parent['ent'].get('firstName', '')} {parent['ent'].get('lastName', '')}",
+                        "nom_individu": str(parent["individu_correspondant"]),
+                    })
+
+            groupe = groupes_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": [], "cles": set()})
+            for ligne in lignes:
+                if ligne["cle"] not in groupe["cles"]:
+                    groupe["lignes"].append({"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"]})
+                    groupe["cles"].add(ligne["cle"])
+
+        groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])
+        for groupe in groupes:
+            del groupe["cles"]
+        return groupes
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_titre"] = "Pré-liaison avant import en masse"
+        context["box_titre"] = "Correspondances trouvées"
+        context["box_introduction"] = "Lancez la recherche des membres de famille déjà présents dans Noethys qui correspondent à une famille connue par l'ENT, avant de lancer l'import en masse."
+        context["erreur_connexion"] = False
+        context["recherche_lancee"] = self.SESSION_KEY in self.request.session
+        context["groupes"] = self.request.session.get(self.SESSION_KEY) or []
+        context["nb_correspondances"] = sum(len(g["lignes"]) for g in context["groupes"])
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return self.render_to_response(self.get_context_data())
+
+    def post(self, request, *args, **kwargs):
+        action = request.POST.get("action", "confirmer")
+
+        if action == "rechercher":
+            if get_headers() is None:
+                messages.error(request, "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible).")
+            else:
+                request.session[self.SESSION_KEY] = self._rechercher_toutes_correspondances()
+            return HttpResponseRedirect(reverse("ent_preliaison"))
+
+        # action == "confirmer" : n'écrit qu'en base et met à jour la liste déjà en session -
+        # ne relance jamais de recherche vers l'ENT.
+        cles_confirmees = set(request.POST.getlist("liaisons_confirmees"))
+        nb_lies = 0
+
+        for cle in cles_confirmees:
+            try:
+                ent_id, individu_pk = cle.split("|", 1)
+            except ValueError:
+                continue
+            if Individu.objects.filter(ent_id=ent_id).exists():
+                continue
+            individu = Individu.objects.filter(pk=individu_pk, ent_id__isnull=True).first()
+            if individu:
+                individu.ent_id = ent_id
+                individu.save()
+                nb_lies += 1
+
+        groupes = request.session.get(self.SESSION_KEY, [])
+        nouveaux_groupes = []
+        for groupe in groupes:
+            lignes_restantes = [l for l in groupe["lignes"] if l["cle"] not in cles_confirmees]
+            if lignes_restantes:
+                groupe["lignes"] = lignes_restantes
+                nouveaux_groupes.append(groupe)
+        request.session[self.SESSION_KEY] = nouveaux_groupes
+
+        if nb_lies:
+            messages.success(request, f"{nb_lies} individu(s) lié(s) à leur compte ENT. L'import en masse les reconnaîtra désormais automatiquement.")
+        else:
+            messages.info(request, "Aucune liaison confirmée.")
+
+        return HttpResponseRedirect(reverse("ent_preliaison"))
+
+
 class ImporterEnMasseEnt(CustomView, TemplateView):
     template_name = "fiche_famille/famille_ent_import_masse.html"
     menu_code = "famille_liste"

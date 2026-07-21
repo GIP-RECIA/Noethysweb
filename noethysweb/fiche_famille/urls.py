@@ -25,6 +25,7 @@ urlpatterns = [
     path('individus/familles/ajouter', famille_ajouter.Creer_famille.as_view(), name='famille_ajouter'),
     path('individus/familles/ent/importer', famille_ent.ImporterFamilleEnt.as_view(), name='ent_import_famille'),
     path('individus/familles/ent/importer_masse', famille_ent.ImporterEnMasseEnt.as_view(), name='ent_import_masse'),
+    path('individus/familles/ent/preliaison', famille_ent.PreLiaisonEnt.as_view(), name='ent_preliaison'),
     path('individus/familles/ent/civilites_a_verifier', civilite_verification.ListeCivilitesAVerifier.as_view(), name='civilites_a_verifier'),
     path('individus/familles/fusionner/<int:idfamille>', famille_ent.FusionnerFamilles.as_view(), name='famille_fusionner'),
     path('individus/familles/separer/<int:idfamille>', famille_ent.SeparerFamille.as_view(), name='famille_separer'),

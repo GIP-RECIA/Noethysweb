@@ -157,7 +157,8 @@ def get_user(ent_id):
 def get_school(school_id):
     """
     GET /directory/school/:schoolid
-    Retourne les infos d'un établissement (nom, UAI, adresse...).
+    Retourne les infos d'un établissement (nom, UAI, adresse...). Accepte soit l'identifiant
+    interne de l'établissement, soit son code UAI, indifféremment.
     """
     base_url = _get_base_url()
     if not base_url:
