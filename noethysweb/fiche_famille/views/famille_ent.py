@@ -104,15 +104,16 @@ def _normaliser_enfant(data):
     return data
 
 
-def _get_ou_creer_ecole(ecole_nom, uai, ent_id=None):
+def _trouver_ecole(ecole_nom, uai, ent_id=None):
     """
     Retrouve l'École Noethys correspondant à cette école ENT (par identifiant ENT en priorité -
-    toujours présent -, puis par UAI, puis par nom, insensible à la casse), ou la crée si elle
-    n'existe vraiment pas encore.
+    toujours présent -, puis par UAI, puis par nom, insensible à la casse) - ne crée jamais
+    d'École. Renvoie None si elle n'est pas déjà connue de Noethys.
 
-    Le repli par nom est nécessaire car l'ENT ne fournit pas toujours un UAI par élève (observé
-    en pratique) - sans lui, une école déjà créée serait sinon dupliquée à chaque import. Mesure
-    intermédiaire en attendant l'import dédié des écoles par UAI (bug remonté à Édifice).
+    Ne pas créer automatiquement est un choix délibéré (décision d'équipe) : une collectivité ne
+    doit gérer que les écoles qu'elle connaît vraiment, importées explicitement via
+    ImporterEcoleEnt (Paramétrage > Écoles) - jamais une école inconnue créée en douce à l'import
+    ou à la synchronisation d'un élève.
     """
     if not ecole_nom:
         return None
@@ -125,14 +126,12 @@ def _get_ou_creer_ecole(ecole_nom, uai, ent_id=None):
         if ecole:
             return ecole
     ecole = Ecole.objects.filter(nom__iexact=ecole_nom).first()
-    if ecole:
+    if ecole and ent_id and not ecole.ent_id:
         # Complète l'école déjà connue avec l'identifiant ENT si elle ne l'avait pas encore,
         # pour fiabiliser les prochaines correspondances.
-        if ent_id and not ecole.ent_id:
-            ecole.ent_id = ent_id
-            ecole.save()
-        return ecole
-    return Ecole.objects.create(nom=ecole_nom, uai=uai or None, ent_id=ent_id or None)
+        ecole.ent_id = ent_id
+        ecole.save()
+    return ecole
 
 
 def _get_annee_scolaire_par_defaut():
@@ -170,13 +169,18 @@ def _creer_scolarite(individu, eleve_data):
     """
     Crée la ligne Scolarité (école + classe) d'un individu à partir des données ENT de
     l'élève. `eleve_data` doit avoir été passé par `_normaliser_enfant()` au préalable.
-    Ne fait rien si l'ENT ne donne aucune école pour cet élève.
+    Ne fait rien si l'ENT ne donne aucune école pour cet élève, ou si son école n'est pas
+    déjà connue de Noethys (une Scolarité ne peut pas exister sans école, champ obligatoire -
+    et on ne veut pas en créer une automatiquement, voir `_trouver_ecole`).
     """
     ecole_nom = eleve_data.get("ecole_nom")
     if not ecole_nom:
         return None
 
-    ecole = _get_ou_creer_ecole(ecole_nom, eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id"))
+    ecole = _trouver_ecole(ecole_nom, eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id"))
+    if not ecole:
+        return None
+
     classe = _get_ou_creer_classe(
         ecole, eleve_data.get("classe_nom"),
         eleve_data.get("startDateClasses"), eleve_data.get("endDateClasses"),
