@@ -48,7 +48,7 @@ def Est_profil_eleve(data_ent):
 def Get_lignes_comparaison(individu, data_ent):
     """ Retourne la liste des champs comparés entre Noethysweb et l'ENT pour un individu. """
     # Import ici pour éviter un import circulaire au chargement du module
-    from fiche_famille.views.famille_ent import _normaliser_enfant
+    from fiche_famille.views.famille_ent import _normaliser_enfant, _trouver_ecole
 
     lignes = []
     for champ in CHAMPS_SYNC:
@@ -72,12 +72,19 @@ def Get_lignes_comparaison(individu, data_ent):
         scolarite_actuelle = Get_scolarite_actuelle(individu)
         ecole_noethys = scolarite_actuelle.ecole.nom if scolarite_actuelle and scolarite_actuelle.ecole else ""
         classe_noethys = scolarite_actuelle.classe.nom if scolarite_actuelle and scolarite_actuelle.classe else ""
+
+        # L'école actuelle de l'ENT n'est peut-être pas (encore) connue de Noethys - dans ce cas
+        # on ne doit pas proposer de synchroniser cette ligne (voir _trouver_ecole : on ne crée
+        # jamais d'école automatiquement).
+        ecole_connue = _trouver_ecole(ecole_ent, data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"))
+
         lignes.append({
             "code": "ecole_classe",
             "label": "École / Classe",
             "val_noethys": f"{ecole_noethys} - {classe_noethys}" if classe_noethys else ecole_noethys,
             "val_ent": f"{ecole_ent} - {classe_ent}" if classe_ent else ecole_ent,
             "different": ecole_noethys.strip() != ecole_ent.strip() or classe_noethys.strip() != classe_ent.strip(),
+            "ecole_non_reconnue": ecole_connue is None,
         })
 
     return lignes
@@ -89,7 +96,7 @@ def Appliquer_sync_ecole_classe(individu, data_ent):
     une s'il n'en a aucune). Ne garde pas d'historique des changements côté Noethys - l'ENT/
     l'Éducation Nationale garde déjà cet historique de son côté (champ "oldClasses").
     """
-    from fiche_famille.views.famille_ent import _normaliser_enfant, _get_ou_creer_ecole, _get_ou_creer_classe, _creer_scolarite
+    from fiche_famille.views.famille_ent import _normaliser_enfant, _trouver_ecole, _get_ou_creer_classe, _creer_scolarite
 
     if not Est_profil_eleve(data_ent):
         return False
@@ -98,11 +105,17 @@ def Appliquer_sync_ecole_classe(individu, data_ent):
     if not data_ent.get("ecole_nom"):
         return False
 
+    ecole = _trouver_ecole(data_ent.get("ecole_nom"), data_ent.get("ecole_uai"), data_ent.get("ecole_ent_id"))
+    if not ecole:
+        # École ENT pas encore connue de Noethys - on ne modifie rien plutôt que d'en créer une
+        # à la volée (décision d'équipe, voir _trouver_ecole).
+        return False
+
     scolarite = Get_scolarite_actuelle(individu)
     if scolarite:
-        scolarite.ecole = _get_ou_creer_ecole(data_ent.get("ecole_nom"), data_ent.get("ecole_uai"), data_ent.get("ecole_ent_id"))
+        scolarite.ecole = ecole
         scolarite.classe = _get_ou_creer_classe(
-            scolarite.ecole, data_ent.get("classe_nom"),
+            ecole, data_ent.get("classe_nom"),
             data_ent.get("startDateClasses"), data_ent.get("endDateClasses"),
         )
         scolarite.save()
