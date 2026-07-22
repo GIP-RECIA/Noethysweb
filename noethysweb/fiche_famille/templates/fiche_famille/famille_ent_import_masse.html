@@ -33,7 +33,16 @@
         <div class="alert alert-danger">
             <i class="fa fa-exclamation-triangle"></i> Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible).
         </div>
-    {% elif eleves %}
+    {% else %}
+        {% if nb_masques_ecole_inconnue %}
+            <div class="alert alert-secondary">
+                <i class="fa fa-info-circle"></i> {{ nb_masques_ecole_inconnue }} élève{{ nb_masques_ecole_inconnue|pluralize }} masqué{{ nb_masques_ecole_inconnue|pluralize }} car son école n'est pas encore importée dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).
+            </div>
+        {% endif %}
+
+    {% endif %}
+
+    {% if eleves %}
         <form method="post" id="form_import_masse" class="form_spinner">
             {% csrf_token %}
             <div class="d-flex align-items-center mb-3">
@@ -99,7 +108,7 @@
                 });
             });
         </script>
-    {% else %}
+    {% elif not erreur_connexion %}
         <div class="alert alert-info">
             <i class="fa fa-info-circle"></i> Aucun élève trouvé dans l'ENT.
         </div>

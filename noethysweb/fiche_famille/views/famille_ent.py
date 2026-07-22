@@ -668,10 +668,19 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         context["erreur_connexion"] = get_headers() is None
 
         eleves = []
+        nb_masques_ecole_inconnue = 0
         if not context["erreur_connexion"]:
             eleves_bruts = search_users(profile="Student")
             for eleve_data in eleves_bruts:
                 eleve_data = _normaliser_enfant(dict(eleve_data))
+                # Ne montre que les élèves d'une école déjà connue de Noethys (même logique que
+                # partout ailleurs, voir _trouver_ecole) - décision d'équipe : ne jamais remonter
+                # des informations sur des enfants hors du périmètre de l'organisateur.
+                ecole = _trouver_ecole(eleve_data.get("ecole_nom"), eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id"))
+                if not ecole:
+                    nb_masques_ecole_inconnue += 1
+                    continue
+
                 individu_existant = Individu.objects.filter(ent_id=eleve_data.get("id")).first()
                 eleve_data["deja_importe"] = individu_existant is not None
                 if individu_existant:
@@ -682,6 +691,7 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
                 eleves.append(eleve_data)
 
         context["eleves"] = eleves
+        context["nb_masques_ecole_inconnue"] = nb_masques_ecole_inconnue
         context["nb_a_importer"] = sum(1 for e in eleves if not e["deja_importe"])
         return context
 
