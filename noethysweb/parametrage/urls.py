@@ -355,6 +355,7 @@ urlpatterns = [
     path('parametrage/ecoles/ajouter', ecoles.Ajouter.as_view(), name='ecoles_ajouter'),
     path('parametrage/ecoles/modifier/<int:pk>', ecoles.Modifier.as_view(), name='ecoles_modifier'),
     path('parametrage/ecoles/supprimer/<int:pk>', ecoles.Supprimer.as_view(), name='ecoles_supprimer'),
+    path('parametrage/ecoles/importer_ent', ecoles.ImporterEcoleEnt.as_view(), name='ent_importer_ecole'),
 
     # Classes
     path('parametrage/classes/liste', classes.Liste.as_view(), name='classes_liste'),

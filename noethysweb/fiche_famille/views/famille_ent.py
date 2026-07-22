@@ -107,8 +107,8 @@ def _normaliser_enfant(data):
 def _get_ou_creer_ecole(ecole_nom, uai, ent_id=None):
     """
     Retrouve l'École Noethys correspondant à cette école ENT (par identifiant ENT en priorité -
-    toujours présent -, puis par UAI, puis par nom exact), ou la crée si elle n'existe vraiment
-    pas encore.
+    toujours présent -, puis par UAI, puis par nom, insensible à la casse), ou la crée si elle
+    n'existe vraiment pas encore.
 
     Le repli par nom est nécessaire car l'ENT ne fournit pas toujours un UAI par élève (observé
     en pratique) - sans lui, une école déjà créée serait sinon dupliquée à chaque import. Mesure
@@ -124,7 +124,7 @@ def _get_ou_creer_ecole(ecole_nom, uai, ent_id=None):
         ecole = Ecole.objects.filter(uai=uai).first()
         if ecole:
             return ecole
-    ecole = Ecole.objects.filter(nom=ecole_nom).first()
+    ecole = Ecole.objects.filter(nom__iexact=ecole_nom).first()
     if ecole:
         # Complète l'école déjà connue avec l'identifiant ENT si elle ne l'avait pas encore,
         # pour fiabiliser les prochaines correspondances.
