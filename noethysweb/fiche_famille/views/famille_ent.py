@@ -556,12 +556,20 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 continue
 
             resultat = resultats[0]
+            parents_enrichis = resultat.get("parents_enrichis", [])
+
+            # Le nom de l'enfant seul ne suffit pas à être sûr que ce résultat ENT correspond
+            # bien à cette famille (risque d'homonyme avec un enfant d'une autre famille/commune
+            # portant le même nom) - il faut qu'au moins un parent le confirme aussi.
+            if not any(parent["individu_correspondant"] for parent in parents_enrichis):
+                continue
+
             lignes = [{
                 "cle": f"{resultat['id']}|{enfant.pk}",
                 "nom_ent": f"{resultat.get('firstName', '')} {resultat.get('lastName', '')}",
                 "nom_individu": str(enfant),
             }]
-            for parent in resultat.get("parents_enrichis", []):
+            for parent in parents_enrichis:
                 if parent["individu_correspondant"] and not parent["deja_lie"]:
                     lignes.append({
                         "cle": f"{parent['ent']['id']}|{parent['individu_correspondant'].pk}",
