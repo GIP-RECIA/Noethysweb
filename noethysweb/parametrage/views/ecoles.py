@@ -83,6 +83,7 @@ class ImporterEcoleEnt(CustomView, TemplateView):
         context["erreur"] = kwargs.get("erreur")
         context["aucun_resultat"] = kwargs.get("aucun_resultat", False)
         context["resultat"] = kwargs.get("resultat")
+        context["ecole_existante"] = kwargs.get("ecole_existante")
         return context
 
     def get(self, request, *args, **kwargs):
@@ -95,6 +96,10 @@ class ImporterEcoleEnt(CustomView, TemplateView):
         if action == "rechercher":
             if not uai:
                 return self.render_to_response(self.get_context_data(erreur="Veuillez saisir un code UAI."))
+
+            # Prévient l'agent si cette école est déjà importée, sans bloquer la recherche - il
+            # peut quand même continuer pour actualiser ses informations si besoin.
+            ecole_existante = Ecole.objects.filter(uai__iexact=uai).first()
 
             if get_headers() is None:
                 return self.render_to_response(self.get_context_data(
@@ -113,7 +118,7 @@ class ImporterEcoleEnt(CustomView, TemplateView):
             # La clé "s.address" (avec un point) n'est pas lisible dans le template avec la
             # notation habituelle - on la recopie ici sous un nom simple.
             data["adresse"] = data.get("s.address")
-            return self.render_to_response(self.get_context_data(uai_recherche=uai, resultat=data))
+            return self.render_to_response(self.get_context_data(uai_recherche=uai, resultat=data, ecole_existante=ecole_existante))
 
         # action == "importer" : on redemande les données à l'ENT plutôt que de faire confiance
         # à ce qui a transité par le formulaire, pour être sûr d'enregistrer des infos à jour.
