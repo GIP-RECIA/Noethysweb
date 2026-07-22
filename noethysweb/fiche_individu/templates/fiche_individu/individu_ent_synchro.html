@@ -14,12 +14,20 @@
                 <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
             </div>
         {% else %}
-            <p class="text-muted">
+            <p class="text-muted mb-2">
                 <i class="fa fa-info-circle"></i>
                 Cochez les champs que vous souhaitez mettre à jour avec les données de l'ENT, puis cliquez sur <strong>Synchroniser</strong>.
-                Les champs surlignés en jaune sont différents entre Noethysweb et l'ENT.
-                Les champs surlignés en rouge concernent une école pas encore importée dans Noethys - non synchronisables pour l'instant.
             </p>
+            <div class="mb-3">
+                <span class="mr-4">
+                    <span style="display:inline-block; width:14px; height:14px; background-color:#fff9c4; border:1px solid #e0c200; vertical-align:middle;"></span>
+                    <span class="ml-1">Champ différent entre Noethysweb et l'ENT</span>
+                </span>
+                <span>
+                    <span style="display:inline-block; width:14px; height:14px; background-color:#f8d7da; border:1px solid #dc3545; vertical-align:middle;"></span>
+                    <span class="ml-1">École non reconnue dans Noethys - non synchronisable pour l'instant</span>
+                </span>
+            </div>
 
             <form method="post" id="form_synchro_individu">
                 {% csrf_token %}
