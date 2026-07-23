@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import date
 from concurrent.futures import ThreadPoolExecutor
 from django.views.generic import TemplateView
@@ -104,6 +105,16 @@ def _normaliser_enfant(data):
     return data
 
 
+def _normaliser_nom_ecole(nom):
+    """
+    Enlève les accents et met en minuscules, pour comparer deux noms d'école de façon fiable.
+    Nécessaire car nom__iexact (SQLite) n'ignore la casse que pour les lettres a-z sans accent -
+    "École" et "école" ne seraient sinon pas reconnus comme identiques.
+    """
+    sans_accents = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode("ascii")
+    return sans_accents.strip().lower()
+
+
 def _trouver_ecole(ecole_nom, uai, ent_id=None):
     """
     Retrouve l'École Noethys correspondant à cette école ENT (par identifiant ENT en priorité -
@@ -125,7 +136,8 @@ def _trouver_ecole(ecole_nom, uai, ent_id=None):
         ecole = Ecole.objects.filter(uai=uai).first()
         if ecole:
             return ecole
-    ecole = Ecole.objects.filter(nom__iexact=ecole_nom).first()
+    nom_normalise = _normaliser_nom_ecole(ecole_nom)
+    ecole = next((e for e in Ecole.objects.all() if _normaliser_nom_ecole(e.nom) == nom_normalise), None)
     if ecole and ent_id and not ecole.ent_id:
         # Complète l'école déjà connue avec l'identifiant ENT si elle ne l'avait pas encore,
         # pour fiabiliser les prochaines correspondances.
