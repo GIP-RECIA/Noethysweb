@@ -66,14 +66,16 @@
                             </tr>
                         </table>
 
-                        {% if personne.parents_enrichis %}
-                            <p class="mb-1"><strong>Parents dans l'ENT :</strong></p>
+                        {% if personne.membres_enrichis %}
+                            <p class="mb-1"><strong>{{ personne.membres_label }} dans l'ENT :</strong></p>
                             <ul class="mb-3">
-                                {% for parent in personne.parents_enrichis %}
+                                {% for parent in personne.membres_enrichis %}
                                     <li>
                                         {{ parent.ent.firstName }} {{ parent.ent.lastName }} (ENT)
                                         {% if parent.echec %}
                                             <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} (Noethys) - vérifiez sa fiche</span>
+                                        {% elif parent.lie_a_autre_compte %}
+                                            <span class="badge badge-danger">{{ parent.individu_correspondant }} (Noethys) est déjà lié(e) à un autre compte ENT - vérifiez sa fiche</span>
                                         {% elif parent.deja_lie %}
                                             <span class="badge badge-secondary">Déjà lié à {{ parent.individu_correspondant }} (Noethys)</span>
                                         {% elif parent.individu_correspondant %}
@@ -90,8 +92,8 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="lier">
                             <input type="hidden" name="ent_id" value="{{ personne.id }}">
-                            {% for parent in personne.parents_enrichis %}
-                                {% if parent.individu_correspondant and not parent.deja_lie and not parent.echec %}
+                            {% for parent in personne.membres_enrichis %}
+                                {% if parent.individu_correspondant and not parent.deja_lie and not parent.echec and not parent.lie_a_autre_compte %}
                                     <div class="form-check mb-2">
                                         <input type="checkbox" class="form-check-input" name="parent_lier_{{ parent.individu_correspondant.pk }}" value="{{ parent.ent.id }}" id="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}" checked>
                                         <label class="form-check-label" for="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}">

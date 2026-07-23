@@ -595,12 +595,12 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # parent renseigné ne peut de toute façon jamais corroborer). Si plusieurs candidats
             # corroborent chacun un parent différent, là c'est une vraie ambiguïté - on abandonne,
             # l'agent pourra le faire à la main si besoin.
-            candidats_corrobores = [r for r in resultats if any(p["individu_correspondant"] for p in r.get("parents_enrichis", []))]
+            candidats_corrobores = [r for r in resultats if any(p["individu_correspondant"] for p in r.get("membres_enrichis", []))]
             if len(candidats_corrobores) != 1:
                 continue
 
             resultat = candidats_corrobores[0]
-            parents_enrichis = resultat.get("parents_enrichis", [])
+            parents_enrichis = resultat.get("membres_enrichis", [])
 
             lignes = [{
                 "cle": f"{resultat['id']}|{enfant.pk}",

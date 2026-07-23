@@ -203,25 +203,38 @@ class LierCompteEnt(Onglet, TemplateView):
         # Import ici pour éviter un import circulaire au chargement du module
         from fiche_famille.views.famille_ent import _normaliser_texte
 
-        # Pour chaque résultat, regarde si ses parents (donnés par l'ENT) correspondent à des
-        # individus déjà présents dans cette même famille sur Noethys - pour rassurer l'agent
-        # que c'est bien la bonne famille, et lui permettre de les lier en même temps.
+        # Pour chaque résultat, regarde si les membres de sa famille (donnés par l'ENT)
+        # correspondent à des individus déjà présents dans cette même famille sur Noethys - pour
+        # rassurer l'agent que c'est bien la bonne famille, et lui permettre de les lier en même
+        # temps. Selon le profil trouvé : pour un élève on regarde ses parents, pour un parent on
+        # regarde ses enfants (un adulte n'a jamais de "parents" côté ENT - sans cette symétrie,
+        # chercher un parent directement n'aurait aucune corroboration possible).
         membres_famille = list(Rattachement.objects.filter(famille_id=idfamille).exclude(individu_id=idindividu_exclu).select_related('individu'))
         for resultat in resultats:
-            parents_enrichis = []
-            for parent_ent in resultat.get('parents', []):
+            if Est_profil_eleve(resultat):
+                membres_ent = resultat.get('parents', [])
+                resultat['membres_label'] = "Parents"
+            else:
+                membres_ent = resultat.get('children', [])
+                resultat['membres_label'] = "Enfants"
+            membres_enrichis = []
+            for membre_ent in membres_ent:
                 match = None
                 for ratt in membres_famille:
-                    if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(parent_ent.get('lastName') or '')
-                            and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(parent_ent.get('firstName') or '')):
+                    if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(membre_ent.get('lastName') or '')
+                            and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(membre_ent.get('firstName') or '')):
                         match = ratt.individu
                         break
-                parents_enrichis.append({
-                    "ent": parent_ent,
+                # Important : on compare à l'id précis de CE candidat, pas juste "a-t-il un
+                # ent_id" - sinon un individu déjà lié à un tout autre compte ENT (erreur
+                # passée) afficherait à tort "déjà lié" comme si tout était en ordre.
+                membres_enrichis.append({
+                    "ent": membre_ent,
                     "individu_correspondant": match,
-                    "deja_lie": bool(match and match.ent_id),
+                    "deja_lie": bool(match and match.ent_id == membre_ent.get('id')),
+                    "lie_a_autre_compte": bool(match and match.ent_id and match.ent_id != membre_ent.get('id')),
                 })
-            resultat['parents_enrichis'] = parents_enrichis
+            resultat['membres_enrichis'] = membres_enrichis
         return resultats, None
 
     def get_context_data(self, **kwargs):
@@ -303,10 +316,10 @@ class LierCompteEnt(Onglet, TemplateView):
                     context['resultats'], context['erreur'] = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
                     context['recherche_auto'] = False
                     for resultat in (context['resultats'] or []):
-                        for parent in resultat.get('parents_enrichis', []):
-                            correspondant = parent['individu_correspondant']
+                        for membre in resultat.get('membres_enrichis', []):
+                            correspondant = membre['individu_correspondant']
                             if correspondant and str(correspondant.pk) in echecs:
-                                parent['echec'] = echecs[str(correspondant.pk)]
+                                membre['echec'] = echecs[str(correspondant.pk)]
                     return self.render_to_response(context)
 
                 return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
