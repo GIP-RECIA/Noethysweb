@@ -583,19 +583,23 @@ class PreLiaisonEnt(CustomView, TemplateView):
             famille = ratt.famille
 
             resultats, erreur = chercheur._rechercher(enfant.nom, enfant.prenom, famille.pk, enfant.pk)
-            if erreur or not resultats or len(resultats) != 1:
-                # Aucun résultat, ou plusieurs élèves du même nom dans l'ENT : ambigu, on
-                # n'affiche rien - l'agent pourra le faire à la main si besoin.
+            if erreur or not resultats:
                 continue
 
-            resultat = resultats[0]
+            # Le nom de l'enfant seul ne suffit pas à être sûr que l'ENT connaît "notre" enfant
+            # (risque d'homonyme avec un enfant d'une autre famille/commune) - il faut qu'au moins
+            # un parent le confirme aussi. Si l'ENT renvoie plusieurs élèves du même nom, on ne
+            # garde que ceux dont un parent corrobore - s'il n'y en a qu'un seul comme ça, pas
+            # d'ambiguïté réelle même si l'ENT en a renvoyé plusieurs (ex: un homonyme sans aucun
+            # parent renseigné ne peut de toute façon jamais corroborer). Si plusieurs candidats
+            # corroborent chacun un parent différent, là c'est une vraie ambiguïté - on abandonne,
+            # l'agent pourra le faire à la main si besoin.
+            candidats_corrobores = [r for r in resultats if any(p["individu_correspondant"] for p in r.get("parents_enrichis", []))]
+            if len(candidats_corrobores) != 1:
+                continue
+
+            resultat = candidats_corrobores[0]
             parents_enrichis = resultat.get("parents_enrichis", [])
-
-            # Le nom de l'enfant seul ne suffit pas à être sûr que ce résultat ENT correspond
-            # bien à cette famille (risque d'homonyme avec un enfant d'une autre famille/commune
-            # portant le même nom) - il faut qu'au moins un parent le confirme aussi.
-            if not any(parent["individu_correspondant"] for parent in parents_enrichis):
-                continue
 
             lignes = [{
                 "cle": f"{resultat['id']}|{enfant.pk}",
