@@ -71,7 +71,7 @@
                             <ul class="mb-3">
                                 {% for parent in personne.parents_enrichis %}
                                     <li>
-                                        {{ parent.ent.firstName }} {{ parent.ent.lastName }}
+                                        {{ parent.ent.firstName }} {{ parent.ent.lastName }} (ENT)
                                         {% if parent.echec %}
                                             <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} (Noethys) - vérifiez sa fiche</span>
                                         {% elif parent.deja_lie %}
@@ -79,7 +79,7 @@
                                         {% elif parent.individu_correspondant %}
                                             <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }} (Noethys) - cochez ci-dessous pour la lier</span>
                                         {% else %}
-                                            <span class="badge badge-warning">Aucune correspondance trouvée dans Noethys pour cette famille</span>
+                                            <span class="badge badge-warning">Ne correspond à personne dans la famille de {{ prenom_recherche }} {{ nom_recherche }} sur Noethys</span>
                                         {% endif %}
                                     </li>
                                 {% endfor %}
