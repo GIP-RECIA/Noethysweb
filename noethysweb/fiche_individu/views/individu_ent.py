@@ -200,6 +200,9 @@ class LierCompteEnt(Onglet, TemplateView):
         if not resultats:
             return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
 
+        # Import ici pour éviter un import circulaire au chargement du module
+        from fiche_famille.views.famille_ent import _normaliser_texte
+
         # Pour chaque résultat, regarde si ses parents (donnés par l'ENT) correspondent à des
         # individus déjà présents dans cette même famille sur Noethys - pour rassurer l'agent
         # que c'est bien la bonne famille, et lui permettre de les lier en même temps.
@@ -209,8 +212,8 @@ class LierCompteEnt(Onglet, TemplateView):
             for parent_ent in resultat.get('parents', []):
                 match = None
                 for ratt in membres_famille:
-                    if (ratt.individu.nom.strip().lower() == (parent_ent.get('lastName') or '').strip().lower()
-                            and (ratt.individu.prenom or '').strip().lower() == (parent_ent.get('firstName') or '').strip().lower()):
+                    if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(parent_ent.get('lastName') or '')
+                            and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(parent_ent.get('firstName') or '')):
                         match = ratt.individu
                         break
                 parents_enrichis.append({

@@ -105,13 +105,14 @@ def _normaliser_enfant(data):
     return data
 
 
-def _normaliser_nom_ecole(nom):
+def _normaliser_texte(texte):
     """
-    Enlève les accents et met en minuscules, pour comparer deux noms d'école de façon fiable.
-    Nécessaire car nom__iexact (SQLite) n'ignore la casse que pour les lettres a-z sans accent -
-    "École" et "école" ne seraient sinon pas reconnus comme identiques.
+    Enlève les accents et met en minuscules, pour comparer deux textes (noms d'école, noms de
+    personnes...) de façon fiable. Nécessaire car nom__iexact (SQLite) n'ignore la casse que
+    pour les lettres a-z sans accent - "École"/"école" ou "François"/"Francois" ne seraient
+    sinon pas reconnus comme identiques.
     """
-    sans_accents = unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode("ascii")
+    sans_accents = unicodedata.normalize("NFKD", texte).encode("ascii", "ignore").decode("ascii")
     return sans_accents.strip().lower()
 
 
@@ -136,8 +137,8 @@ def _trouver_ecole(ecole_nom, uai, ent_id=None):
         ecole = Ecole.objects.filter(uai=uai).first()
         if ecole:
             return ecole
-    nom_normalise = _normaliser_nom_ecole(ecole_nom)
-    ecole = next((e for e in Ecole.objects.all() if _normaliser_nom_ecole(e.nom) == nom_normalise), None)
+    nom_normalise = _normaliser_texte(ecole_nom)
+    ecole = next((e for e in Ecole.objects.all() if _normaliser_texte(e.nom) == nom_normalise), None)
     if ecole and ent_id and not ecole.ent_id:
         # Complète l'école déjà connue avec l'identifiant ENT si elle ne l'avait pas encore,
         # pour fiabiliser les prochaines correspondances.
