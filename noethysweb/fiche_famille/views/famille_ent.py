@@ -468,6 +468,13 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                 enfant["deja_importe"] = False
                 enfant["famille_id"] = None
 
+            # École pas encore importée dans Noethys - on ne peut pas importer cet élève sans
+            # elle (décision d'équipe, voir _trouver_ecole). Ne s'applique que si l'ENT donne
+            # bien une école pour cet élève (sinon rien à vérifier).
+            enfant["ecole_non_reconnue"] = bool(enfant.get("ecole_nom")) and not _trouver_ecole(
+                enfant.get("ecole_nom"), enfant.get("ecole_uai"), enfant.get("ecole_ent_id")
+            )
+
             # Récupérer les détails des parents (déjà récupérés en parallèle à la phase 3)
             parents_details = []
             for parent in enfant.get("parents", []):
@@ -515,7 +522,17 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             messages.error(request, "Données manquantes.")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        resultat = _importer_eleve_ent(eleve_ent_id)
+        eleve_data = get_user(eleve_ent_id)
+        if not eleve_data:
+            messages.error(request, "Impossible de récupérer les données de cet élève depuis l'ENT.")
+            return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
+
+        eleve_data = _normaliser_enfant(eleve_data)
+        if eleve_data.get("ecole_nom") and not _trouver_ecole(eleve_data.get("ecole_nom"), eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id")):
+            messages.error(request, f"Impossible d'importer : l'école « {eleve_data['ecole_nom']} » n'est pas encore importée dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).")
+            return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
+
+        resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleve_data)
 
         if resultat["statut"] == "deja_importe":
             messages.warning(request, "Cet élève a déjà été importé.")

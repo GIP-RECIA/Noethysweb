@@ -130,6 +130,13 @@
                                     </a>
                                 {% endif %}
                             </div>
+                        {% elif eleve.ecole_non_reconnue %}
+                            <div class="alert alert-danger">
+                                <i class="fa fa-times-circle"></i> Impossible d'importer : l'école « {{ eleve.ecole_nom }} » n'est pas encore importée dans Noethys.
+                                <a href="{% url 'ent_importer_ecole' %}" class="btn btn-sm btn-primary ml-2">
+                                    <i class="fa fa-download"></i> Importer cette école
+                                </a>
+                            </div>
                         {% else %}
                             <form method="post" class="form_spinner">
                                 {% csrf_token %}
