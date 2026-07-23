@@ -66,9 +66,9 @@
                                 </thead>
                                 <tbody>
                                     {% for champ in ligne.champs %}
-                                    <tr {% if champ.different and champ.val_ent %}style="background-color: #fff9c4;"{% endif %}>
+                                    <tr {% if champ.ecole_non_reconnue %}style="background-color: #f8d7da;"{% elif champ.different and champ.val_ent %}style="background-color: #fff9c4;"{% endif %}>
                                         <td class="text-center">
-                                            {% if champ.val_ent %}
+                                            {% if champ.val_ent and not champ.ecole_non_reconnue %}
                                                 <input type="checkbox" name="champs_{{ ligne.individu.pk }}" value="{{ champ.code }}"
                                                     class="case_champ case_champ_{{ ligne.individu.pk }}"
                                                     {% if champ.different %}checked{% endif %}>
@@ -79,7 +79,12 @@
                                         <td>
                                             {% if champ.val_ent %}
                                                 {{ champ.val_ent }}
-                                                {% if champ.different %}
+                                                {% if champ.ecole_non_reconnue %}
+                                                    <i class="fa fa-times-circle text-danger ml-1" title="École non reconnue"></i>
+                                                    <div class="text-danger small mt-1">
+                                                        Cette école n'est pas dans votre liste d'écoles Noethys - importez-la d'abord (Paramétrage > Écoles) pour pouvoir synchroniser cette information.
+                                                    </div>
+                                                {% elif champ.different %}
                                                     <i class="fa fa-exclamation-circle text-warning ml-1"></i>
                                                 {% else %}
                                                     <i class="fa fa-check text-green ml-1"></i>
