@@ -621,7 +621,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 "role": "Enfant",
             }]
             for parent in parents_enrichis:
-                if parent["individu_correspondant"] and not parent["deja_lie"]:
+                if parent["individu_correspondant"] and not parent["deja_lie"] and not parent["lie_a_autre_compte"]:
                     lignes.append({
                         "cle": f"{parent['ent']['id']}|{parent['individu_correspondant'].pk}",
                         "nom_ent": f"{parent['ent'].get('firstName', '')} {parent['ent'].get('lastName', '')}",
