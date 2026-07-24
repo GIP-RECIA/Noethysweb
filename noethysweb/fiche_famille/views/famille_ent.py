@@ -696,7 +696,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
         context["box_introduction"] = "Lancez la recherche des membres de famille déjà présents dans Noethys qui correspondent à une famille connue par l'ENT, avant de lancer l'import en masse."
         context["erreur_connexion"] = False
         context["recherche_lancee"] = self.SESSION_KEY in self.request.session
-        session_data = self.request.session.get(self.SESSION_KEY) or {}
+        session_data = self.request.session.get(self.SESSION_KEY)
+        # Garde-fou : une session encore au format d'avant ce changement (juste une liste, pas
+        # un dict {groupes, non_resolus}) ne doit pas planter la page - traitée comme vide.
+        if not isinstance(session_data, dict):
+            session_data = {}
         context["groupes"] = session_data.get("groupes", [])
         context["non_resolus"] = session_data.get("non_resolus", [])
         context["nb_correspondances"] = sum(len(g["lignes"]) for g in context["groupes"])
@@ -734,7 +738,9 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 individu.save()
                 nb_lies += 1
 
-        session_data = request.session.get(self.SESSION_KEY) or {}
+        session_data = request.session.get(self.SESSION_KEY)
+        if not isinstance(session_data, dict):
+            session_data = {}
         groupes = session_data.get("groupes", [])
         nouveaux_groupes = []
         for groupe in groupes:
