@@ -262,6 +262,9 @@ class LierCompteEnt(Onglet, TemplateView):
             # pas comme une vraie preuve (son propre lien est déjà suspect).
             nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] for m in membres_enrichis)
             membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+            # Exposé sur le résultat pour que la pré-liaison puisse distinguer "vraiment aucun
+            # nom ne correspond" de "un nom correspond mais la date le contredit".
+            resultat['nom_corrobore'] = nom_corrobore
 
             # Décision combinée : le nom et la date sont deux preuves indépendantes. La date
             # seule suffit si le nom échoue (utile quand le nom pose un problème qu'on ne peut

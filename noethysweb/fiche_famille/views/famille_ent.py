@@ -622,7 +622,15 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # l'agent pourra le faire à la main si besoin.
             candidats_corrobores = [r for r in resultats if not r.get("aucune_corroboration", True)]
             if len(candidats_corrobores) == 0:
-                _ajouter_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
+                # Si un candidat a été rejeté PARCE QUE sa date de naissance contredit (alors
+                # qu'un nom de parent correspondait), on réutilise le message précis déjà
+                # calculé - dire "aucun parent ne correspond" serait faux et contradictoire
+                # avec ce que l'agent verra en cliquant sur "Vérifier/lier".
+                contradiction_date = next((r for r in resultats if r.get("nom_corrobore") and r.get("date_coherente") is False), None)
+                if contradiction_date and contradiction_date.get("message_avertissement"):
+                    _ajouter_non_resolu(famille, enfant, contradiction_date["message_avertissement"])
+                else:
+                    _ajouter_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
                 continue
             if len(candidats_corrobores) > 1:
                 _ajouter_non_resolu(famille, enfant, "Plusieurs correspondances possibles dans l'ENT (ambigu)")
