@@ -235,11 +235,26 @@ class LierCompteEnt(Onglet, TemplateView):
                     "lie_a_autre_compte": bool(match and match.ent_id and match.ent_id != membre_ent.get('id')),
                 })
             resultat['membres_enrichis'] = membres_enrichis
-            # Sert à avertir l'agent avant qu'il ne lie ce compte : si aucun membre de la
-            # famille ENT ne correspond à personne dans Noethys, rien ne confirme que c'est
-            # bien la bonne personne (risque d'homonyme) - voir individu_ent_lier.html.
-            resultat['aucune_corroboration'] = not any(m['individu_correspondant'] for m in membres_enrichis)
-            resultat['noms_membres_ent'] = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_enrichis)
+
+            # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
+            # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
+            # pas comme une vraie preuve (son propre lien est déjà suspect) - mais ce n'est pas
+            # la même situation que "personne du tout ne correspond", donc message différent.
+            vraie_corroboration = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] for m in membres_enrichis)
+            membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+            resultat['aucune_corroboration'] = not vraie_corroboration
+
+            if not vraie_corroboration and membres_lies_ailleurs:
+                noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
+                resultat['message_avertissement'] = (
+                    f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
+                    f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
+                    f"fiche avant de continuer."
+                )
+            elif not vraie_corroboration:
+                resultat['message_avertissement'] = (
+                    "Aucun parent/enfant ne correspond à un membre de cette famille sur Noethys."
+                )
         return resultats, None
 
     def get_context_data(self, **kwargs):

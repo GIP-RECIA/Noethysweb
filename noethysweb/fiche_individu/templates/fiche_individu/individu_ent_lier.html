@@ -90,9 +90,7 @@
 
                         <form method="post" class="form_spinner form_lier"
                               data-aucune-corroboration="{{ personne.aucune_corroboration|yesno:'1,0' }}"
-                              data-noms-membres="{{ personne.noms_membres_ent }}"
-                              data-prenom="{{ prenom_recherche }}"
-                              data-nom="{{ nom_recherche }}">
+                              data-message-avertissement="{{ personne.message_avertissement }}">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="lier">
                             <input type="hidden" name="ent_id" value="{{ personne.id }}">
@@ -137,12 +135,7 @@
 
     function confirmer_liaison_sans_corroboration(bouton) {
         var form = bouton.closest('form');
-        var message = "Aucun parent/enfant ne correspond à un membre de la famille de "
-            + form.dataset.prenom + " " + form.dataset.nom + " sur Noethys";
-        if (form.dataset.nomsMembres) {
-            message += " (" + form.dataset.nomsMembres + ")";
-        }
-        message += ". Vous risquez de lier la mauvaise personne (homonyme dans l'ENT).";
+        var message = form.dataset.messageAvertissement + " Vous risquez de lier la mauvaise personne (homonyme dans l'ENT).";
 
         bootbox.dialog({
             title: "Confirmation",
