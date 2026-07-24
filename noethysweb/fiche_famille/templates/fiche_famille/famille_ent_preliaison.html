@@ -43,6 +43,7 @@
                         <thead class="thead-light">
                             <tr>
                                 <th style="width:30px;"></th>
+                                <th style="width:100px;">Rôle</th>
                                 <th>Connu par l'ENT</th>
                                 <th>Correspond à (Noethys)</th>
                             </tr>
@@ -52,6 +53,13 @@
                             <tr>
                                 <td class="text-center">
                                     <input type="checkbox" name="liaisons_confirmees" value="{{ ligne.cle }}" class="case_correspondance" checked>
+                                </td>
+                                <td>
+                                    {% if ligne.role == "Enfant" %}
+                                        <span class="badge badge-info">Enfant</span>
+                                    {% else %}
+                                        <span class="badge badge-light">Parent</span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ ligne.nom_ent }}</td>
                                 <td>{{ ligne.nom_individu }}</td>

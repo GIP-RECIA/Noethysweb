@@ -606,6 +606,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 "cle": f"{resultat['id']}|{enfant.pk}",
                 "nom_ent": f"{resultat.get('firstName', '')} {resultat.get('lastName', '')}",
                 "nom_individu": str(enfant),
+                "role": "Enfant",
             }]
             for parent in parents_enrichis:
                 if parent["individu_correspondant"] and not parent["deja_lie"]:
@@ -613,12 +614,13 @@ class PreLiaisonEnt(CustomView, TemplateView):
                         "cle": f"{parent['ent']['id']}|{parent['individu_correspondant'].pk}",
                         "nom_ent": f"{parent['ent'].get('firstName', '')} {parent['ent'].get('lastName', '')}",
                         "nom_individu": str(parent["individu_correspondant"]),
+                        "role": "Parent",
                     })
 
             groupe = groupes_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": [], "cles": set()})
             for ligne in lignes:
                 if ligne["cle"] not in groupe["cles"]:
-                    groupe["lignes"].append({"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"]})
+                    groupe["lignes"].append({"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"], "role": ligne["role"]})
                     groupe["cles"].add(ligne["cle"])
 
         groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])
