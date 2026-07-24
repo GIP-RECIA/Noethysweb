@@ -209,7 +209,12 @@ class LierCompteEnt(Onglet, TemplateView):
         # temps. Selon le profil trouvé : pour un élève on regarde ses parents, pour un parent on
         # regarde ses enfants (un adulte n'a jamais de "parents" côté ENT - sans cette symétrie,
         # chercher un parent directement n'aurait aucune corroboration possible).
-        membres_famille = list(Rattachement.objects.filter(famille_id=idfamille).exclude(individu_id=idindividu_exclu).select_related('individu'))
+        #
+        # On regarde TOUTES les familles de la personne recherchée, pas seulement idfamille : un
+        # enfant de famille séparée est rattaché à 2 familles (une par parent) - se limiter à
+        # idfamille raterait la corroboration par le parent de l'AUTRE famille.
+        familles_ids = Rattachement.objects.filter(individu_id=idindividu_exclu).values_list("famille_id", flat=True)
+        membres_famille = list(Rattachement.objects.filter(famille_id__in=familles_ids).exclude(individu_id=idindividu_exclu).select_related('individu'))
         for resultat in resultats:
             if Est_profil_eleve(resultat):
                 membres_ent = resultat.get('parents', [])
