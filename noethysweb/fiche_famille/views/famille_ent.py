@@ -635,6 +635,22 @@ class PreLiaisonEnt(CustomView, TemplateView):
                     groupe["lignes"].append({"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"], "role": ligne["role"]})
                     groupe["cles"].add(ligne["cle"])
 
+        # Phase 4 : détecte les collisions entre familles - si le même compte ENT se retrouve
+        # proposé à des personnes Noethys différentes (2 familles distinctes qui se ressemblent
+        # trop par coïncidence, même nom d'enfant ET de parent), c'est une vraie ambiguïté : on
+        # retire ces lignes de partout, plutôt que de laisser une des deux familles "gagner" au
+        # hasard sans que l'agent le sache (même logique que l'ambiguïté ENT, juste côté Noethys).
+        ent_id_vers_individus = {}
+        for groupe in groupes_par_famille.values():
+            for ligne in groupe["lignes"]:
+                ent_id, individu_pk = ligne["cle"].split("|", 1)
+                ent_id_vers_individus.setdefault(ent_id, set()).add(individu_pk)
+        ent_ids_en_collision = {ent_id for ent_id, individus in ent_id_vers_individus.items() if len(individus) > 1}
+
+        for groupe in groupes_par_famille.values():
+            groupe["lignes"] = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] not in ent_ids_en_collision]
+        groupes_par_famille = {fid: g for fid, g in groupes_par_famille.items() if g["lignes"]}
+
         groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])
         for groupe in groupes:
             del groupe["cles"]
