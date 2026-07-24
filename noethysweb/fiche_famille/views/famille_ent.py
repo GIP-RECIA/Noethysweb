@@ -614,13 +614,13 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
             # Le nom de l'enfant seul ne suffit pas à être sûr que l'ENT connaît "notre" enfant
             # (risque d'homonyme avec un enfant d'une autre famille/commune) - il faut qu'au moins
-            # un parent le confirme aussi. Si l'ENT renvoie plusieurs élèves du même nom, on ne
-            # garde que ceux dont un parent corrobore - s'il n'y en a qu'un seul comme ça, pas
-            # d'ambiguïté réelle même si l'ENT en a renvoyé plusieurs (ex: un homonyme sans aucun
-            # parent renseigné ne peut de toute façon jamais corroborer). Si plusieurs candidats
-            # corroborent chacun un parent différent, là c'est une vraie ambiguïté - on abandonne,
+            # un parent le confirme, OU que sa date de naissance corresponde (voir "aucune_
+            # corroboration"/"date_coherente" calculés dans _rechercher()). Si l'ENT renvoie
+            # plusieurs élèves du même nom, on ne garde que ceux corroborés - s'il n'y en a qu'un
+            # seul comme ça, pas d'ambiguïté réelle même si l'ENT en a renvoyé plusieurs. Si
+            # plusieurs candidats corroborent chacun, là c'est une vraie ambiguïté - on abandonne,
             # l'agent pourra le faire à la main si besoin.
-            candidats_corrobores = [r for r in resultats if any(p["individu_correspondant"] for p in r.get("membres_enrichis", []))]
+            candidats_corrobores = [r for r in resultats if not r.get("aucune_corroboration", True)]
             if len(candidats_corrobores) == 0:
                 _ajouter_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
                 continue

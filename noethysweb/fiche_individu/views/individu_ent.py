@@ -201,7 +201,13 @@ class LierCompteEnt(Onglet, TemplateView):
             return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
 
         # Import ici pour éviter un import circulaire au chargement du module
-        from fiche_famille.views.famille_ent import _normaliser_texte
+        from fiche_famille.views.famille_ent import _normaliser_texte, _parse_date
+
+        # Date de naissance déjà connue dans Noethys pour la personne recherchée - sert de
+        # deuxième preuve indépendante du nom (voir plus bas), utile quand le nom d'un parent
+        # pose problème (nom de naissance/usage, faute de frappe) alors que la date, elle, ne
+        # varie jamais selon qui la saisit.
+        date_naiss_noethys = Individu.objects.filter(pk=idindividu_exclu).values_list("date_naiss", flat=True).first()
 
         # Pour chaque résultat, regarde si les membres de sa famille (donnés par l'ENT)
         # correspondent à des individus déjà présents dans cette même famille sur Noethys - pour
@@ -241,15 +247,44 @@ class LierCompteEnt(Onglet, TemplateView):
                 })
             resultat['membres_enrichis'] = membres_enrichis
 
+            # Deuxième preuve indépendante du nom : la date de naissance ENT de ce candidat
+            # correspond-elle à celle déjà connue dans Noethys pour la personne recherchée ?
+            # None si une des deux dates manque (rien à comparer, on ne pénalise pas une info
+            # absente).
+            date_ent = _parse_date(resultat.get("birthDate"))
+            if date_naiss_noethys and date_ent:
+                resultat['date_coherente'] = (date_ent == date_naiss_noethys)
+            else:
+                resultat['date_coherente'] = None
+
             # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
             # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
-            # pas comme une vraie preuve (son propre lien est déjà suspect) - mais ce n'est pas
-            # la même situation que "personne du tout ne correspond", donc message différent.
-            vraie_corroboration = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] for m in membres_enrichis)
+            # pas comme une vraie preuve (son propre lien est déjà suspect).
+            nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] for m in membres_enrichis)
             membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+
+            # Décision combinée : le nom et la date sont deux preuves indépendantes. La date
+            # seule suffit si le nom échoue (utile quand le nom pose un problème qu'on ne peut
+            # pas corriger - nom de naissance/usage, faute de frappe). Mais si le nom corrobore
+            # ET que la date le contredit clairement, on ne fait plus confiance à ce nom (risque
+            # d'homonyme, même parent-là).
+            if nom_corrobore and resultat['date_coherente'] is False:
+                vraie_corroboration = False
+            elif nom_corrobore:
+                vraie_corroboration = True
+            else:
+                vraie_corroboration = bool(resultat['date_coherente'])
+
             resultat['aucune_corroboration'] = not vraie_corroboration
 
-            if not vraie_corroboration and membres_lies_ailleurs:
+            if nom_corrobore and resultat['date_coherente'] is False:
+                resultat['message_avertissement'] = (
+                    f"Un nom de parent correspond, mais la date de naissance de cette personne "
+                    f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "
+                    f"connue dans Noethys ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
+                    f"homonyme. Vérifiez avant de continuer."
+                )
+            elif not vraie_corroboration and membres_lies_ailleurs:
                 noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
                 resultat['message_avertissement'] = (
                     f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
