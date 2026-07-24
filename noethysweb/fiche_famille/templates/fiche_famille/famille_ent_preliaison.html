@@ -90,6 +90,49 @@
         </div>
     {% endif %}
 
+    {% if non_resolus %}
+        <hr>
+        <h5>À vérifier à la main</h5>
+        <p class="text-muted">
+            Ces enfants n'ont pas pu être traités automatiquement - vérifiez-les un par un avant
+            de lancer l'import en masse, sinon ils risquent d'être importés en double.
+        </p>
+        {% for groupe in non_resolus %}
+        <div class="card mb-3">
+            <div class="card-header p-2">
+                <strong>
+                    <i class="fa fa-home"></i>
+                    Famille {{ groupe.famille_nom }}
+                </strong>
+            </div>
+            <div class="card-body p-2">
+                <table class="table table-bordered table-sm mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Enfant</th>
+                            <th>Raison</th>
+                            <th style="width:150px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for enfant in groupe.enfants %}
+                        <tr>
+                            <td>{{ enfant.nom }}</td>
+                            <td>{{ enfant.raison }}</td>
+                            <td>
+                                <a href="{% url 'individu_ent_lier' idfamille=groupe.famille_id idindividu=enfant.individu_id %}" class="btn btn-sm btn-primary" target="_blank" rel="noopener">
+                                    <i class="fa fa-link"></i> Vérifier/lier
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+
     <script>
         document.querySelectorAll('.form_spinner').forEach(function(form) {
             form.addEventListener('submit', function() {

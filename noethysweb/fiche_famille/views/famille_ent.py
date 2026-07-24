@@ -568,14 +568,23 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
     def _rechercher_toutes_correspondances(self):
         """
-        Lance la recherche complète et renvoie une liste de groupes ne contenant que des types
-        simples (str/int) - pas d'objets Django - pour pouvoir être stockée en session.
+        Lance la recherche complète et renvoie (groupes, non_resolus) - deux listes ne contenant
+        que des types simples (str/int), pas d'objets Django, pour pouvoir être stockées en
+        session. "non_resolus" liste, par famille, les enfants que la recherche automatique n'a
+        pas su traiter (avec la raison + un lien direct vers leur fiche) - pour que l'agent
+        sache lesquels vérifier à la main avant l'import en masse (sinon ils risquent d'être
+        importés en double).
         """
         from fiche_individu.views.individu_ent import LierCompteEnt
         chercheur = LierCompteEnt()
 
         groupes_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "lignes":[...], "cles":{...}}}
+        non_resolus_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "enfants":[{...}]}}
         enfants = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
+
+        def _ajouter_non_resolu(famille, enfant, raison):
+            groupe = non_resolus_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "enfants": []})
+            groupe["enfants"].append({"nom": str(enfant), "individu_id": enfant.pk, "raison": raison})
 
         # Phase 1 : détermine la famille de chaque enfant (rapide, en local)
         candidats = []
@@ -596,7 +605,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
         # Phase 3 : traite les résultats (rapide, en local, pas d'appel API/DB supplémentaire)
         for enfant, famille, resultats, erreur in resultats_recherche:
-            if erreur or not resultats:
+            # _rechercher() renvoie toujours une erreur explicite dès que resultats est vide
+            # (connexion impossible ou aucun résultat) - on réutilise directement ce message
+            # plutôt que d'en deviner un nous-mêmes (les deux cas donnent juste "erreur rempli").
+            if erreur:
+                _ajouter_non_resolu(famille, enfant, erreur)
                 continue
 
             # Le nom de l'enfant seul ne suffit pas à être sûr que l'ENT connaît "notre" enfant
@@ -608,7 +621,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # corroborent chacun un parent différent, là c'est une vraie ambiguïté - on abandonne,
             # l'agent pourra le faire à la main si besoin.
             candidats_corrobores = [r for r in resultats if any(p["individu_correspondant"] for p in r.get("membres_enrichis", []))]
-            if len(candidats_corrobores) != 1:
+            if len(candidats_corrobores) == 0:
+                _ajouter_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
+                continue
+            if len(candidats_corrobores) > 1:
+                _ajouter_non_resolu(famille, enfant, "Plusieurs correspondances possibles dans l'ENT (ambigu)")
                 continue
 
             resultat = candidats_corrobores[0]
@@ -647,6 +664,20 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 ent_id_vers_individus.setdefault(ent_id, set()).add(individu_pk)
         ent_ids_en_collision = {ent_id for ent_id, individus in ent_id_vers_individus.items() if len(individus) > 1}
 
+        # Avant de les retirer, note les enfants perdus à cause d'une collision - sinon ils
+        # disparaîtraient de partout, sans que l'agent sache qu'il faut les vérifier à la main.
+        for famille_pk, groupe in groupes_par_famille.items():
+            # Toutes les lignes "Enfant" en collision de cette famille (pas juste la première -
+            # 2 fiches en double dans la même famille donneraient 2 lignes Enfant ici).
+            lignes_enfant_en_collision = [l for l in groupe["lignes"] if l["role"] == "Enfant" and l["cle"].split("|", 1)[0] in ent_ids_en_collision]
+            for ligne_enfant in lignes_enfant_en_collision:
+                grp = non_resolus_par_famille.setdefault(famille_pk, {"famille_id": famille_pk, "famille_nom": groupe["famille_nom"], "enfants": []})
+                grp["enfants"].append({
+                    "nom": ligne_enfant["nom_individu"],
+                    "individu_id": int(ligne_enfant["cle"].split("|", 1)[1]),
+                    "raison": "Correspond au même compte ENT qu'une autre famille Noethys (collision)",
+                })
+
         for groupe in groupes_par_famille.values():
             groupe["lignes"] = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] not in ent_ids_en_collision]
         groupes_par_famille = {fid: g for fid, g in groupes_par_famille.items() if g["lignes"]}
@@ -654,7 +685,9 @@ class PreLiaisonEnt(CustomView, TemplateView):
         groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])
         for groupe in groupes:
             del groupe["cles"]
-        return groupes
+
+        non_resolus = sorted(non_resolus_par_famille.values(), key=lambda g: g["famille_nom"])
+        return groupes, non_resolus
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -663,7 +696,9 @@ class PreLiaisonEnt(CustomView, TemplateView):
         context["box_introduction"] = "Lancez la recherche des membres de famille déjà présents dans Noethys qui correspondent à une famille connue par l'ENT, avant de lancer l'import en masse."
         context["erreur_connexion"] = False
         context["recherche_lancee"] = self.SESSION_KEY in self.request.session
-        context["groupes"] = self.request.session.get(self.SESSION_KEY) or []
+        session_data = self.request.session.get(self.SESSION_KEY) or {}
+        context["groupes"] = session_data.get("groupes", [])
+        context["non_resolus"] = session_data.get("non_resolus", [])
         context["nb_correspondances"] = sum(len(g["lignes"]) for g in context["groupes"])
         return context
 
@@ -677,7 +712,8 @@ class PreLiaisonEnt(CustomView, TemplateView):
             if get_headers() is None:
                 messages.error(request, "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible).")
             else:
-                request.session[self.SESSION_KEY] = self._rechercher_toutes_correspondances()
+                groupes, non_resolus = self._rechercher_toutes_correspondances()
+                request.session[self.SESSION_KEY] = {"groupes": groupes, "non_resolus": non_resolus}
             return HttpResponseRedirect(reverse("ent_preliaison"))
 
         # action == "confirmer" : n'écrit qu'en base et met à jour la liste déjà en session -
@@ -698,14 +734,16 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 individu.save()
                 nb_lies += 1
 
-        groupes = request.session.get(self.SESSION_KEY, [])
+        session_data = request.session.get(self.SESSION_KEY) or {}
+        groupes = session_data.get("groupes", [])
         nouveaux_groupes = []
         for groupe in groupes:
             lignes_restantes = [l for l in groupe["lignes"] if l["cle"] not in cles_confirmees]
             if lignes_restantes:
                 groupe["lignes"] = lignes_restantes
                 nouveaux_groupes.append(groupe)
-        request.session[self.SESSION_KEY] = nouveaux_groupes
+        session_data["groupes"] = nouveaux_groupes
+        request.session[self.SESSION_KEY] = session_data
 
         if nb_lies:
             messages.success(request, f"{nb_lies} individu(s) lié(s) à leur compte ENT. L'import en masse les reconnaîtra désormais automatiquement.")
