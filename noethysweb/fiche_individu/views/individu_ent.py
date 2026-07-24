@@ -317,7 +317,10 @@ class LierCompteEnt(Onglet, TemplateView):
                         if deja_utilise_par:
                             if autre_individu:
                                 echecs[autre_id] = deja_utilise_par
-                        elif autre_individu:
+                        # Ne jamais écraser un ent_id déjà existant (même écran normalement -
+                        # la case à cocher est cachée dans ce cas, mais on protège aussi côté
+                        # serveur, au cas où la requête serait envoyée directement).
+                        elif autre_individu and not autre_individu.ent_id:
                             autre_individu.ent_id = valeur
                             autre_individu.save()
                             nb_lies += 1
