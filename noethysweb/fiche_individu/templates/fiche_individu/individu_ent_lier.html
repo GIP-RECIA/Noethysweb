@@ -88,7 +88,11 @@
                             </ul>
                         {% endif %}
 
-                        <form method="post" class="form_spinner">
+                        <form method="post" class="form_spinner form_lier"
+                              data-aucune-corroboration="{{ personne.aucune_corroboration|yesno:'1,0' }}"
+                              data-noms-membres="{{ personne.noms_membres_ent }}"
+                              data-prenom="{{ prenom_recherche }}"
+                              data-nom="{{ nom_recherche }}">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="lier">
                             <input type="hidden" name="ent_id" value="{{ personne.id }}">
@@ -102,9 +106,15 @@
                                     </div>
                                 {% endif %}
                             {% endfor %}
-                            <button type="submit" class="btn btn-success btn_spinner">
-                                <i class="fa fa-link"></i> Lier ce compte
-                            </button>
+                            {% if personne.aucune_corroboration %}
+                                <button type="button" class="btn btn-success btn_spinner" onclick="confirmer_liaison_sans_corroboration(this)">
+                                    <i class="fa fa-link"></i> Lier ce compte
+                                </button>
+                            {% else %}
+                                <button type="submit" class="btn btn-success btn_spinner">
+                                    <i class="fa fa-link"></i> Lier ce compte
+                                </button>
+                            {% endif %}
                         </form>
                     </div>
                 </div>
@@ -115,6 +125,7 @@
     {% endembed %}
 </div>
 
+<script type="text/javascript" src="{% static 'lib/bootbox/bootbox.min.js' %}"></script>
 <script>
     document.querySelectorAll('.form_spinner').forEach(function(form) {
         form.addEventListener('submit', function() {
@@ -123,5 +134,35 @@
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
         });
     });
+
+    function confirmer_liaison_sans_corroboration(bouton) {
+        var form = bouton.closest('form');
+        var message = "Aucun parent/enfant ne correspond à un membre de la famille de "
+            + form.dataset.prenom + " " + form.dataset.nom + " sur Noethys";
+        if (form.dataset.nomsMembres) {
+            message += " (" + form.dataset.nomsMembres + ")";
+        }
+        message += ". Vous risquez de lier la mauvaise personne (homonyme dans l'ENT).";
+
+        bootbox.dialog({
+            title: "Confirmation",
+            message: message,
+            buttons: {
+                ok: {
+                    label: "<i class='fa fa-check'></i> Lier quand même",
+                    className: 'btn-danger',
+                    callback: function() {
+                        bouton.disabled = true;
+                        bouton.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+                        form.submit();
+                    }
+                },
+                cancel: {
+                    label: "<i class='fa fa-ban'></i> Annuler",
+                    className: 'btn-default',
+                }
+            }
+        });
+    }
 </script>
 {% endblock %}

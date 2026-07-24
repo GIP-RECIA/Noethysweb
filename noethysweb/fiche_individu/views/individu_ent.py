@@ -235,6 +235,11 @@ class LierCompteEnt(Onglet, TemplateView):
                     "lie_a_autre_compte": bool(match and match.ent_id and match.ent_id != membre_ent.get('id')),
                 })
             resultat['membres_enrichis'] = membres_enrichis
+            # Sert à avertir l'agent avant qu'il ne lie ce compte : si aucun membre de la
+            # famille ENT ne correspond à personne dans Noethys, rien ne confirme que c'est
+            # bien la bonne personne (risque d'homonyme) - voir individu_ent_lier.html.
+            resultat['aucune_corroboration'] = not any(m['individu_correspondant'] for m in membres_enrichis)
+            resultat['noms_membres_ent'] = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_enrichis)
         return resultats, None
 
     def get_context_data(self, **kwargs):
