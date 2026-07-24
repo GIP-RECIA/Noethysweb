@@ -577,13 +577,25 @@ class PreLiaisonEnt(CustomView, TemplateView):
         groupes_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "lignes":[...], "cles":{...}}}
         enfants = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
 
+        # Phase 1 : détermine la famille de chaque enfant (rapide, en local)
+        candidats = []
         for enfant in enfants:
             ratt = Rattachement.objects.filter(individu=enfant, categorie=2).select_related("famille").first()
-            if not ratt:
-                continue
-            famille = ratt.famille
+            if ratt:
+                candidats.append((enfant, ratt.famille))
 
+        # Phase 2 : lance les recherches vers l'ENT en parallèle (5 à la fois) - la partie lente,
+        # un enfant non lié = un appel API, potentiellement des centaines en une fois.
+        def _chercher_un(candidat):
+            enfant, famille = candidat
             resultats, erreur = chercheur._rechercher(enfant.nom, enfant.prenom, famille.pk, enfant.pk)
+            return enfant, famille, resultats, erreur
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            resultats_recherche = list(executor.map(_chercher_un, candidats))
+
+        # Phase 3 : traite les résultats (rapide, en local, pas d'appel API/DB supplémentaire)
+        for enfant, famille, resultats, erreur in resultats_recherche:
             if erreur or not resultats:
                 continue
 
