@@ -758,25 +758,49 @@ class PreLiaisonEnt(CustomView, TemplateView):
         # action == "confirmer" : n'écrit qu'en base et met à jour la liste déjà en session -
         # ne relance jamais de recherche vers l'ENT.
         cles_confirmees = set(request.POST.getlist("liaisons_confirmees"))
-        nb_lies = 0
-
-        for cle in cles_confirmees:
-            try:
-                ent_id, individu_pk = cle.split("|", 1)
-            except ValueError:
-                continue
-            if Individu.objects.filter(ent_id=ent_id).exists():
-                continue
-            individu = Individu.objects.filter(pk=individu_pk, ent_id__isnull=True).first()
-            if individu:
-                individu.ent_id = ent_id
-                individu.save()
-                nb_lies += 1
 
         session_data = request.session.get(self.SESSION_KEY)
         if not isinstance(session_data, dict):
             session_data = {}
         groupes = session_data.get("groupes", [])
+
+        # Nom tel qu'affiché à l'écran, pour pouvoir nommer précisément les lignes ignorées
+        # (même libellé que celui que l'agent a coché, pas un recalcul).
+        noms_par_cle = {ligne["cle"]: ligne["nom_individu"] for groupe in groupes for ligne in groupe["lignes"]}
+
+        nb_lies = 0
+        echecs = []  # [(nom, raison)] - jamais ignorer une ligne en silence : l'agent a coché,
+                     # il doit savoir ce qui n'a pas été fait et pourquoi.
+        deja_fait = []  # liaisons déjà en place à l'identique : ni succès, ni échec
+
+        for cle in cles_confirmees:
+            nom = noms_par_cle.get(cle, "Ligne inconnue")
+            try:
+                ent_id, individu_pk = cle.split("|", 1)
+            except ValueError:
+                echecs.append((nom, "donnée illisible, relancez la recherche"))
+                continue
+            detenteur = Individu.objects.filter(ent_id=ent_id).first()
+            if detenteur:
+                # Cas fréquent depuis que "Vérifier/lier" ouvre un onglet : l'agent a déjà fait
+                # cette liaison à côté. Le résultat voulu est atteint - ne pas l'annoncer comme
+                # un échec, ce serait une fausse alerte.
+                if str(detenteur.pk) == str(individu_pk):
+                    deja_fait.append(nom)
+                else:
+                    echecs.append((nom, f"ce compte ENT est déjà utilisé par {detenteur}"))
+                continue
+            individu = Individu.objects.filter(pk=individu_pk).first()
+            if not individu:
+                echecs.append((nom, "cette fiche n'existe plus dans Noethys"))
+                continue
+            if individu.ent_id:
+                echecs.append((nom, "déjà lié à un compte ENT entre-temps"))
+                continue
+            individu.ent_id = ent_id
+            individu.save()
+            nb_lies += 1
+
         nouveaux_groupes = []
         for groupe in groupes:
             lignes_restantes = [l for l in groupe["lignes"] if l["cle"] not in cles_confirmees]
@@ -788,7 +812,24 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
         if nb_lies:
             messages.success(request, f"{nb_lies} individu(s) lié(s) à leur compte ENT. L'import en masse les reconnaîtra désormais automatiquement.")
-        else:
+
+        # Plafonné : avec des centaines de lignes cochées d'un coup, tout détailler donnerait
+        # un message illisible.
+        MAX_DETAIL = 10
+
+        def _resumer(elements):
+            detail = " ; ".join(elements[:MAX_DETAIL])
+            if len(elements) > MAX_DETAIL:
+                detail += f" ; et {len(elements) - MAX_DETAIL} autre(s)"
+            return detail
+
+        if deja_fait:
+            messages.info(request, f"{len(deja_fait)} liaison(s) déjà en place, aucune action nécessaire : {_resumer(deja_fait)}.")
+
+        if echecs:
+            messages.warning(request, f"{len(echecs)} liaison(s) non effectuée(s) : {_resumer([f'{nom} ({raison})' for nom, raison in echecs])}.")
+
+        if not nb_lies and not echecs and not deja_fait:
             messages.info(request, "Aucune liaison confirmée.")
 
         return HttpResponseRedirect(reverse("ent_preliaison"))

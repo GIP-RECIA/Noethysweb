@@ -187,6 +187,94 @@ class TestCorroborationPreLiaison(TestCase):
         # ... et le parent en double n'est évidemment plus proposé
         self.assertFalse([c for c in cles if c.startswith("ENT-MARC|")])
 
+    # ------------------------------------------ confirmation : jamais d'échec silencieux
+
+    def _confirmer(self, cles, groupes_session):
+        """Simule le clic 'Confirmer les liaisons sélectionnées' et renvoie les messages."""
+        request = RequestFactory().post("/", {"action": "confirmer", "liaisons_confirmees": cles})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session[PreLiaisonEnt.SESSION_KEY] = {"groupes": groupes_session, "non_resolus": []}
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+
+        vue = PreLiaisonEnt()
+        vue.request = request
+        vue.kwargs = {}
+        vue.post(request)
+        from django.contrib.messages import get_messages
+        return [(m.level_tag, str(m)) for m in get_messages(request)]
+
+    def test_confirmation_liste_les_lignes_ignorees_avec_leur_raison(self):
+        """Une ligne cochée qui ne peut pas être liée ne doit jamais être ignorée en
+        silence : le message doit nommer la personne et donner la raison précise."""
+        famille = Famille.objects.create(nom="CONFIRM")
+        ok = Individu.objects.create(nom="CONFIRM", prenom="Reussite", civilite=4)
+        deja = Individu.objects.create(nom="CONFIRM", prenom="DejaLie", civilite=4, ent_id="ENT-DEJA")
+        # Un autre individu détient déjà le compte visé par la 3e ligne
+        Individu.objects.create(nom="AUTRE", prenom="Detenteur", civilite=1, ent_id="ENT-PRIS")
+        convoite = Individu.objects.create(nom="CONFIRM", prenom="ComptePris", civilite=4)
+        for ind in (ok, deja, convoite):
+            Rattachement.objects.create(individu=ind, famille=famille, categorie=2, titulaire=False)
+
+        lignes = [
+            {"cle": f"ENT-OK|{ok.pk}", "nom_ent": "Reussite", "nom_individu": str(ok), "role": "Enfant"},
+            {"cle": f"ENT-AUTRE|{deja.pk}", "nom_ent": "DejaLie", "nom_individu": str(deja), "role": "Enfant"},
+            {"cle": f"ENT-PRIS|{convoite.pk}", "nom_ent": "ComptePris", "nom_individu": str(convoite), "role": "Enfant"},
+            {"cle": f"ENT-FANTOME|999999", "nom_ent": "Fantome", "nom_individu": "CONFIRM Fantome", "role": "Enfant"},
+        ]
+        groupes = [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": lignes}]
+
+        msgs = self._confirmer([l["cle"] for l in lignes], groupes)
+        texte = " || ".join(t for _, t in msgs)
+
+        # 1 seule réussite
+        ok.refresh_from_db()
+        self.assertEqual(ok.ent_id, "ENT-OK")
+        self.assertIn("1 individu(s) lié(s)", texte)
+
+        # ... et les 3 échecs sont nommés avec leur raison
+        self.assertIn("3 liaison(s) non effectuée(s)", texte,
+                      "Les lignes ignorées ne sont pas signalées à l'agent.")
+        self.assertIn(str(deja), texte)
+        self.assertIn("déjà lié", texte)
+        self.assertIn(str(convoite), texte)
+        self.assertIn("Detenteur", texte)          # nomme QUI détient le compte
+        self.assertIn("n'existe plus", texte)      # la ligne fantôme
+
+        # les échecs ne doivent pas être comptés comme des réussites
+        deja.refresh_from_db()
+        self.assertEqual(deja.ent_id, "ENT-DEJA")
+
+    def test_confirmation_ligne_deja_liee_ailleurs_nest_pas_une_erreur(self):
+        """Cas fréquent : l'agent a déjà fait la liaison via le bouton "Vérifier/lier" (qui
+        ouvre un onglet), puis confirme la ligne restée à l'écran. Le résultat voulu étant
+        atteint, ça ne doit pas être annoncé comme un échec."""
+        famille = Famille.objects.create(nom="DEJAFAIT")
+        ind = Individu.objects.create(nom="DEJAFAIT", prenom="Lucas", civilite=4, ent_id="ENT-L")
+        Rattachement.objects.create(individu=ind, famille=famille, categorie=2, titulaire=False)
+        lignes = [{"cle": f"ENT-L|{ind.pk}", "nom_ent": "Lucas", "nom_individu": str(ind), "role": "Enfant"}]
+
+        msgs = self._confirmer([lignes[0]["cle"]], [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": lignes}])
+        niveaux = [n for n, _ in msgs]
+        texte = " || ".join(t for _, t in msgs)
+
+        self.assertNotIn("warning", niveaux,
+                         "Une liaison déjà en place à l'identique est signalée comme un échec.")
+        self.assertIn("déjà en place", texte)
+        self.assertIn(str(ind), texte)
+
+    def test_confirmation_sans_echec_ne_produit_pas_d_avertissement(self):
+        """Non-régression : quand tout passe, aucun message d'avertissement parasite."""
+        famille = Famille.objects.create(nom="CONFIRM2")
+        ind = Individu.objects.create(nom="CONFIRM2", prenom="Ok", civilite=4)
+        Rattachement.objects.create(individu=ind, famille=famille, categorie=2, titulaire=False)
+        lignes = [{"cle": f"ENT-OK2|{ind.pk}", "nom_ent": "Ok", "nom_individu": str(ind), "role": "Enfant"}]
+
+        msgs = self._confirmer([lignes[0]["cle"]], [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": lignes}])
+        niveaux = [n for n, _ in msgs]
+        self.assertIn("success", niveaux)
+        self.assertNotIn("warning", niveaux)
+
     # ------------------------------------------------------------------ règle 8
 
     def test_regle8c_confirm_pre_liaison_n_ecrase_pas_un_ent_id_existant(self):
