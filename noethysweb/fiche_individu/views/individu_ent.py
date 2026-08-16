@@ -313,7 +313,22 @@ class LierCompteEnt(Onglet, TemplateView):
 
             resultat['aucune_corroboration'] = not vraie_corroboration
 
-            if nom_corrobore and resultat['date_coherente'] is False:
+            # Cas limite : la date concorde mais AUCUN nom ne corrobore (famille Noethys vide,
+            # ou aucun parent retrouvé). C'est techniquement une corroboration - deux personnes
+            # du même nom nées exactement le même jour sont improbables - mais c'est la preuve
+            # la plus faible qu'on accepte, et à l'écran rien ne la rend visible (les parents
+            # affichés sont tous en jaune). On lie donc, mais jamais en silence : avertissement
+            # sur l'écran individuel, et exclusion des propositions automatiques de la
+            # pré-liaison (voir _rechercher_toutes_correspondances).
+            resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore)
+
+            if resultat['corrobore_par_date_seule']:
+                resultat['message_avertissement'] = (
+                    f"Aucun parent/enfant ne correspond à un membre de cette famille sur "
+                    f"Noethys : le seul point commun est la date de naissance "
+                    f"({date_ent.strftime('%d/%m/%Y')})."
+                )
+            elif nom_corrobore and resultat['date_coherente'] is False:
                 resultat['message_avertissement'] = (
                     f"Un nom de parent correspond, mais la date de naissance de cette personne "
                     f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "

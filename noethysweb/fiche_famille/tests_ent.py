@@ -98,6 +98,31 @@ class TestCorroborationPreLiaison(TestCase):
             "échouerait silencieusement).",
         )
 
+    def test_regle5d_preliaison_ne_propose_pas_les_cas_corrobores_par_la_date_seule(self):
+        """La date seule suffit sur l'écran individuel (avec avertissement), mais pas pour
+        une proposition automatique cochée d'avance en pré-liaison : ces cas basculent en
+        "à vérifier à la main" avec une raison explicite."""
+        famille = Famille.objects.create(nom="DATESEULE")
+        # Enfant SEUL dans sa famille : aucun parent ne pourra corroborer
+        enfant = Individu.objects.create(nom="DATESEULE", prenom="Lucas", civilite=4,
+                                        date_naiss=date(2005, 4, 10))
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Lucas": lambda: [_resultat_eleve("ENT-L", "DATESEULE", "Lucas", birth="2005-04-10", parents=[
+                {"firstName": "Alice", "lastName": "DATESEULE", "id": "ENT-A"},
+            ])],
+        })
+
+        self.assertNotIn(
+            f"ENT-L|{enfant.pk}", self._cles_proposees(groupes),
+            "Un cas corroboré par la seule date de naissance est proposé automatiquement, "
+            "coché d'avance, alors qu'aucun parent ne corrobore.",
+        )
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons, "Le cas a disparu au lieu d'être listé à vérifier.")
+        self.assertIn("date de naissance", raisons[0])
+
     # ------------------------------------------------------------------ règle 6
 
     def test_regle6_collision_deux_familles_aucune_retenue(self):

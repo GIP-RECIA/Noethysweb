@@ -176,6 +176,41 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
             "La date qui correspond exactement devrait suffire à corroborer.",
         )
 
+    def test_regle5b_date_seule_corrobore_mais_avertit(self):
+        """Règle 5 (suite) : la date seule corrobore (règle 5 inchangée), mais comme c'est
+        la preuve la plus faible et que rien à l'écran ne la met en évidence, ce cas doit
+        être signalé à l'agent au lieu d'être lié en silence."""
+        self.enfant.date_naiss = date(2006, 10, 8)
+        self.enfant.save()
+
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", birth="2006-10-08", parents=[
+                {"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"},
+            ]),
+        ])
+        resultat = resultats[0]
+        # Toujours corroboré (règle 5) : on lie, on ne bloque pas
+        self.assertFalse(resultat["aucune_corroboration"])
+        # ... mais explicitement signalé comme reposant sur la seule date
+        self.assertTrue(resultat["corrobore_par_date_seule"])
+        self.assertIn("date de naissance", resultat["message_avertissement"])
+
+    def test_regle5c_corroboration_par_nom_nest_pas_signalee_comme_date_seule(self):
+        """Le nouveau signalement ne doit se déclencher QUE sans corroboration par le nom -
+        un cas nom + date ne doit pas se mettre à avertir (pas de régression sur le flux
+        normal, qui doit rester sans popup)."""
+        self.enfant.date_naiss = date(2006, 10, 8)
+        self.enfant.save()
+
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", birth="2006-10-08", parents=[
+                {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+            ]),
+        ])
+        resultat = resultats[0]
+        self.assertFalse(resultat["aucune_corroboration"])
+        self.assertFalse(resultat["corrobore_par_date_seule"])
+
     # ------------------------------------------------------------------ règle 7
 
     def test_regle7_enfant_multi_familles_cherche_sur_toutes_les_familles(self):

@@ -112,7 +112,8 @@
                                     </div>
                                 {% endif %}
                             {% endfor %}
-                            {% if personne.aucune_corroboration %}
+                            {# Popup de confirmation aussi quand la seule preuve est la date : rien à l'écran ne la rend visible, l'agent lierait sans savoir sur quoi on s'appuie #}
+                            {% if personne.aucune_corroboration or personne.corrobore_par_date_seule %}
                                 <button type="button" class="btn btn-success btn_spinner" onclick="confirmer_liaison_sans_corroboration(this)">
                                     <i class="fa fa-link"></i> Lier ce compte
                                 </button>
