@@ -122,8 +122,45 @@ class TestCorroborationPreLiaison(TestCase):
             "compte ENT ne peut pas être proposé à deux personnes différentes.",
         )
         # Les deux enfants doivent être visibles dans les non-résolus (pas perdus)
-        enfants_non_resolus = [e["individu_id"] for g in non_resolus for e in g["enfants"]]
+        enfants_non_resolus = [p["individu_id"] for g in non_resolus for p in g["personnes"] if p["role"] == "Enfant"]
         self.assertEqual(len(enfants_non_resolus), 2)
+
+    def test_regle6b_collision_de_parents_est_signalee_sans_bloquer_les_enfants(self):
+        """Règle 6 (parents) : deux fiches Noethys différentes qui correspondent au même
+        compte ENT parent (fiche en double) doivent être signalées à l'agent - et les
+        enfants, eux, restent proposés puisque leurs propres comptes ne sont pas ambigus."""
+        # Deux enfants DISTINCTS (Lea et Tom), dans deux familles Noethys séparées, mais
+        # le même vrai père saisi deux fois (une fiche par famille).
+        familles = {}
+        for prenom_enfant, suffixe in (("Lea", "A"), ("Tom", "B")):
+            famille = Famille.objects.create(nom=f"MARTIN {suffixe}")
+            parent = Individu.objects.create(nom="MARTIN", prenom="Marc", civilite=1)
+            enfant = Individu.objects.create(nom="MARTIN", prenom=prenom_enfant, civilite=4)
+            Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+            Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+            familles[prenom_enfant] = {"famille": famille, "parent": parent, "enfant": enfant}
+
+        # Côté ENT : Lea et Tom sont frère et soeur, même père (ENT-MARC)
+        parent_ent = [{"firstName": "Marc", "lastName": "MARTIN", "id": "ENT-MARC"}]
+        groupes, non_resolus = self._lancer_recherche({
+            "Lea": lambda: [_resultat_eleve("ENT-LEA", "MARTIN", "Lea", parents=list(parent_ent))],
+            "Tom": lambda: [_resultat_eleve("ENT-TOM", "MARTIN", "Tom", parents=list(parent_ent))],
+        })
+
+        # Les deux fiches parent en double doivent être signalées à l'agent
+        parents_signales = [p for g in non_resolus for p in g["personnes"] if p["role"] == "Parent"]
+        self.assertEqual(
+            len(parents_signales), 2,
+            "Les fiches parent en double ont été retirées des propositions sans être "
+            "signalées - l'agent ne peut pas savoir qu'il a un doublon à corriger.",
+        )
+
+        # Les enfants, eux, ne sont pas ambigus : ils restent proposés
+        cles = self._cles_proposees(groupes)
+        self.assertIn(f"ENT-LEA|{familles['Lea']['enfant'].pk}", cles)
+        self.assertIn(f"ENT-TOM|{familles['Tom']['enfant'].pk}", cles)
+        # ... et le parent en double n'est évidemment plus proposé
+        self.assertFalse([c for c in cles if c.startswith("ENT-MARC|")])
 
     # ------------------------------------------------------------------ règle 8
 

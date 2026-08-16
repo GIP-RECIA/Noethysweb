@@ -570,21 +570,25 @@ class PreLiaisonEnt(CustomView, TemplateView):
         """
         Lance la recherche complète et renvoie (groupes, non_resolus) - deux listes ne contenant
         que des types simples (str/int), pas d'objets Django, pour pouvoir être stockées en
-        session. "non_resolus" liste, par famille, les enfants que la recherche automatique n'a
-        pas su traiter (avec la raison + un lien direct vers leur fiche) - pour que l'agent
-        sache lesquels vérifier à la main avant l'import en masse (sinon ils risquent d'être
-        importés en double).
+        session. "non_resolus" liste, par famille, les personnes (enfants ET parents) que la
+        recherche automatique n'a pas su traiter (avec la raison + un lien direct vers leur
+        fiche) - pour que l'agent sache lesquelles vérifier à la main avant l'import en masse
+        (sinon elles risquent d'être importées en double).
         """
         from fiche_individu.views.individu_ent import LierCompteEnt
         chercheur = LierCompteEnt()
 
         groupes_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "lignes":[...], "cles":{...}}}
-        non_resolus_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "enfants":[{...}]}}
+        non_resolus_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "personnes":[{...}]}}
         enfants = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
 
-        def _ajouter_non_resolu(famille, enfant, raison):
-            groupe = non_resolus_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "enfants": []})
-            groupe["enfants"].append({"nom": str(enfant), "individu_id": enfant.pk, "raison": raison})
+        def _ajouter_non_resolu(famille_pk, famille_nom, nom, individu_id, raison, role="Enfant"):
+            """Signale une personne (enfant ou parent) que la recherche n'a pas su traiter."""
+            groupe = non_resolus_par_famille.setdefault(famille_pk, {"famille_id": famille_pk, "famille_nom": famille_nom, "personnes": []})
+            groupe["personnes"].append({"nom": nom, "individu_id": individu_id, "raison": raison, "role": role})
+
+        def _ajouter_enfant_non_resolu(famille, enfant, raison):
+            _ajouter_non_resolu(famille.pk, famille.nom, str(enfant), enfant.pk, raison, role="Enfant")
 
         # Phase 1 : détermine la famille de chaque enfant (rapide, en local)
         candidats = []
@@ -609,7 +613,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # (connexion impossible ou aucun résultat) - on réutilise directement ce message
             # plutôt que d'en deviner un nous-mêmes (les deux cas donnent juste "erreur rempli").
             if erreur:
-                _ajouter_non_resolu(famille, enfant, erreur)
+                _ajouter_enfant_non_resolu(famille, enfant, erreur)
                 continue
 
             # Le nom de l'enfant seul ne suffit pas à être sûr que l'ENT connaît "notre" enfant
@@ -628,12 +632,12 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 # avec ce que l'agent verra en cliquant sur "Vérifier/lier".
                 contradiction_date = next((r for r in resultats if r.get("nom_corrobore") and r.get("date_coherente") is False), None)
                 if contradiction_date and contradiction_date.get("message_avertissement"):
-                    _ajouter_non_resolu(famille, enfant, contradiction_date["message_avertissement"])
+                    _ajouter_enfant_non_resolu(famille, enfant, contradiction_date["message_avertissement"])
                 else:
-                    _ajouter_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
+                    _ajouter_enfant_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
                 continue
             if len(candidats_corrobores) > 1:
-                _ajouter_non_resolu(famille, enfant, "Plusieurs correspondances possibles dans l'ENT (ambigu)")
+                _ajouter_enfant_non_resolu(famille, enfant, "Plusieurs correspondances possibles dans l'ENT (ambigu)")
                 continue
 
             resultat = candidats_corrobores[0]
@@ -643,7 +647,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # dès maintenant, avec une raison claire (fiche en double probable).
             detenteur = resultat.get("compte_deja_utilise_par")
             if detenteur:
-                _ajouter_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} (Noethys) - vérifiez s'il s'agit d'une fiche en double")
+                _ajouter_enfant_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} (Noethys) - vérifiez s'il s'agit d'une fiche en double")
                 continue
 
             parents_enrichis = resultat.get("membres_enrichis", [])
@@ -681,19 +685,25 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 ent_id_vers_individus.setdefault(ent_id, set()).add(individu_pk)
         ent_ids_en_collision = {ent_id for ent_id, individus in ent_id_vers_individus.items() if len(individus) > 1}
 
-        # Avant de les retirer, note les enfants perdus à cause d'une collision - sinon ils
+        # Avant de les retirer, note les personnes perdues à cause d'une collision - sinon elles
         # disparaîtraient de partout, sans que l'agent sache qu'il faut les vérifier à la main.
+        # Enfants ET parents : un parent en collision signale presque toujours une fiche en
+        # double côté Noethys (deux fiches pour le même vrai parent, une par famille), et c'est
+        # justement l'information utile à remonter - sinon elle se perd en silence.
         for famille_pk, groupe in groupes_par_famille.items():
-            # Toutes les lignes "Enfant" en collision de cette famille (pas juste la première -
-            # 2 fiches en double dans la même famille donneraient 2 lignes Enfant ici).
-            lignes_enfant_en_collision = [l for l in groupe["lignes"] if l["role"] == "Enfant" and l["cle"].split("|", 1)[0] in ent_ids_en_collision]
-            for ligne_enfant in lignes_enfant_en_collision:
-                grp = non_resolus_par_famille.setdefault(famille_pk, {"famille_id": famille_pk, "famille_nom": groupe["famille_nom"], "enfants": []})
-                grp["enfants"].append({
-                    "nom": ligne_enfant["nom_individu"],
-                    "individu_id": int(ligne_enfant["cle"].split("|", 1)[1]),
-                    "raison": "Correspond au même compte ENT qu'une autre famille Noethys (collision)",
-                })
+            # Toutes les lignes en collision de cette famille (pas juste la première - 2 fiches
+            # en double dans la même famille donneraient 2 lignes du même rôle ici).
+            lignes_en_collision = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] in ent_ids_en_collision]
+            for ligne in lignes_en_collision:
+                if ligne["role"] == "Parent":
+                    raison = "Ce parent correspond au même compte ENT qu'une autre fiche Noethys - probable fiche en double, à fusionner ou corriger"
+                else:
+                    raison = "Correspond au même compte ENT qu'une autre famille Noethys (collision)"
+                _ajouter_non_resolu(
+                    famille_pk, groupe["famille_nom"],
+                    ligne["nom_individu"], int(ligne["cle"].split("|", 1)[1]),
+                    raison, role=ligne["role"],
+                )
 
         for groupe in groupes_par_famille.values():
             groupe["lignes"] = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] not in ent_ids_en_collision]
