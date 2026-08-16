@@ -637,6 +637,15 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 continue
 
             resultat = candidats_corrobores[0]
+
+            # Le compte ENT du candidat est-il déjà utilisé par un autre individu Noethys ?
+            # Dans ce cas la confirmation échouerait silencieusement - on écarte l'enfant
+            # dès maintenant, avec une raison claire (fiche en double probable).
+            detenteur = resultat.get("compte_deja_utilise_par")
+            if detenteur:
+                _ajouter_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} (Noethys) - vérifiez s'il s'agit d'une fiche en double")
+                continue
+
             parents_enrichis = resultat.get("membres_enrichis", [])
 
             lignes = [{
@@ -646,7 +655,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 "role": "Enfant",
             }]
             for parent in parents_enrichis:
-                if parent["individu_correspondant"] and not parent["deja_lie"] and not parent["lie_a_autre_compte"]:
+                if parent["proposable"]:
                     lignes.append({
                         "cle": f"{parent['ent']['id']}|{parent['individu_correspondant'].pk}",
                         "nom_ent": f"{parent['ent'].get('firstName', '')} {parent['ent'].get('lastName', '')}",

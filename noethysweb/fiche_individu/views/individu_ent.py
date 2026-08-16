@@ -239,13 +239,43 @@ class LierCompteEnt(Onglet, TemplateView):
                 # Important : on compare à l'id précis de CE candidat, pas juste "a-t-il un
                 # ent_id" - sinon un individu déjà lié à un tout autre compte ENT (erreur
                 # passée) afficherait à tort "déjà lié" comme si tout était en ordre.
+                deja_lie = bool(match and match.ent_id == membre_ent.get('id'))
+                lie_a_autre_compte = bool(match and match.ent_id and match.ent_id != membre_ent.get('id'))
+
+                # Le compte ENT candidat de ce membre est-il déjà utilisé par un AUTRE
+                # individu Noethys ? Dans ce cas il ne doit jamais être proposé : la
+                # confirmation échouerait de toute façon (et probablement une fiche en
+                # double existe quelque part).
+                membre_id = membre_ent.get('id')
+                detenteur = None
+                if membre_id:
+                    qs_detenteur = Individu.objects.filter(ent_id=membre_id)
+                    if match:
+                        qs_detenteur = qs_detenteur.exclude(pk=match.pk)
+                    detenteur = qs_detenteur.first()
+                compte_deja_pris = detenteur is not None
+
                 membres_enrichis.append({
                     "ent": membre_ent,
                     "individu_correspondant": match,
-                    "deja_lie": bool(match and match.ent_id == membre_ent.get('id')),
-                    "lie_a_autre_compte": bool(match and match.ent_id and match.ent_id != membre_ent.get('id')),
+                    "deja_lie": deja_lie,
+                    "lie_a_autre_compte": lie_a_autre_compte,
+                    "compte_deja_pris": compte_deja_pris,
+                    "compte_pris_par": detenteur,
+                    # Champ canonique "peut être coché pour liaison" - seule source de
+                    # vérité, utilisée par le template ET par la pré-liaison ET les tests.
+                    "proposable": bool(match and not deja_lie and not lie_a_autre_compte and not compte_deja_pris),
                 })
             resultat['membres_enrichis'] = membres_enrichis
+
+            # Le compte ENT du candidat principal lui-même est-il déjà utilisé par un autre
+            # individu Noethys (autre que la personne qu'on cherche à lier) ? Si oui, cette
+            # carte ne doit pas proposer de liaison du tout.
+            candidat_id = resultat.get('id')
+            if candidat_id:
+                resultat['compte_deja_utilise_par'] = Individu.objects.filter(ent_id=candidat_id).exclude(pk=idindividu_exclu).first()
+            else:
+                resultat['compte_deja_utilise_par'] = None
 
             # Deuxième preuve indépendante du nom : la date de naissance ENT de ce candidat
             # correspond-elle à celle déjà connue dans Noethys pour la personne recherchée ?
@@ -259,9 +289,12 @@ class LierCompteEnt(Onglet, TemplateView):
 
             # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
             # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
-            # pas comme une vraie preuve (son propre lien est déjà suspect).
-            nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] for m in membres_enrichis)
+            # pas comme une vraie preuve (son propre lien est déjà suspect) - même chose pour
+            # un membre dont le compte candidat est déjà pris par un autre individu (fiche en
+            # double probable, la correspondance est ambiguë).
+            nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] and not m['compte_deja_pris'] for m in membres_enrichis)
             membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+            membres_comptes_pris = [m for m in membres_enrichis if m['individu_correspondant'] and m['compte_deja_pris']]
             # Exposé sur le résultat pour que la pré-liaison puisse distinguer "vraiment aucun
             # nom ne correspond" de "un nom correspond mais la date le contredit".
             resultat['nom_corrobore'] = nom_corrobore
@@ -293,6 +326,13 @@ class LierCompteEnt(Onglet, TemplateView):
                     f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
                     f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
                     f"fiche avant de continuer."
+                )
+            elif not vraie_corroboration and membres_comptes_pris:
+                noms = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_comptes_pris)
+                resultat['message_avertissement'] = (
+                    f"Le compte ENT du seul membre retrouvé ({noms}) est déjà utilisé par un "
+                    f"autre individu dans Noethys - vérifiez s'il s'agit d'une fiche en double "
+                    f"avant de continuer."
                 )
             elif not vraie_corroboration:
                 resultat['message_avertissement'] = (
@@ -346,6 +386,13 @@ class LierCompteEnt(Onglet, TemplateView):
                 messages.error(request, "Ce compte ENT est déjà lié à un autre individu dans Noethys.")
             else:
                 individu = Individu.objects.get(pk=idindividu)
+                # Ne jamais écraser un lien existant, même via une requête directe - même
+                # garde-fou que pour les parents cochés ci-dessous (l'écran n'affiche
+                # normalement cette page que pour un individu non lié, mais rien ne
+                # l'empêche d'être appelée directement).
+                if individu.ent_id:
+                    messages.error(request, "Cet individu est déjà lié à un compte ENT - aucune modification effectuée, pour ne pas écraser le lien existant. Vérifiez sa fiche.")
+                    return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
                 individu.ent_id = ent_id
                 individu.save()
                 nb_lies = 1

@@ -74,12 +74,15 @@
                                         {{ parent.ent.firstName }} {{ parent.ent.lastName }} (ENT)
                                         {% if parent.echec %}
                                             <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} (Noethys) - vérifiez sa fiche</span>
+                                        {% elif parent.compte_deja_pris %}
+                                            <span class="badge badge-danger">Le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.compte_pris_par }} (Noethys) - vérifiez s'il s'agit d'une fiche en double</span>
                                         {% elif parent.lie_a_autre_compte %}
                                             <span class="badge badge-danger">{{ parent.individu_correspondant }} (Noethys) est déjà lié(e) à un autre compte ENT - vérifiez sa fiche</span>
                                         {% elif parent.deja_lie %}
                                             <span class="badge badge-secondary">Déjà lié à {{ parent.individu_correspondant }} (Noethys)</span>
                                         {% elif parent.individu_correspondant %}
-                                            <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }} (Noethys) - cochez ci-dessous pour la lier</span>
+                                            {# "cochez ci-dessous" seulement si la carte propose vraiment la liaison - si le compte du candidat principal est déjà pris, la zone de liaison est remplacée par une alerte, il n'y a plus de case #}
+                                            <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }} (Noethys){% if not personne.compte_deja_utilise_par %} - cochez ci-dessous pour la lier{% endif %}</span>
                                         {% else %}
                                             <span class="badge badge-warning">Ne correspond à personne dans la famille de {{ prenom_recherche }} {{ nom_recherche }} sur Noethys</span>
                                         {% endif %}
@@ -88,6 +91,11 @@
                             </ul>
                         {% endif %}
 
+                        {% if personne.compte_deja_utilise_par %}
+                            <div class="alert alert-danger mb-0">
+                                <i class="fa fa-times-circle"></i> Ce compte ENT est déjà utilisé par {{ personne.compte_deja_utilise_par }} (Noethys) - il ne peut pas être lié à {{ prenom_recherche }} {{ nom_recherche }}. Vérifiez s'il s'agit d'une fiche en double.
+                            </div>
+                        {% else %}
                         <form method="post" class="form_spinner form_lier"
                               data-aucune-corroboration="{{ personne.aucune_corroboration|yesno:'1,0' }}"
                               data-message-avertissement="{{ personne.message_avertissement }}">
@@ -95,7 +103,7 @@
                             <input type="hidden" name="action" value="lier">
                             <input type="hidden" name="ent_id" value="{{ personne.id }}">
                             {% for parent in personne.membres_enrichis %}
-                                {% if parent.individu_correspondant and not parent.deja_lie and not parent.echec and not parent.lie_a_autre_compte %}
+                                {% if parent.proposable and not parent.echec %}
                                     <div class="form-check mb-2">
                                         <input type="checkbox" class="form-check-input" name="parent_lier_{{ parent.individu_correspondant.pk }}" value="{{ parent.ent.id }}" id="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}" checked>
                                         <label class="form-check-label" for="parent_{{ personne.id }}_{{ parent.individu_correspondant.pk }}">
@@ -114,6 +122,7 @@
                                 </button>
                             {% endif %}
                         </form>
+                        {% endif %}
                     </div>
                 </div>
             {% endfor %}
