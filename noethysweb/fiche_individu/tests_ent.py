@@ -505,3 +505,60 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         self.parent.refresh_from_db()
         self.assertEqual(self.parent.ent_lie_par, "agent_qui_lie_2")
         self.assertIsNotNone(self.parent.ent_lie_le)
+
+    # ------------------------------------------------------------------- délier
+
+    def test_delier_vide_ent_id_et_les_champs_de_trace(self):
+        """Délier une fiche doit vider ent_id ET ent_lie_par/ent_lie_le - ils ne
+        veulent plus rien dire une fois le lien cassé."""
+        agent = Utilisateur.objects.create_user(username="agent_qui_lie_3")
+        self.enfant.ent_id = "ANCIEN-COMPTE"
+        self.enfant.ent_lie_par = "un_autre_agent"
+        self.enfant.ent_lie_le = timezone.now()
+        self.enfant.save()
+
+        request = self._requete_post({"action": "delier"})
+        request.user = agent
+        self.vue.request = request
+        self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+        self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        self.enfant.refresh_from_db()
+        self.assertIsNone(self.enfant.ent_id)
+        self.assertIsNone(self.enfant.ent_lie_par)
+        self.assertIsNone(self.enfant.ent_lie_le)
+
+    def test_delier_trace_lancien_lien_dans_lhistorique(self):
+        """Avant d'effacer le lien, il faut garder une trace de ce qu'il y avait -
+        sinon on perd l'info "il y avait un lien, lequel, posé par qui" au moment
+        précis où on la supprime."""
+        agent = Utilisateur.objects.create_user(username="agent_qui_delie")
+        self.enfant.ent_id = "ANCIEN-COMPTE-XYZ"
+        self.enfant.ent_lie_par = "premier_agent"
+        self.enfant.ent_lie_le = timezone.now()
+        self.enfant.save()
+
+        request = self._requete_post({"action": "delier"})
+        request.user = agent
+        self.vue.request = request
+        self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+        self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        log = Historique.objects.filter(individu_id=self.enfant.pk, titre__icontains="déliée").first()
+        self.assertIsNotNone(log, "Aucune trace créée pour l'action de déliaison.")
+        self.assertEqual(log.utilisateur, agent)
+        self.assertIn("ANCIEN-COMPTE-XYZ", log.detail)
+        self.assertIn("premier_agent", log.detail)
+
+    def test_delier_sans_lien_existant_ne_plante_pas(self):
+        """Non-régression : délier une fiche déjà non liée ne doit pas planter, ni
+        créer de trace inutile - juste un message informatif."""
+        request = self._requete_post({"action": "delier"})
+        request.user = Utilisateur.objects.create_user(username="agent_test_delier_vide")
+        self.vue.request = request
+        self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+        self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        self.enfant.refresh_from_db()
+        self.assertIsNone(self.enfant.ent_id)
+        self.assertEqual(Historique.objects.filter(individu_id=self.enfant.pk).count(), 0)

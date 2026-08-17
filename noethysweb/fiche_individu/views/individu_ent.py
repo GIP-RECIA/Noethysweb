@@ -447,6 +447,31 @@ class LierCompteEnt(Onglet, TemplateView):
             context['recherche_auto'] = False
             return self.render_to_response(context)
 
+        elif action == 'delier':
+            individu = Individu.objects.get(pk=idindividu)
+            if individu.ent_id:
+                # Garde une trace de l'ancien lien avant de l'effacer - sinon on perd
+                # l'info "il y avait un lien, lequel, posé par qui" au moment précis où
+                # on la supprime (même exigence de traçabilité que pour les liaisons).
+                ancien_ent_id = individu.ent_id
+                ancien_lie_par = individu.ent_lie_par or "inconnu"
+                ancien_lie_le = individu.ent_lie_le.strftime('%d/%m/%Y %H:%M') if individu.ent_lie_le else "date inconnue"
+                utils_historique.Ajouter(
+                    titre="Liaison ENT supprimée (déliée)",
+                    detail=f"{individu.Get_nom()} délié(e) du compte ENT {ancien_ent_id} (lié précédemment par {ancien_lie_par}, le {ancien_lie_le}).",
+                    utilisateur=request.user,
+                    famille=idfamille,
+                    individu=idindividu,
+                )
+                individu.ent_id = None
+                individu.ent_lie_par = None
+                individu.ent_lie_le = None
+                individu.save()
+                messages.success(request, "Compte ENT délié. Vous pouvez maintenant lier cette fiche au bon compte.")
+            else:
+                messages.info(request, "Cette fiche n'était pas liée à un compte ENT.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
         elif action == 'lier':
             ent_id = request.POST.get('ent_id')
             if not ent_id:
