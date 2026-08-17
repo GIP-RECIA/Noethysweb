@@ -202,7 +202,7 @@ class LierCompteEnt(Onglet, TemplateView):
             return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
 
         # Import ici pour éviter un import circulaire au chargement du module
-        from fiche_famille.views.famille_ent import _normaliser_texte, _parse_date
+        from fiche_famille.views.famille_ent import _normaliser_texte, _parse_date, _normaliser_enfant, _trouver_ecole
 
         # Date de naissance déjà connue dans Noethys pour la personne recherchée - sert de
         # deuxième preuve indépendante du nom (voir plus bas), utile quand le nom d'un parent
@@ -288,6 +288,38 @@ class LierCompteEnt(Onglet, TemplateView):
             else:
                 resultat['date_coherente'] = None
 
+            # Troisième preuve indépendante : l'école/classe de ce candidat correspond-elle à
+            # la scolarité déjà connue dans Noethys pour la personne recherchée ? Uniquement
+            # pour un élève (un parent n'a pas de scolarité). Contrairement à la date, l'école
+            # et la classe changent chaque année - une "contradiction" peut juste signifier que
+            # la Scolarité Noethys n'a pas été mise à jour, pas que c'est la mauvaise personne.
+            # Ce signal peut donc AIDER à corroborer, mais n'a jamais de pouvoir de veto (voir
+            # plus bas, contrairement à date_coherente qui peut faire échouer une corroboration
+            # par le nom).
+            resultat['ecole_coherente'] = None
+            resultat['ecole_nom_ent'] = None
+            resultat['classe_nom_ent'] = None
+            if Est_profil_eleve(resultat):
+                # Copie : _normaliser_enfant ne doit pas polluer resultat de champs internes non
+                # voulus - seuls ecole_nom_ent/classe_nom_ent (ci-dessous) sont exposés, pour que
+                # le template puisse afficher ce qui a été comparé (comme pour la date).
+                data_ent_norm = _normaliser_enfant(dict(resultat))
+                resultat['ecole_nom_ent'] = data_ent_norm.get("ecole_nom")
+                resultat['classe_nom_ent'] = data_ent_norm.get("classe_nom")
+                ecole_ent = _trouver_ecole(
+                    data_ent_norm.get("ecole_nom"), data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"),
+                )
+                scolarite_noethys = Get_scolarite_actuelle(idindividu_exclu)
+                if ecole_ent and scolarite_noethys and scolarite_noethys.ecole:
+                    classe_ent = _normaliser_texte(data_ent_norm.get("classe_nom") or "")
+                    classe_noethys = _normaliser_texte(scolarite_noethys.classe.nom) if scolarite_noethys.classe else ""
+                    if ecole_ent != scolarite_noethys.ecole:
+                        resultat['ecole_coherente'] = False
+                    elif classe_ent and classe_noethys:
+                        resultat['ecole_coherente'] = (classe_ent == classe_noethys)
+                    # Sinon (classe absente d'un côté) : école seule concorde, mais pas assez
+                    # précis à lui seul pour trancher - reste None (ni aide ni gêne).
+
             # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
             # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
             # pas comme une vraie preuve (son propre lien est déjà suspect) - même chose pour
@@ -300,34 +332,54 @@ class LierCompteEnt(Onglet, TemplateView):
             # nom ne correspond" de "un nom correspond mais la date le contredit".
             resultat['nom_corrobore'] = nom_corrobore
 
-            # Décision combinée : le nom et la date sont deux preuves indépendantes. La date
-            # seule suffit si le nom échoue (utile quand le nom pose un problème qu'on ne peut
-            # pas corriger - nom de naissance/usage, faute de frappe). Mais si le nom corrobore
-            # ET que la date le contredit clairement, on ne fait plus confiance à ce nom (risque
-            # d'homonyme, même parent-là).
+            # Décision combinée : le nom, la date et l'école/classe sont des preuves
+            # indépendantes. La date seule suffit si le nom échoue (utile quand le nom pose un
+            # problème qu'on ne peut pas corriger - nom de naissance/usage, faute de frappe).
+            # L'école/classe seule suffit aussi (même logique, ex: homonyme dans une autre
+            # école). Mais seule la date a un pouvoir de veto : si le nom corrobore ET que la
+            # date le contredit clairement, on ne fait plus confiance à ce nom (risque
+            # d'homonyme, même parent-là) - l'école/classe, elle, ne peut jamais faire échouer
+            # une corroboration par ailleurs (elle change chaque année, une Scolarité Noethys
+            # pas à jour ne prouve rien contre la personne).
             if nom_corrobore and resultat['date_coherente'] is False:
                 vraie_corroboration = False
             elif nom_corrobore:
                 vraie_corroboration = True
+            elif resultat['date_coherente']:
+                vraie_corroboration = True
             else:
-                vraie_corroboration = bool(resultat['date_coherente'])
+                vraie_corroboration = bool(resultat['ecole_coherente'])
 
             resultat['aucune_corroboration'] = not vraie_corroboration
 
-            # Cas limite : la date concorde mais AUCUN nom ne corrobore (famille Noethys vide,
-            # ou aucun parent retrouvé). C'est techniquement une corroboration - deux personnes
-            # du même nom nées exactement le même jour sont improbables - mais c'est la preuve
-            # la plus faible qu'on accepte, et à l'écran rien ne la rend visible (les parents
-            # affichés sont tous en jaune). On lie donc, mais jamais en silence : avertissement
-            # sur l'écran individuel, et exclusion des propositions automatiques de la
-            # pré-liaison (voir _rechercher_toutes_correspondances).
-            resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore)
+            # Cas limite : une SEULE preuve indépendante suffit (date, ou à défaut école+classe)
+            # mais AUCUN nom ne corrobore (famille Noethys vide, ou aucun parent retrouvé).
+            # Techniquement une corroboration valable, mais la preuve la plus faible qu'on
+            # accepte, et à l'écran rien ne la rend visible (les parents affichés sont tous en
+            # jaune). On lie donc, mais jamais en silence : avertissement sur l'écran
+            # individuel, et exclusion des propositions automatiques de la pré-liaison (voir
+            # _rechercher_toutes_correspondances).
+            resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore and resultat['date_coherente'])
+            resultat['corrobore_par_ecole_seule'] = bool(
+                vraie_corroboration and not nom_corrobore and not resultat['date_coherente'] and resultat['ecole_coherente']
+            )
+
+            # Avertissement doux, non bloquant : le nom (et/ou la date) suffisent déjà à
+            # accepter la liaison, mais l'école/classe indiquée par l'ENT ne correspond pas à
+            # la Scolarité déjà enregistrée dans Noethys - jamais un motif de refus, juste une
+            # invitation à vérifier (scolarité probablement pas mise à jour côté Noethys).
+            resultat['ecole_incoherente_info'] = bool(vraie_corroboration and resultat['ecole_coherente'] is False)
 
             if resultat['corrobore_par_date_seule']:
                 resultat['message_avertissement'] = (
                     f"Aucun parent/enfant ne correspond à un membre de cette famille sur "
                     f"Noethys : le seul point commun est la date de naissance "
                     f"({date_ent.strftime('%d/%m/%Y')})."
+                )
+            elif resultat['corrobore_par_ecole_seule']:
+                resultat['message_avertissement'] = (
+                    "Aucun parent/enfant ne correspond à un membre de cette famille sur "
+                    "Noethys : le seul point commun est l'école et la classe."
                 )
             elif nom_corrobore and resultat['date_coherente'] is False:
                 resultat['message_avertissement'] = (

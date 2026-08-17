@@ -16,13 +16,13 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Famille, Historique, Individu, Rattachement, Utilisateur
+from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
 
 
-def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None):
+def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None, ecole=None, classe=None, ecole_uai=None, ecole_ent_id=None):
     """Fabrique un résultat ENT au format admin/list pour un élève."""
-    return {
+    resultat = {
         "id": ent_id,
         "type": "Student",
         "firstName": prenom,
@@ -30,6 +30,11 @@ def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None):
         "birthDate": birth,
         "parents": list(parents or []),
     }
+    if ecole:
+        resultat["structures"] = [{"name": ecole, "uai": ecole_uai, "id": ecole_ent_id}]
+    if classe:
+        resultat["allClasses"] = [{"name": classe}]
+    return resultat
 
 
 def _est_proposable(membre):
@@ -210,6 +215,88 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         resultat = resultats[0]
         self.assertFalse(resultat["aucune_corroboration"])
         self.assertFalse(resultat["corrobore_par_date_seule"])
+
+    # ------------------------------------------------- école/classe (3e critère)
+
+    def _creer_scolarite_noethys(self, individu, ecole_nom, uai=None, ent_id=None, classe_nom=None):
+        ecole = Ecole.objects.create(nom=ecole_nom, uai=uai, ent_id=ent_id)
+        classe = None
+        if classe_nom:
+            classe = Classe.objects.create(ecole=ecole, nom=classe_nom, date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+        Scolarite.objects.create(individu=individu, ecole=ecole, classe=classe, date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+        return ecole
+
+    def test_ecole_classe_seule_suffit_a_corroborer(self):
+        """École + classe qui correspondent peuvent corroborer à elles seules, même sans
+        aucun nom de parent ni date de naissance qui matche."""
+        self._creer_scolarite_noethys(self.enfant, "École Test", uai="UAI999", ent_id="ENT-ECOLE-1", classe_nom="CE2 A")
+
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", ecole="École Test", ecole_uai="UAI999", ecole_ent_id="ENT-ECOLE-1", classe="CE2 A", parents=[
+                {"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"},
+            ]),
+        ])
+        resultat = resultats[0]
+        self.assertIs(resultat["ecole_coherente"], True)
+        self.assertFalse(
+            resultat["aucune_corroboration"],
+            "École + classe qui correspondent devraient suffire à corroborer.",
+        )
+        self.assertTrue(resultat["corrobore_par_ecole_seule"])
+        self.assertIn("école et la classe", resultat["message_avertissement"])
+
+    def test_ecole_incoherente_ne_bloque_jamais_une_corroboration_par_nom(self):
+        """Contrairement à la date, une école/classe qui NE correspond PAS ne doit jamais
+        faire échouer une corroboration par le nom - juste un avertissement doux, non
+        bloquant (la scolarité Noethys peut simplement être celle de l'an dernier)."""
+        self._creer_scolarite_noethys(self.enfant, "Ancienne École", uai="UAI111", ent_id="ENT-ANCIENNE", classe_nom="CM1 B")
+
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", ecole="Nouvelle École", ecole_uai="UAI222", ecole_ent_id="ENT-NOUVELLE", classe="CM2 A", parents=[
+                {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+            ]),
+        ])
+        resultat = resultats[0]
+        # L'école Noethys "Nouvelle École" n'existe même pas -> _trouver_ecole renvoie None
+        # -> ecole_coherente reste None (rien à comparer), le nom seul suffit déjà ici.
+        self.assertFalse(resultat["aucune_corroboration"], "Le nom corrobore, la liaison ne doit pas être bloquée.")
+
+    def test_ecole_incoherente_avec_ecole_connue_ne_bloque_pas_non_plus(self):
+        """Même chose, mais cette fois l'école ENT est bien connue de Noethys (juste
+        différente de celle enregistrée pour cet enfant) - la contradiction est donc
+        détectée (ecole_coherente=False), mais ne bloque toujours pas."""
+        self._creer_scolarite_noethys(self.enfant, "Ancienne École", uai="UAI111", ent_id="ENT-ANCIENNE", classe_nom="CM1 B")
+        Ecole.objects.create(nom="Nouvelle École", uai="UAI222", ent_id="ENT-NOUVELLE")
+
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", ecole="Nouvelle École", ecole_uai="UAI222", ecole_ent_id="ENT-NOUVELLE", classe="CM2 A", parents=[
+                {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+            ]),
+        ])
+        resultat = resultats[0]
+        self.assertIs(resultat["ecole_coherente"], False)
+        self.assertFalse(
+            resultat["aucune_corroboration"],
+            "Une école/classe incohérente a bloqué une corroboration par le nom - elle ne devrait jamais avoir ce pouvoir.",
+        )
+        self.assertTrue(
+            resultat["ecole_incoherente_info"],
+            "L'incohérence école/classe devrait au moins être signalée (avertissement doux, non bloquant).",
+        )
+
+    def test_ecole_absente_ne_penalise_pas(self):
+        """Non-régression : si Noethys n'a aucune Scolarité enregistrée pour l'enfant, ou si
+        l'ENT ne fournit pas d'école, ecole_coherente reste None - le nom seul suffit comme
+        avant, l'ajout du 3e critère ne doit rien casser du flux normal."""
+        resultats = self._rechercher([
+            _resultat_eleve("ENT-E", "FAMTEST", "Enfant", parents=[
+                {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+            ]),
+        ])
+        resultat = resultats[0]
+        self.assertIsNone(resultat["ecole_coherente"])
+        self.assertFalse(resultat["aucune_corroboration"])
+        self.assertFalse(resultat["corrobore_par_ecole_seule"])
 
     # ------------------------------------------------------------------ règle 7
 

@@ -650,12 +650,16 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 _ajouter_enfant_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} (Noethys) - vérifiez s'il s'agit d'une fiche en double")
                 continue
 
-            # Corroboré par la seule date de naissance, sans qu'aucun parent ne corresponde :
-            # c'est la preuve la plus faible qu'on accepte. Suffisant pour proposer un choix à
-            # un agent qui examine UN cas (écran individuel, avec avertissement), mais pas pour
-            # une proposition automatique cochée d'avance au milieu de centaines d'autres.
+            # Corroboré par la seule date de naissance (ou à défaut la seule école/classe), sans
+            # qu'aucun parent ne corresponde : c'est la preuve la plus faible qu'on accepte.
+            # Suffisant pour proposer un choix à un agent qui examine UN cas (écran individuel,
+            # avec avertissement), mais pas pour une proposition automatique cochée d'avance au
+            # milieu de centaines d'autres.
             if resultat.get("corrobore_par_date_seule"):
                 _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par la date de naissance, aucun parent ne correspond dans Noethys - à confirmer à la main")
+                continue
+            if resultat.get("corrobore_par_ecole_seule"):
+                _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par l'école et la classe, aucun parent ne correspond dans Noethys - à confirmer à la main")
                 continue
 
             parents_enrichis = resultat.get("membres_enrichis", [])

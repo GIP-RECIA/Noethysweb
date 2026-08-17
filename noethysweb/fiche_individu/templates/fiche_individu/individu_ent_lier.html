@@ -64,6 +64,19 @@
                                 <td width="150"><strong>Date de naissance :</strong></td>
                                 <td>{{ personne.birthDate|default:"Non renseignée" }}</td>
                             </tr>
+                            {% if personne.ecole_nom_ent %}
+                            <tr>
+                                <td><strong>École / Classe :</strong></td>
+                                <td>
+                                    {{ personne.ecole_nom_ent }}{% if personne.classe_nom_ent %} - {{ personne.classe_nom_ent }}{% endif %}
+                                    {% if personne.ecole_incoherente_info %}
+                                        <span class="badge badge-warning ml-1" title="La scolarité enregistrée dans Noethys ne correspond pas - probablement pas encore mise à jour, ce n'est pas bloquant">
+                                            <i class="fa fa-info-circle"></i> ne correspond pas à Noethys
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
                         </table>
 
                         {% if personne.membres_enrichis %}
@@ -112,8 +125,8 @@
                                     </div>
                                 {% endif %}
                             {% endfor %}
-                            {# Popup de confirmation aussi quand la seule preuve est la date : rien à l'écran ne la rend visible, l'agent lierait sans savoir sur quoi on s'appuie #}
-                            {% if personne.aucune_corroboration or personne.corrobore_par_date_seule %}
+                            {# Popup de confirmation aussi quand la seule preuve est la date ou l'école/classe : rien à l'écran ne les distingue d'un cas normal, l'agent lierait sans savoir sur quoi on s'appuie #}
+                            {% if personne.aucune_corroboration or personne.corrobore_par_date_seule or personne.corrobore_par_ecole_seule %}
                                 <button type="button" class="btn btn-success btn_spinner" onclick="confirmer_liaison_sans_corroboration(this)">
                                     <i class="fa fa-link"></i> Lier ce compte
                                 </button>

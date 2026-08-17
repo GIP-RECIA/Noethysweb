@@ -18,7 +18,7 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Famille, Individu, Rattachement
+from core.models import Classe, Ecole, Famille, Individu, Rattachement, Scolarite
 from fiche_famille.views.famille_ent import PreLiaisonEnt
 
 
@@ -39,8 +39,8 @@ class _SerialExecutor:
         return [fn(x) for x in iterable]
 
 
-def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None):
-    return {
+def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None, ecole=None, classe=None, ecole_uai=None, ecole_ent_id=None):
+    resultat = {
         "id": ent_id,
         "type": "Student",
         "firstName": prenom,
@@ -48,6 +48,11 @@ def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None):
         "birthDate": birth,
         "parents": list(parents or []),
     }
+    if ecole:
+        resultat["structures"] = [{"name": ecole, "uai": ecole_uai, "id": ecole_ent_id}]
+    if classe:
+        resultat["allClasses"] = [{"name": classe}]
+    return resultat
 
 
 class TestCorroborationPreLiaison(TestCase):
@@ -122,6 +127,33 @@ class TestCorroborationPreLiaison(TestCase):
         raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
         self.assertTrue(raisons, "Le cas a disparu au lieu d'être listé à vérifier.")
         self.assertIn("date de naissance", raisons[0])
+
+    def test_ecole_seule_nest_pas_proposee_automatiquement_en_preliaison(self):
+        """Même traitement que la date seule : l'école/classe seule peut corroborer, mais
+        ne doit pas être proposée automatiquement en pré-liaison - elle bascule en "à
+        vérifier à la main"."""
+        famille = Famille.objects.create(nom="ECOLESEULE")
+        enfant = Individu.objects.create(nom="ECOLESEULE", prenom="Lucas", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        ecole = Ecole.objects.create(nom="École Test", uai="UAI999", ent_id="ENT-ECOLE-1")
+        classe = Classe.objects.create(ecole=ecole, nom="CE2 A", date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+        Scolarite.objects.create(individu=enfant, ecole=ecole, classe=classe, date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Lucas": lambda: [_resultat_eleve(
+                "ENT-L", "ECOLESEULE", "Lucas", ecole="École Test", ecole_uai="UAI999", ecole_ent_id="ENT-ECOLE-1", classe="CE2 A",
+                parents=[{"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"}],
+            )],
+        })
+
+        self.assertNotIn(
+            f"ENT-L|{enfant.pk}", self._cles_proposees(groupes),
+            "Un cas corroboré par la seule école/classe est proposé automatiquement, coché "
+            "d'avance, alors qu'aucun parent ne corrobore.",
+        )
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons, "Le cas a disparu au lieu d'être listé à vérifier.")
+        self.assertIn("école", raisons[0])
 
     # ------------------------------------------------------------------ règle 6
 
