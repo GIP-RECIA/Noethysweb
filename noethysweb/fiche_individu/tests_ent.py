@@ -16,7 +16,7 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Famille, Individu, Rattachement
+from core.models import Famille, Historique, Individu, Rattachement, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
 
 
@@ -271,10 +271,83 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         })
         self.vue.request = request
         self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
-        self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+        # post() action='lier' recalcule désormais la corroboration (traçabilité) - mock
+        # nécessaire même si ce test ne porte pas là-dessus.
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=[]):
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
 
         self.parent.refresh_from_db()
         self.assertEqual(
             self.parent.ent_id, "ANCIEN-COMPTE-PARENT",
             "L'ent_id existant du parent a été écrasé.",
+        )
+
+    # ------------------------------------------------------- traçabilité (Historique)
+
+    def test_historique_liaison_forcee_sans_corroboration_est_tracee(self):
+        """Une liaison confirmée malgré 'aucune_corroboration' doit être tracée dans
+        l'historique Noethys (demande de Julien : sécurité/aspects légaux), avec
+        l'agent, la personne liée et la raison précise."""
+        agent = Utilisateur.objects.create_user(username="agent_test_1")
+        reponse_ent = [_resultat_eleve("ENT-E", "FAMTEST", "Enfant")]  # aucun parent -> aucune corroboration
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=reponse_ent):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E"})
+            request.user = agent
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        logs = Historique.objects.filter(individu_id=self.enfant.pk)
+        self.assertEqual(logs.count(), 1, "La liaison forcée sans corroboration n'a pas été tracée.")
+        log = logs.first()
+        self.assertEqual(log.utilisateur, agent)
+        self.assertEqual(log.famille_id, self.famille.pk)
+        self.assertIn("forcée", log.titre.lower())
+        self.assertIn("aucune correspondance", log.detail)
+        self.assertIn(str(self.enfant), log.detail)
+
+    def test_historique_liaison_forcee_par_date_seule_est_tracee(self):
+        """Même chemin UI (popup 'lier quand même') pour le cas 'preuve la plus faible' -
+        date seule, sans nom - doit aussi être tracé, avec la bonne raison."""
+        agent = Utilisateur.objects.create_user(username="agent_test_2")
+        self.enfant.date_naiss = date(2006, 10, 8)
+        self.enfant.save()
+        reponse_ent = [_resultat_eleve("ENT-E", "FAMTEST", "Enfant", birth="2006-10-08", parents=[
+            {"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"},
+        ])]
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=reponse_ent):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E"})
+            request.user = agent
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        log = Historique.objects.filter(individu_id=self.enfant.pk).first()
+        self.assertIsNotNone(log, "La liaison forcée par la date seule n'a pas été tracée.")
+        self.assertIn("date de naissance seule", log.detail)
+
+    def test_historique_liaison_normale_nest_pas_tracee(self):
+        """Non-régression : une liaison normale (nom + date qui corroborent) ne doit pas
+        créer de trace - la traçabilité ne concerne que les liaisons forcées."""
+        self.enfant.date_naiss = date(2006, 10, 8)
+        self.enfant.save()
+        reponse_ent = [_resultat_eleve("ENT-E", "FAMTEST", "Enfant", birth="2006-10-08", parents=[
+            {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+        ])]
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=reponse_ent):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E"})
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        self.assertEqual(
+            Historique.objects.filter(individu_id=self.enfant.pk).count(), 0,
+            "Une liaison normale (bien corroborée) a été tracée à tort comme forcée.",
         )

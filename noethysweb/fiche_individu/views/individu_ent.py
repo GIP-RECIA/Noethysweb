@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.db import transaction
 from core.models import Individu, Scolarite, Rattachement
 from core.views.base import CustomView
+from core.utils import utils_historique
 from core.utils.utils_ent import get_user, get_headers, search_by_name
 from fiche_individu.views.individu import Onglet
 
@@ -408,8 +409,31 @@ class LierCompteEnt(Onglet, TemplateView):
                 if individu.ent_id:
                     messages.error(request, "Cet individu est déjà lié à un compte ENT - aucune modification effectuée, pour ne pas écraser le lien existant. Vérifiez sa fiche.")
                     return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+                # Recalcule côté serveur si CE candidat précis nécessitait de passer outre un
+                # avertissement (aucune preuve, ou preuve la plus faible - date seule) - pour
+                # tracer une liaison forcée de façon fiable en cas de contestation, sans se fier
+                # à ce que le navigateur affichait (demande de traçabilité légale/sécurité).
+                resultats_verif, _ = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+                candidat = next((r for r in (resultats_verif or []) if r.get('id') == ent_id), None)
+                liaison_forcee = bool(candidat and (candidat.get('aucune_corroboration') or candidat.get('corrobore_par_date_seule')))
+
                 individu.ent_id = ent_id
                 individu.save()
+
+                if liaison_forcee:
+                    raison = "aucune correspondance" if candidat.get('aucune_corroboration') else "date de naissance seule"
+                    utils_historique.Ajouter(
+                        titre="Liaison ENT forcée sans corroboration fiable",
+                        detail=(
+                            f"{individu.Get_nom()} lié(e) au compte ENT {ent_id} malgré un avertissement "
+                            f"({raison} - validé manuellement par l'agent)."
+                        ),
+                        utilisateur=request.user,
+                        famille=idfamille,
+                        individu=idindividu,
+                    )
+
                 nb_lies = 1
                 echecs = {}  # {idindividu (str): raison}
 
