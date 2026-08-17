@@ -9,12 +9,14 @@ code par rapport à la règle, pas une erreur du test.
 Aucun appel réseau réel : search_by_name / get_headers sont mockés.
 """
 
+import uuid
 from datetime import date
 from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
+from django.utils import timezone
 
 from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
@@ -68,6 +70,7 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         SessionMiddleware(lambda r: None).process_request(request)
         request.session.save()
         MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
         return request
 
     # ------------------------------------------------------------------ règle 1
@@ -418,6 +421,28 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         self.assertIsNotNone(log, "La liaison forcée par la date seule n'a pas été tracée.")
         self.assertIn("date de naissance seule", log.detail)
 
+    def test_historique_liaison_forcee_par_ecole_seule_est_tracee(self):
+        """Même chemin UI (popup 'lier quand même') pour le cas école/classe seule -
+        doit aussi être tracé, avec la bonne raison (pas juste 'aucune correspondance')."""
+        agent = Utilisateur.objects.create_user(username="agent_test_ecole")
+        self._creer_scolarite_noethys(self.enfant, "École Test", uai="UAI999", ent_id="ENT-ECOLE-1", classe_nom="CE2 A")
+        reponse_ent = [_resultat_eleve(
+            "ENT-E", "FAMTEST", "Enfant", ecole="École Test", ecole_uai="UAI999", ecole_ent_id="ENT-ECOLE-1", classe="CE2 A",
+            parents=[{"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"}],
+        )]
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=reponse_ent):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E"})
+            request.user = agent
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        log = Historique.objects.filter(individu_id=self.enfant.pk).first()
+        self.assertIsNotNone(log, "La liaison forcée par l'école/classe seule n'a pas été tracée.")
+        self.assertIn("école et classe seules", log.detail)
+
     def test_historique_liaison_normale_nest_pas_tracee(self):
         """Non-régression : une liaison normale (nom + date qui corroborent) ne doit pas
         créer de trace - la traçabilité ne concerne que les liaisons forcées."""
@@ -438,3 +463,45 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
             Historique.objects.filter(individu_id=self.enfant.pk).count(), 0,
             "Une liaison normale (bien corroborée) a été tracée à tort comme forcée.",
         )
+
+    # ------------------------------------------------- trace ent_lie_par / ent_lie_le
+
+    def test_ent_lie_par_enregistre_lagent_sur_liaison_individuelle(self):
+        """Toute liaison faite sur l'écran individuel (forcée ou pas) doit garder une
+        trace de l'agent qui l'a posée et de la date, directement sur la fiche."""
+        agent = Utilisateur.objects.create_user(username="agent_qui_lie")
+        avant = timezone.now()
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=[_resultat_eleve("ENT-E", "FAMTEST", "Enfant")]):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E"})
+            request.user = agent
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        self.enfant.refresh_from_db()
+        self.assertEqual(self.enfant.ent_lie_par, "agent_qui_lie")
+        self.assertIsNotNone(self.enfant.ent_lie_le)
+        self.assertGreaterEqual(self.enfant.ent_lie_le, avant)
+
+    def test_ent_lie_par_enregistre_aussi_pour_un_parent_coche(self):
+        """Un parent lié en même temps que l'enfant (case cochée) garde lui aussi sa
+        propre trace qui/quand, pas seulement l'enfant principal."""
+        agent = Utilisateur.objects.create_user(username="agent_qui_lie_2")
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=[
+                 _resultat_eleve("ENT-E", "FAMTEST", "Enfant", parents=[
+                     {"firstName": "Parent", "lastName": "FAMTEST", "id": "ENT-P"},
+                 ]),
+             ]):
+            request = self._requete_post({"action": "lier", "ent_id": "ENT-E", f"parent_lier_{self.parent.pk}": "ENT-P"})
+            request.user = agent
+            self.vue.request = request
+            self.vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.enfant.pk}
+            self.vue.post(request, idfamille=self.famille.pk, idindividu=self.enfant.pk)
+
+        self.parent.refresh_from_db()
+        self.assertEqual(self.parent.ent_lie_par, "agent_qui_lie_2")
+        self.assertIsNotNone(self.parent.ent_lie_le)

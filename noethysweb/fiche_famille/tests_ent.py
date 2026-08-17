@@ -11,6 +11,7 @@ ThreadPoolExecutor est remplacé par une exécution en série (les threads ne
 verraient pas les données de la transaction de test).
 """
 
+import uuid
 from datetime import date
 from unittest.mock import patch
 
@@ -18,8 +19,8 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Classe, Ecole, Famille, Individu, Rattachement, Scolarite
-from fiche_famille.views.famille_ent import PreLiaisonEnt
+from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
+from fiche_famille.views.famille_ent import PreLiaisonEnt, _importer_eleve_ent
 
 
 class _SerialExecutor:
@@ -228,6 +229,7 @@ class TestCorroborationPreLiaison(TestCase):
         request.session[PreLiaisonEnt.SESSION_KEY] = {"groupes": groupes_session, "non_resolus": []}
         request.session.save()
         MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
 
         vue = PreLiaisonEnt()
         vue.request = request
@@ -323,6 +325,7 @@ class TestCorroborationPreLiaison(TestCase):
         SessionMiddleware(lambda r: None).process_request(request)
         request.session.save()
         MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username="agent_test_regle8c")
 
         vue = PreLiaisonEnt()
         vue.request = request
@@ -334,3 +337,87 @@ class TestCorroborationPreLiaison(TestCase):
             enfant.ent_id, "ANCIEN-COMPTE",
             "L'ent_id existant a été écrasé par la confirmation de pré-liaison.",
         )
+
+    # ------------------------------------------------- trace ent_lie_par / ent_lie_le
+
+    def test_confirmation_preliaison_enregistre_lagent_pas_auto(self):
+        """L'agent a coché explicitement cette ligne avant de confirmer - ce n'est pas
+        un import en masse sans revue, donc ent_lie_par doit être son identifiant, pas
+        "auto"."""
+        famille = Famille.objects.create(nom="TRACECONFIRM")
+        enfant = Individu.objects.create(nom="TRACECONFIRM", prenom="Julia", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        lignes = [{"cle": f"ENT-J|{enfant.pk}", "nom_ent": "Julia", "nom_individu": str(enfant), "role": "Enfant"}]
+
+        self._confirmer([lignes[0]["cle"]], [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": lignes}])
+
+        enfant.refresh_from_db()
+        self.assertEqual(enfant.ent_id, "ENT-J")
+        self.assertNotEqual(enfant.ent_lie_par, "auto")
+        self.assertTrue(enfant.ent_lie_par.startswith("agent_test_"))
+        self.assertIsNotNone(enfant.ent_lie_le)
+
+    def test_confirmation_preliaison_cree_un_seul_log_de_lancement(self):
+        """Un seul log Historique pour tout le clic "Confirmer", pas une ligne par
+        enfant lié - le détail par enfant est déjà tracé sur chaque fiche."""
+        famille = Famille.objects.create(nom="TRACELOG")
+        enfants = [Individu.objects.create(nom="TRACELOG", prenom=f"Enfant{i}", civilite=4) for i in range(3)]
+        for e in enfants:
+            Rattachement.objects.create(individu=e, famille=famille, categorie=2, titulaire=False)
+        lignes = [{"cle": f"ENT-{i}|{e.pk}", "nom_ent": f"Enfant{i}", "nom_individu": str(e), "role": "Enfant"} for i, e in enumerate(enfants)]
+
+        avant = Historique.objects.count()
+        self._confirmer([l["cle"] for l in lignes], [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": lignes}])
+
+        nouveaux = Historique.objects.filter(titre="Confirmation de liaisons en pré-liaison ENT")
+        self.assertEqual(
+            nouveaux.count(), 1,
+            "Il devrait y avoir un seul log de lancement, pas un par enfant lié.",
+        )
+        self.assertIn("3 liaison(s)", nouveaux.first().detail)
+
+
+class TestImporterEleveEnt(TestCase):
+    """Tests directs de _importer_eleve_ent (logique partagée entre l'import unitaire et
+    l'import en masse) - appelée directement, sans passer par les vues, avec des données
+    ENT déjà fournies (pas d'appel réseau)."""
+
+    def _eleve_data(self, ent_id="ENT-NOUVEAU"):
+        return {
+            "id": ent_id,
+            "type": "Student",
+            "firstName": "Nouveau",
+            "lastName": "TESTIMPORT",
+            "birthDate": "2015-06-01",
+            "parents": [],
+        }
+
+    def test_import_unitaire_enregistre_lagent(self):
+        """Import via l'écran unitaire (agent qui choisit et revoit une famille précise
+        à l'écran) : ent_lie_par doit être l'identifiant de l'agent."""
+        resultat = _importer_eleve_ent("ENT-UNITAIRE", eleve_data=self._eleve_data("ENT-UNITAIRE"), lie_par="agent_import_test")
+
+        self.assertEqual(resultat["statut"], "importe")
+        eleve = Individu.objects.get(ent_id="ENT-UNITAIRE")
+        self.assertEqual(eleve.ent_lie_par, "agent_import_test")
+        self.assertIsNotNone(eleve.ent_lie_le)
+
+    def test_import_masse_enregistre_auto(self):
+        """Import en masse (aucune revue individuelle par élève) : ent_lie_par doit être
+        le tag "auto", pas l'agent qui a lancé l'action globale."""
+        resultat = _importer_eleve_ent("ENT-MASSE", eleve_data=self._eleve_data("ENT-MASSE"), lie_par="auto")
+
+        self.assertEqual(resultat["statut"], "importe")
+        eleve = Individu.objects.get(ent_id="ENT-MASSE")
+        self.assertEqual(eleve.ent_lie_par, "auto")
+        self.assertIsNotNone(eleve.ent_lie_le)
+
+    def test_import_sans_lie_par_ne_renseigne_rien(self):
+        """Non-régression : si aucun lie_par n'est fourni (défaut), les champs restent
+        vides plutôt que de mettre une valeur inventée."""
+        resultat = _importer_eleve_ent("ENT-SANSTRACE", eleve_data=self._eleve_data("ENT-SANSTRACE"))
+
+        self.assertEqual(resultat["statut"], "importe")
+        eleve = Individu.objects.get(ent_id="ENT-SANSTRACE")
+        self.assertIsNone(eleve.ent_lie_par)
+        self.assertIsNone(eleve.ent_lie_le)

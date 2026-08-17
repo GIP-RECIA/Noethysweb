@@ -26,6 +26,11 @@
                             <a href="{% url 'individu_ent_synchro' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-info">
                                 <i class="fa fa-refresh"></i> Synchroniser avec l'ENT
                             </a>
+                            {% if individu.ent_lie_par %}
+                                <div class="text-muted small mt-1">
+                                    Compte lié par : {% if individu.ent_lie_par == "auto" %}import en masse (auto){% else %}{{ individu.ent_lie_par }}{% endif %}{% if individu.ent_lie_le %}, le {{ individu.ent_lie_le|date:"d/m/Y à H:i" }}{% endif %}
+                                </div>
+                            {% endif %}
                         </dd>
                     {% else %}
                         <dt class="col-sm-4">ENT</dt>

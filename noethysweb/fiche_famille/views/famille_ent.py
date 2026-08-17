@@ -6,6 +6,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.db import transaction
+from django.utils import timezone
 from urllib.parse import urlencode
 
 from core.views.base import CustomView
@@ -15,6 +16,7 @@ from core.models import (
     PortailRenseignement, ContactUrgence, Assurance, SondageRepondant, Cotisation, Mandat,
     Ecole, Classe, Scolarite,
 )
+from core.utils import utils_historique
 from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers
 from django.shortcuts import get_object_or_404
 
@@ -209,17 +211,20 @@ def _creer_scolarite(individu, eleve_data):
     )
 
 
-def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
+def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_par=None):
     """
     Importe un élève et sa famille depuis l'ENT (logique partagée entre l'import unitaire
     et l'import en masse). `eleve_data` et `parents_cache` peuvent être fournis pré-chargés
     (récupérés en parallèle en amont) pour éviter de refaire les appels API un par un.
+    `lie_par` trace qui a posé ce lien ENT : l'identifiant de l'agent pour un import unitaire
+    (choisi et revu à l'écran), ou "auto" pour un import en masse (aucune revue individuelle).
     Retourne un dict {"statut": "importe"|"deja_importe"|"erreur", "message": str, "famille_id": int|None,
     "type": "famille_existante"|"nouvelle_famille"|"nouvelle_famille_separee"|None}. Le champ "type" précise,
     quand statut="importe", si l'élève a rejoint une famille déjà créée (frère/soeur) ou si une nouvelle
     famille a été créée pour lui — utile pour ne pas confondre "élèves importés" et "familles créées"
     dans un résumé d'import en masse.
     """
+    lie_le = timezone.now() if lie_par else None
     if Individu.objects.filter(ent_id=eleve_ent_id).exists():
         return {"statut": "deja_importe", "message": "Élève déjà importé.", "famille_id": None, "type": None}
 
@@ -248,6 +253,8 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
                 cp_resid=eleve_data.get("zipCode") or None,
                 ville_resid=eleve_data.get("city") or None,
                 ent_id=eleve_ent_id,
+                ent_lie_par=lie_par,
+                ent_lie_le=lie_le,
             )
             eleve.save()
 
@@ -308,6 +315,8 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
                         cp_resid=parent_data.get("zipCode") or None,
                         ville_resid=parent_data.get("city") or None,
                         ent_id=ent_id_parent,
+                        ent_lie_par=lie_par,
+                        ent_lie_le=lie_le,
                     )
                     parent.save()
                     Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
@@ -334,6 +343,8 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None):
                         cp_resid=parent_data.get("zipCode") or None,
                         ville_resid=parent_data.get("city") or None,
                         ent_id=ent_id_parent,
+                        ent_lie_par=lie_par,
+                        ent_lie_le=lie_le,
                     )
                     parent.save()
                     Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
@@ -533,7 +544,7 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             messages.error(request, f"Impossible d'importer : l'école « {eleve_data['ecole_nom']} » n'est pas encore importée dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
-        resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleve_data)
+        resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleve_data, lie_par=request.user.username)
 
         if resultat["statut"] == "deja_importe":
             messages.warning(request, "Cet élève a déjà été importé.")
@@ -802,6 +813,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 echecs.append((nom, "déjà lié à un compte ENT entre-temps"))
                 continue
             individu.ent_id = ent_id
+            # L'agent, pas "auto" : il a coché explicitement cette ligne précise avant de
+            # confirmer (contrairement à l'import en masse, qui ne montre aucune ligne
+            # individuellement).
+            individu.ent_lie_par = request.user.username
+            individu.ent_lie_le = timezone.now()
             individu.save()
             nb_lies += 1
 
@@ -835,6 +851,12 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
         if not nb_lies and not echecs and not deja_fait:
             messages.info(request, "Aucune liaison confirmée.")
+
+        # Un seul log pour tout le lancement, pas une ligne par liaison confirmée - chaque
+        # liaison individuelle est déjà tracée sur sa propre fiche (ent_lie_par/ent_lie_le).
+        if cles_confirmees:
+            detail = f"{nb_lies} liaison(s) créée(s), {len(echecs)} échec(s), {len(deja_fait)} déjà en place."
+            utils_historique.Ajouter(titre="Confirmation de liaisons en pré-liaison ENT", detail=detail, utilisateur=request.user)
 
         return HttpResponseRedirect(reverse("ent_preliaison"))
 
@@ -910,7 +932,10 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         nb_nouvelles_familles, nb_familles_existantes = 0, 0
         erreurs_detail = []
         for eleve_ent_id in ids_selectionnes:
-            resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleves_data.get(eleve_ent_id), parents_cache=parents_cache)
+            # "auto" et non l'agent : l'import en masse traite potentiellement des centaines
+            # d'élèves sans qu'aucun ne soit revu individuellement - contrairement à l'import
+            # unitaire ci-dessus, où l'agent choisit et voit précisément qui il importe.
+            resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleves_data.get(eleve_ent_id), parents_cache=parents_cache, lie_par="auto")
             if resultat["statut"] == "importe":
                 nb_eleves_importes += 1
                 if resultat["type"] == "famille_existante":
@@ -933,6 +958,17 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
             "nb_erreurs": nb_erreurs,
             "erreurs_detail": erreurs_detail,
         }
+
+        # Un seul log pour tout le lancement, pas une ligne par élève importé - c'est
+        # l'exécution de l'action qu'on trace ici, pas chaque élève individuellement (déjà
+        # tracé sur sa propre fiche via ent_lie_par/ent_lie_le).
+        detail = f"{nb_eleves_importes} élève(s) importé(s), {nb_ignores} déjà importé(s), {nb_erreurs} erreur(s)."
+        if erreurs_detail:
+            detail += " Erreurs : " + " ; ".join(erreurs_detail[:10])
+            if len(erreurs_detail) > 10:
+                detail += f" ; et {len(erreurs_detail) - 10} autre(s)"
+        utils_historique.Ajouter(titre="Import en masse depuis l'ENT", detail=detail, utilisateur=request.user)
+
         return HttpResponseRedirect(reverse("ent_import_masse"))
 
 

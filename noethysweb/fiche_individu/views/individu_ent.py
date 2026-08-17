@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.db import transaction
+from django.utils import timezone
 from core.models import Individu, Scolarite, Rattachement
 from core.views.base import CustomView
 from core.utils import utils_historique
@@ -463,18 +464,28 @@ class LierCompteEnt(Onglet, TemplateView):
                     return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
 
                 # Recalcule côté serveur si CE candidat précis nécessitait de passer outre un
-                # avertissement (aucune preuve, ou preuve la plus faible - date seule) - pour
-                # tracer une liaison forcée de façon fiable en cas de contestation, sans se fier
-                # à ce que le navigateur affichait (demande de traçabilité légale/sécurité).
+                # avertissement (aucune preuve, ou preuve la plus faible - date seule ou
+                # école/classe seule) - pour tracer une liaison forcée de façon fiable en cas
+                # de contestation, sans se fier à ce que le navigateur affichait (demande de
+                # traçabilité légale/sécurité).
                 resultats_verif, _ = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
                 candidat = next((r for r in (resultats_verif or []) if r.get('id') == ent_id), None)
-                liaison_forcee = bool(candidat and (candidat.get('aucune_corroboration') or candidat.get('corrobore_par_date_seule')))
+                liaison_forcee = bool(candidat and (
+                    candidat.get('aucune_corroboration') or candidat.get('corrobore_par_date_seule') or candidat.get('corrobore_par_ecole_seule')
+                ))
 
                 individu.ent_id = ent_id
+                individu.ent_lie_par = request.user.username
+                individu.ent_lie_le = timezone.now()
                 individu.save()
 
                 if liaison_forcee:
-                    raison = "aucune correspondance" if candidat.get('aucune_corroboration') else "date de naissance seule"
+                    if candidat.get('aucune_corroboration'):
+                        raison = "aucune correspondance"
+                    elif candidat.get('corrobore_par_date_seule'):
+                        raison = "date de naissance seule"
+                    else:
+                        raison = "école et classe seules"
                     utils_historique.Ajouter(
                         titre="Liaison ENT forcée sans corroboration fiable",
                         detail=(
@@ -503,6 +514,8 @@ class LierCompteEnt(Onglet, TemplateView):
                         # serveur, au cas où la requête serait envoyée directement).
                         elif autre_individu and not autre_individu.ent_id:
                             autre_individu.ent_id = valeur
+                            autre_individu.ent_lie_par = request.user.username
+                            autre_individu.ent_lie_le = timezone.now()
                             autre_individu.save()
                             nb_lies += 1
 
