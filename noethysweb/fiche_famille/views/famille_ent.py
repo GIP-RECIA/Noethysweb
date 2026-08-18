@@ -680,6 +680,8 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 "nom_ent": f"{resultat.get('firstName', '')} {resultat.get('lastName', '')}",
                 "nom_individu": str(enfant),
                 "role": "Enfant",
+                "date_coherente": resultat.get('date_coherente'),
+                "ecole_coherente": resultat.get('ecole_coherente'),
             }]
             for parent in parents_enrichis:
                 if parent["proposable"]:
@@ -693,7 +695,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
             groupe = groupes_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": [], "cles": set()})
             for ligne in lignes:
                 if ligne["cle"] not in groupe["cles"]:
-                    groupe["lignes"].append({"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"], "role": ligne["role"]})
+                    nouvelle_ligne = {"cle": ligne["cle"], "nom_ent": ligne["nom_ent"], "nom_individu": ligne["nom_individu"], "role": ligne["role"]}
+                    if ligne["role"] == "Enfant":
+                        nouvelle_ligne["date_coherente"] = ligne.get("date_coherente")
+                        nouvelle_ligne["ecole_coherente"] = ligne.get("ecole_coherente")
+                    groupe["lignes"].append(nouvelle_ligne)
                     groupe["cles"].add(ligne["cle"])
 
         # Phase 4 : détecte les collisions entre familles - si le même compte ENT se retrouve
@@ -708,6 +714,32 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 ent_id_vers_individus.setdefault(ent_id, set()).add(individu_pk)
         ent_ids_en_collision = {ent_id for ent_id, individus in ent_id_vers_individus.items() if len(individus) > 1}
 
+        # Départage automatique (demandé par l'équipe) : uniquement pour les enfants (un même
+        # compte ENT élève proposé à 2 familles Noethys différentes - le cas typique d'homonymes).
+        # Si une seule des familles en collision a une date de naissance cohérente avec ce compte
+        # ENT (les autres non, ou inconnue), on la retient sans avertissement - la date de
+        # naissance est une preuve individuelle bien plus fiable qu'un nom qui peut se répéter par
+        # coïncidence entre 2 familles. Si la date ne suffit pas à trancher (aucune ne correspond,
+        # ou plusieurs), on retente avec l'école/classe en dernier recours (plus faible - elle
+        # change chaque année - mais toujours mieux que de tout laisser à la main). Les parents en
+        # collision ne sont jamais départagés ainsi : une collision de parents signale presque
+        # toujours une vraie fiche en double côté Noethys, pas une ambiguïté à trancher.
+        ent_ids_departages = {}  # {ent_id: individu_pk retenu}
+        for ent_id in ent_ids_en_collision:
+            lignes_enfant_en_collision = [
+                ligne
+                for groupe in groupes_par_famille.values()
+                for ligne in groupe["lignes"]
+                if ligne["role"] == "Enfant" and ligne["cle"].split("|", 1)[0] == ent_id
+            ]
+            if len(lignes_enfant_en_collision) < 2:
+                continue  # collision due uniquement aux parents, rien à départager ici
+            for critere in ("date_coherente", "ecole_coherente"):
+                gagnants = [l for l in lignes_enfant_en_collision if l.get(critere) is True]
+                if len(gagnants) == 1:
+                    ent_ids_departages[ent_id] = gagnants[0]["cle"].split("|", 1)[1]
+                    break
+
         # Avant de les retirer, note les personnes perdues à cause d'une collision - sinon elles
         # disparaîtraient de partout, sans que l'agent sache qu'il faut les vérifier à la main.
         # Enfants ET parents : un parent en collision signale presque toujours une fiche en
@@ -718,18 +750,27 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # en double dans la même famille donneraient 2 lignes du même rôle ici).
             lignes_en_collision = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] in ent_ids_en_collision]
             for ligne in lignes_en_collision:
+                ent_id, individu_pk = ligne["cle"].split("|", 1)
+                if ent_ids_departages.get(ent_id) == individu_pk:
+                    continue  # départagée en sa faveur : reste dans les propositions automatiques
                 if ligne["role"] == "Parent":
                     raison = "Ce parent correspond au même compte ENT qu'une autre fiche Noethys - probable fiche en double, à fusionner ou corriger"
+                elif ent_id in ent_ids_departages:
+                    raison = "Correspond au même compte ENT qu'une autre famille Noethys - départagé en faveur de l'autre famille par la date de naissance ou l'école/classe"
                 else:
                     raison = "Correspond au même compte ENT qu'une autre famille Noethys (collision)"
                 _ajouter_non_resolu(
                     famille_pk, groupe["famille_nom"],
-                    ligne["nom_individu"], int(ligne["cle"].split("|", 1)[1]),
+                    ligne["nom_individu"], int(individu_pk),
                     raison, role=ligne["role"],
                 )
 
         for groupe in groupes_par_famille.values():
-            groupe["lignes"] = [l for l in groupe["lignes"] if l["cle"].split("|", 1)[0] not in ent_ids_en_collision]
+            groupe["lignes"] = [
+                l for l in groupe["lignes"]
+                if l["cle"].split("|", 1)[0] not in ent_ids_en_collision
+                or ent_ids_departages.get(l["cle"].split("|", 1)[0]) == l["cle"].split("|", 1)[1]
+            ]
         groupes_par_famille = {fid: g for fid, g in groupes_par_famille.items() if g["lignes"]}
 
         groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])

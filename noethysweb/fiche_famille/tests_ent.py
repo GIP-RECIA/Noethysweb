@@ -220,6 +220,77 @@ class TestCorroborationPreLiaison(TestCase):
         # ... et le parent en double n'est évidemment plus proposé
         self.assertFalse([c for c in cles if c.startswith("ENT-MARC|")])
 
+    def test_regle6c_collision_departagee_par_date_de_naissance(self):
+        """Règle 6 (départage) : deux familles Noethys en collision sur le même compte ENT
+        enfant, mais une seule a une date de naissance cohérente avec l'ENT => elle est
+        retenue automatiquement, l'autre est écartée avec une raison explicite.
+
+        Note : si la date de Noethys ETAIT connue et contredisait franchement l'ENT, le
+        veto de la règle 3 (nom_corrobore + date_coherente=False) exclurait déjà cette
+        famille avant même d'atteindre la détection de collision - ce n'est donc pas
+        départagé par ce mécanisme mais par le veto existant. Le cas que ce mécanisme sert
+        vraiment à trancher, c'est quand une des deux dates est simplement INCONNUE côté
+        Noethys (pas de contradiction franche, juste rien à comparer)."""
+        famille_a = Famille.objects.create(nom="COLLDATE A")
+        parent_a = Individu.objects.create(nom="COLLDATE", prenom="Gabriel", civilite=1)
+        enfant_a = Individu.objects.create(nom="COLLDATE", prenom="Julia", civilite=4, date_naiss=date(2010, 5, 1))
+        Rattachement.objects.create(individu=parent_a, famille=famille_a, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=enfant_a, famille=famille_a, categorie=2, titulaire=False)
+
+        famille_c = Famille.objects.create(nom="COLLDATE C")
+        parent_c = Individu.objects.create(nom="COLLDATE", prenom="Gabriel", civilite=1)
+        enfant_c = Individu.objects.create(nom="COLLDATE", prenom="Julia", civilite=4)  # date de naissance inconnue
+        Rattachement.objects.create(individu=parent_c, famille=famille_c, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=enfant_c, famille=famille_c, categorie=2, titulaire=False)
+
+        familles = {"A": {"famille": famille_a, "enfant": enfant_a}, "C": {"famille": famille_c, "enfant": enfant_c}}
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Julia": lambda: [_resultat_eleve("ENT-J", "COLLDATE", "Julia", birth="2010-05-01", parents=[
+                {"firstName": "Gabriel", "lastName": "COLLDATE", "id": "ENT-G"},
+            ])],
+        })
+
+        cles = self._cles_proposees(groupes)
+        self.assertIn(
+            f"ENT-J|{familles['A']['enfant'].pk}", cles,
+            "La famille dont la date de naissance correspond n'a pas été retenue - "
+            "le départage par la date de naissance n'a pas fonctionné.",
+        )
+        self.assertNotIn(f"ENT-J|{familles['C']['enfant'].pk}", cles)
+
+        raisons_c = [p["raison"] for g in non_resolus if g["famille_id"] == familles["C"]["famille"].pk for p in g["personnes"]]
+        self.assertTrue(raisons_c, "La famille écartée par le départage doit être signalée en 'à vérifier'.")
+        self.assertIn("départagé", raisons_c[0])
+
+    def test_regle6d_collision_departagee_par_ecole_si_date_ne_suffit_pas(self):
+        """Règle 6 (départage, repli) : si la date de naissance ne permet pas de trancher
+        (aucune date connue des deux côtés), l'école/classe sert de critère de repli."""
+        ecole = Ecole.objects.create(nom="École Test", uai="UAI999", ent_id="ENT-ECOLE-1")
+        classe = Classe.objects.create(ecole=ecole, nom="CE2 A", date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+
+        familles = {}
+        for suffixe, avec_ecole in (("A", True), ("C", False)):
+            famille = Famille.objects.create(nom=f"COLLECOLE {suffixe}")
+            parent = Individu.objects.create(nom="COLLECOLE", prenom="Gabriel", civilite=1)
+            enfant = Individu.objects.create(nom="COLLECOLE", prenom="Julia", civilite=4)
+            Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+            Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+            if avec_ecole:
+                Scolarite.objects.create(individu=enfant, ecole=ecole, classe=classe, date_debut=date(2020, 9, 1), date_fin=date(2030, 8, 31))
+            familles[suffixe] = {"famille": famille, "enfant": enfant}
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Julia": lambda: [_resultat_eleve(
+                "ENT-J", "COLLECOLE", "Julia", ecole="École Test", ecole_uai="UAI999", ecole_ent_id="ENT-ECOLE-1", classe="CE2 A",
+                parents=[{"firstName": "Gabriel", "lastName": "COLLECOLE", "id": "ENT-G"}],
+            )],
+        })
+
+        cles = self._cles_proposees(groupes)
+        self.assertIn(f"ENT-J|{familles['A']['enfant'].pk}", cles)
+        self.assertNotIn(f"ENT-J|{familles['C']['enfant'].pk}", cles)
+
     # ------------------------------------------ confirmation : jamais d'échec silencieux
 
     def _confirmer(self, cles, groupes_session):
