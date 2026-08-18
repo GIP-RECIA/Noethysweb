@@ -675,8 +675,9 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
             parents_enrichis = resultat.get("membres_enrichis", [])
 
+            cle_enfant = f"{resultat['id']}|{enfant.pk}"
             lignes = [{
-                "cle": f"{resultat['id']}|{enfant.pk}",
+                "cle": cle_enfant,
                 "nom_ent": f"{resultat.get('firstName', '')} {resultat.get('lastName', '')}",
                 "nom_individu": str(enfant),
                 "role": "Enfant",
@@ -690,6 +691,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
                         "nom_ent": f"{parent['ent'].get('firstName', '')} {parent['ent'].get('lastName', '')}",
                         "nom_individu": str(parent["individu_correspondant"]),
                         "role": "Parent",
+                        # Une ligne Parent n'existe que parce que CET enfant a permis de la
+                        # proposer - mémorisé pour pouvoir la retirer plus tard si l'enfant est
+                        # écarté (voir phase 5), sans pénaliser un parent encore justifié par un
+                        # frère/soeur dont la correspondance reste valable.
+                        "vient_de": cle_enfant,
                     })
 
             groupe = groupes_par_famille.setdefault(famille.pk, {"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": [], "cles": set()})
@@ -699,8 +705,17 @@ class PreLiaisonEnt(CustomView, TemplateView):
                     if ligne["role"] == "Enfant":
                         nouvelle_ligne["date_coherente"] = ligne.get("date_coherente")
                         nouvelle_ligne["ecole_coherente"] = ligne.get("ecole_coherente")
+                    else:
+                        nouvelle_ligne["justifiee_par"] = []
                     groupe["lignes"].append(nouvelle_ligne)
                     groupe["cles"].add(ligne["cle"])
+                if ligne["role"] == "Parent":
+                    # Cas de la fratrie : ce même parent peut être proposé via plusieurs enfants
+                    # de la famille - on accumule chaque enfant qui le justifie, que la ligne
+                    # vienne d'être créée ci-dessus ou qu'elle existe déjà pour un enfant précédent.
+                    ligne_deja_la = next(l for l in groupe["lignes"] if l["cle"] == ligne["cle"])
+                    if ligne["vient_de"] not in ligne_deja_la["justifiee_par"]:
+                        ligne_deja_la["justifiee_par"].append(ligne["vient_de"])
 
         # Phase 4 : détecte les collisions entre familles - si le même compte ENT se retrouve
         # proposé à des personnes Noethys différentes (2 familles distinctes qui se ressemblent
@@ -771,11 +786,41 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 if l["cle"].split("|", 1)[0] not in ent_ids_en_collision
                 or ent_ids_departages.get(l["cle"].split("|", 1)[0]) == l["cle"].split("|", 1)[1]
             ]
+
+        # Phase 5 : une ligne Parent n'a jamais existé toute seule - elle n'a été proposée que
+        # parce qu'au moins un enfant de la famille a permis de la corroborer (voir "vient_de"/
+        # "justifiee_par" plus haut). Si TOUS les enfants qui la justifiaient viennent d'être
+        # écartés ci-dessus (collision perdue, départage perdu...), la proposition sur ce parent
+        # n'a plus aucun fondement et doit être retirée aussi - sinon on continuerait à proposer
+        # de lier un parent à un compte ENT dont on vient de décider qu'il n'est pas le bon. À
+        # l'inverse, tant qu'un seul enfant (fratrie) le justifie encore, on ne retire rien : le
+        # priver de cette proposition serait injustifié, sa correspondance reste valable.
+        for famille_pk, groupe in groupes_par_famille.items():
+            cles_enfants_restants = {l["cle"] for l in groupe["lignes"] if l["role"] == "Enfant"}
+            lignes_parent_orphelines = [
+                l for l in groupe["lignes"]
+                if l["role"] == "Parent" and l.get("justifiee_par")
+                and not (set(l["justifiee_par"]) & cles_enfants_restants)
+            ]
+            for ligne in lignes_parent_orphelines:
+                _ajouter_non_resolu(
+                    famille_pk, groupe["famille_nom"],
+                    ligne["nom_individu"], int(ligne["cle"].split("|", 1)[1]),
+                    "Ce parent n'était proposé que via un enfant écarté entre-temps (collision "
+                    "ou départage) - plus aucun enfant ne corrobore ce compte, à vérifier à la main",
+                    role="Parent",
+                )
+            if lignes_parent_orphelines:
+                cles_a_retirer = {l["cle"] for l in lignes_parent_orphelines}
+                groupe["lignes"] = [l for l in groupe["lignes"] if l["cle"] not in cles_a_retirer]
+
         groupes_par_famille = {fid: g for fid, g in groupes_par_famille.items() if g["lignes"]}
 
         groupes = sorted(groupes_par_famille.values(), key=lambda g: g["famille_nom"])
         for groupe in groupes:
             del groupe["cles"]
+            for ligne in groupe["lignes"]:
+                ligne.pop("justifiee_par", None)
 
         non_resolus = sorted(non_resolus_par_famille.values(), key=lambda g: g["famille_nom"])
         return groupes, non_resolus

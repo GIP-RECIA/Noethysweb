@@ -291,6 +291,91 @@ class TestCorroborationPreLiaison(TestCase):
         self.assertIn(f"ENT-J|{familles['A']['enfant'].pk}", cles)
         self.assertNotIn(f"ENT-J|{familles['C']['enfant'].pk}", cles)
 
+    def test_departage_retire_aussi_le_parent_devenu_sans_fondement(self):
+        """Une ligne Parent n'est proposée que parce qu'un enfant précis a permis de la
+        corroborer. Si cet enfant est écarté par un départage, la proposition sur le parent
+        n'a plus aucune preuve - elle doit être retirée aussi, sinon on continue à proposer
+        de lier un parent à un compte ENT dont on vient de décider qu'il n'est pas le bon."""
+        famille_a = Famille.objects.create(nom="ORPHELIN A")
+        marc = Individu.objects.create(nom="MOREAU", prenom="Marc", civilite=1)
+        lea_a = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4, date_naiss=date(2012, 3, 4))
+        Rattachement.objects.create(individu=marc, famille=famille_a, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=lea_a, famille=famille_a, categorie=2, titulaire=False)
+
+        # Famille homonyme sans rapport réel avec la famille A - sa "Sophie MOREAU" est une
+        # personne différente qui porte, par coïncidence, le même nom que la mère listée côté ENT.
+        famille_c = Famille.objects.create(nom="ORPHELIN C")
+        sophie = Individu.objects.create(nom="MOREAU", prenom="Sophie", civilite=3)
+        lea_c = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4)  # date inconnue
+        Rattachement.objects.create(individu=sophie, famille=famille_c, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=lea_c, famille=famille_c, categorie=2, titulaire=False)
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Lea": lambda: [_resultat_eleve("ENT-LEA", "MOREAU", "Lea", birth="2012-03-04", parents=[
+                {"firstName": "Marc", "lastName": "MOREAU", "id": "ENT-MARC"},
+                {"firstName": "Sophie", "lastName": "MOREAU", "id": "ENT-SOPHIE"},
+            ])],
+        })
+
+        cles = self._cles_proposees(groupes)
+        self.assertIn(f"ENT-LEA|{lea_a.pk}", cles, "La famille A (date correcte) doit gagner le départage.")
+        self.assertIn(f"ENT-MARC|{marc.pk}", cles, "Le parent de la famille gagnante doit rester proposé.")
+        self.assertNotIn(f"ENT-LEA|{lea_c.pk}", cles)
+        self.assertNotIn(
+            f"ENT-SOPHIE|{sophie.pk}", cles,
+            "Le parent de la famille perdante reste proposé alors que son seul enfant "
+            "justificatif (Lea C) a été écarté par le départage - la proposition n'a plus "
+            "aucun fondement.",
+        )
+
+        raisons_sophie = [
+            p["raison"] for g in non_resolus if g["famille_id"] == famille_c.pk
+            for p in g["personnes"] if p["individu_id"] == sophie.pk
+        ]
+        self.assertTrue(raisons_sophie, "Sophie a disparu au lieu d'être listée à vérifier.")
+
+    def test_departage_ne_retire_pas_un_parent_encore_justifie_par_un_frere(self):
+        """Si un parent est corroboré via 2 enfants d'une même fratrie, et que l'un des deux
+        est écarté par un départage (perdu contre une autre famille), le parent reste
+        légitimement corroboré par l'autre enfant - il ne doit PAS être retiré. Le retirer
+        priverait l'agent d'une proposition pourtant toujours valable."""
+        famille_a = Famille.objects.create(nom="FRATRIE A")
+        marc = Individu.objects.create(nom="MOREAU", prenom="Marc", civilite=1)
+        lea_a = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4)  # date inconnue -> va perdre
+        tom_a = Individu.objects.create(nom="MOREAU", prenom="Tom", civilite=4)
+        Rattachement.objects.create(individu=marc, famille=famille_a, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=lea_a, famille=famille_a, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=tom_a, famille=famille_a, categorie=2, titulaire=False)
+
+        # Famille homonyme sans rapport réel, dont la Lea a la bonne date de naissance -> elle
+        # gagne le départage sur ENT-LEA, aux dépens de Lea de la famille A.
+        famille_b = Famille.objects.create(nom="FRATRIE B")
+        sophie_b = Individu.objects.create(nom="DIFFERENT", prenom="Sophie", civilite=3)
+        lea_b = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4, date_naiss=date(2012, 3, 4))
+        Rattachement.objects.create(individu=sophie_b, famille=famille_b, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=lea_b, famille=famille_b, categorie=2, titulaire=False)
+
+        groupes, non_resolus = self._lancer_recherche({
+            "Lea": lambda: [_resultat_eleve("ENT-LEA", "MOREAU", "Lea", birth="2012-03-04", parents=[
+                {"firstName": "Marc", "lastName": "MOREAU", "id": "ENT-MARC"},
+                {"firstName": "Sophie", "lastName": "DIFFERENT", "id": "ENT-SOPHIE-B"},
+            ])],
+            "Tom": lambda: [_resultat_eleve("ENT-TOM", "MOREAU", "Tom", parents=[
+                {"firstName": "Marc", "lastName": "MOREAU", "id": "ENT-MARC"},
+            ])],
+        })
+
+        cles = self._cles_proposees(groupes)
+        self.assertIn(f"ENT-LEA|{lea_b.pk}", cles, "La famille B (date correcte) doit gagner le départage.")
+        self.assertNotIn(f"ENT-LEA|{lea_a.pk}", cles, "Lea de la famille A doit perdre le départage.")
+        self.assertIn(f"ENT-TOM|{tom_a.pk}", cles, "Tom n'est concerné par aucune collision.")
+        self.assertIn(
+            f"ENT-MARC|{marc.pk}", cles,
+            "Marc a été retiré alors que Tom (son autre enfant, non écarté) le justifie "
+            "toujours - un parent ne doit être retiré que si TOUS ses enfants justificatifs "
+            "ont été écartés.",
+        )
+
     # ------------------------------------------------- panne ENT vs absence de résultat
 
     def test_panne_en_masse_ne_dit_pas_que_les_enfants_nexistent_pas(self):
