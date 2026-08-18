@@ -406,10 +406,10 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         request.session["ent_last_name"] = last_name
         request.session["ent_first_name"] = first_name
 
-        # Vérifie la connexion avant la recherche : search_by_name() renvoie une liste vide
-        # aussi bien quand la recherche ne trouve rien que quand la connexion échoue
-        # (identifiants incorrects, ENT désactivé...) - sans ce test, l'agent verrait
-        # "Aucun résultat" dans les deux cas sans savoir qu'il y a un vrai problème.
+        # Vérifie la connexion avant la recherche (credentials absents, ENT désactivé...) :
+        # message explicite plutôt qu'un "Aucun résultat" trompeur. Une panne survenant APRÈS
+        # ce test, en cours d'appel, est rattrapée juste en dessous (search_by_name renvoie
+        # None dans ce cas, distinct de la liste vide "l'ENT ne connaît personne").
         if get_headers() is None:
             request.session["ent_erreur"] = "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
             return
@@ -922,6 +922,11 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         nb_masques_ecole_inconnue = 0
         if not context["erreur_connexion"]:
             eleves_bruts = search_users(profile="Student")
+            # None = l'ENT n'a pas répondu (panne en cours d'appel, timeout), à ne pas confondre
+            # avec une liste vide qui signifie "l'ENT a répondu qu'il n'a aucun élève".
+            if eleves_bruts is None:
+                context["erreur_connexion"] = True
+                eleves_bruts = []
             for eleve_data in eleves_bruts:
                 eleve_data = _normaliser_enfant(dict(eleve_data))
                 # Ne montre que les élèves d'une école déjà connue de Noethys (même logique que

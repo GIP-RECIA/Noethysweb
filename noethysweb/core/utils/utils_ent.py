@@ -97,7 +97,7 @@ def search_users(profile=None, structure_id=None):
     """
     base_url = _get_base_url()
     if not base_url:
-        return []
+        return None
 
     params = {}
     if profile:
@@ -105,8 +105,9 @@ def search_users(profile=None, structure_id=None):
     if structure_id:
         params["structureId"] = structure_id
 
-    result = _api_get(f"{base_url}/directory/user/admin/list", params=params)
-    return result if result is not None else []
+    # Voir search_by_name : on laisse passer le None de _api_get, sinon une panne devient
+    # indiscernable d'un ENT qui n'a réellement aucun élève.
+    return _api_get(f"{base_url}/directory/user/admin/list", params=params)
 
 
 def search_students_by_name(last_name, first_name, structure_id=None):
@@ -136,8 +137,13 @@ def search_by_name(last_name, first_name):
         return None
 
     params = {"firstName": first_name, "lastName": last_name}
-    result = _api_get(f"{base_url}/directory/user/admin/list", params=params)
-    return result if result is not None else []
+    # _api_get ne renvoie None qu'en cas d'échec technique (credentials absents, timeout,
+    # erreur HTTP après retry) - une recherche sans résultat renvoie une liste vide. On laisse
+    # donc passer ce None tel quel : l'appelant doit pouvoir distinguer "l'ENT n'a pas répondu"
+    # de "l'ENT a répondu qu'il ne connaît personne". Sans ça, une panne passagère est annoncée
+    # à l'agent comme une absence de fiche - et en traitement de masse, chaque personne touchée
+    # par l'incident reçoit une raison fausse.
+    return _api_get(f"{base_url}/directory/user/admin/list", params=params)
 
 
 

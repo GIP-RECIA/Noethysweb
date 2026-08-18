@@ -199,6 +199,11 @@ class LierCompteEnt(Onglet, TemplateView):
         if get_headers() is None:
             return None, "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
         resultats = search_by_name(last_name=nom, first_name=prenom)
+        # None = l'ENT n'a pas répondu (panne, timeout, coupure en cours de recherche). Le test
+        # get_headers() ci-dessus ne couvre pas ce cas : un token encore valide en cache le laisse
+        # passer. Sans cette distinction, une panne s'annonce comme "cette personne n'existe pas".
+        if resultats is None:
+            return None, "La connexion à l'ENT a échoué pendant la recherche. Réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
         if not resultats:
             return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
 

@@ -73,6 +73,38 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
         return request
 
+    # ------------------------------------------------- panne ENT vs absence de résultat
+
+    def test_panne_en_cours_de_recherche_nest_pas_annoncee_comme_absence_de_fiche(self):
+        """Une panne ENT survenant APRÈS l'obtention du token (token encore valide en cache,
+        mais l'appel échoue : timeout, 500, coupure) doit produire un message de connexion.
+        L'annoncer comme "cet individu n'existe peut-être pas" est un diagnostic faux, qui
+        pousse l'agent à conclure à tort qu'il n'y a pas de compte à lier."""
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=None):
+            resultats, erreur = self.vue._rechercher(
+                self.enfant.nom, self.enfant.prenom, self.famille.pk, self.enfant.pk,
+            )
+
+        self.assertIsNone(resultats)
+        self.assertIn("connexion", erreur.lower())
+        self.assertNotIn(
+            "n'y existe peut-être pas", erreur,
+            "Une panne de connexion est annoncée comme une absence de fiche dans l'ENT.",
+        )
+
+    def test_aucun_resultat_reste_bien_annonce_comme_tel(self):
+        """Non-régression du test ci-dessus : une vraie réponse vide de l'ENT (liste vide,
+        pas None) doit continuer à dire "aucun résultat", pas "panne"."""
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=[]):
+            resultats, erreur = self.vue._rechercher(
+                self.enfant.nom, self.enfant.prenom, self.famille.pk, self.enfant.pk,
+            )
+
+        self.assertIsNone(resultats)
+        self.assertIn("Aucun résultat", erreur)
+
     # ------------------------------------------------------------------ règle 1
 
     def test_regle1_parent_dont_le_compte_ent_est_deja_pris_nest_pas_propose(self):
@@ -377,7 +409,7 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
 
     def test_historique_liaison_forcee_sans_corroboration_est_tracee(self):
         """Une liaison confirmée malgré 'aucune_corroboration' doit être tracée dans
-        l'historique Noethys (demande de Julien : sécurité/aspects légaux), avec
+        l'historique Noethys (demande de l'équipe : sécurité/aspects légaux), avec
         l'agent, la personne liée et la raison précise."""
         agent = Utilisateur.objects.create_user(username="agent_test_1")
         reponse_ent = [_resultat_eleve("ENT-E", "FAMTEST", "Enfant")]  # aucun parent -> aucune corroboration

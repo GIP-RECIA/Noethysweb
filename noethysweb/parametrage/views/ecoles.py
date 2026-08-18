@@ -68,7 +68,7 @@ class Supprimer(Page, crud.Supprimer):
 class ImporterEcoleEnt(CustomView, TemplateView):
     """
     Permet d'importer/actualiser une École Noethys à partir de son code UAI, en interrogeant
-    directement Édifice (get_school) - plutôt que de laisser une École se créer à la volée,
+    directement l'ENT (get_school) - plutôt que de laisser une École se créer à la volée,
     de façon peu fiable, au moment de l'import d'un élève.
     """
     template_name = "parametrage/ecoles_importer_ent.html"
