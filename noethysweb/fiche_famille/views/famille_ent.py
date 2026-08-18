@@ -830,7 +830,16 @@ class PreLiaisonEnt(CustomView, TemplateView):
         deja_fait = []  # liaisons déjà en place à l'identique : ni succès, ni échec
 
         for cle in cles_confirmees:
-            nom = noms_par_cle.get(cle, "Ligne inconnue")
+            # Une clé qui ne fait pas partie des correspondances actuellement en session ne doit
+            # jamais être liée. Deux cas réels : un formulaire périmé (l'agent a relancé la
+            # recherche dans un autre onglet, puis confirmé l'ancien écran), ou une requête
+            # envoyée directement. Sans ce contrôle, une ligne volontairement écartée - collision
+            # entre 2 familles, ou famille perdante d'un départage - reste liable en rejouant le
+            # POST, alors que c'est précisément la liaison qu'on refusait de proposer.
+            if cle not in noms_par_cle:
+                echecs.append(("Ligne inconnue", "ne fait pas partie des correspondances proposées, relancez la recherche"))
+                continue
+            nom = noms_par_cle[cle]
             try:
                 ent_id, individu_pk = cle.split("|", 1)
             except ValueError:

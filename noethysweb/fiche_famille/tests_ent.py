@@ -291,6 +291,28 @@ class TestCorroborationPreLiaison(TestCase):
         self.assertIn(f"ENT-J|{familles['A']['enfant'].pk}", cles)
         self.assertNotIn(f"ENT-J|{familles['C']['enfant'].pk}", cles)
 
+    # ------------------------------------------------- panne ENT vs absence de résultat
+
+    def test_panne_en_masse_ne_dit_pas_que_les_enfants_nexistent_pas(self):
+        """En traitement de masse, une panne ENT touchait chaque enfant traité pendant
+        l'incident avec la raison "n'existe peut-être pas dans l'ENT" - un diagnostic faux
+        répété des centaines de fois, qui pousse l'agent à importer des doublons."""
+        famille = Famille.objects.create(nom="PANNE")
+        enfant = Individu.objects.create(nom="PANNE", prenom="Lucas", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        # search_by_name renvoie None = l'ENT n'a pas répondu (et non [] = aucun résultat)
+        groupes, non_resolus = self._lancer_recherche({"Lucas": lambda: None})
+
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons, "L'enfant a disparu au lieu d'être listé à vérifier.")
+        self.assertIn("connexion", raisons[0].lower())
+        self.assertNotIn(
+            "n'y existe peut-être pas", raisons[0],
+            "Une panne ENT est annoncée comme une absence de fiche - l'agent conclura à tort "
+            "qu'il faut créer/importer cette personne.",
+        )
+
     # ------------------------------------------ confirmation : jamais d'échec silencieux
 
     def _confirmer(self, cles, groupes_session):
@@ -308,6 +330,56 @@ class TestCorroborationPreLiaison(TestCase):
         vue.post(request)
         from django.contrib.messages import get_messages
         return [(m.level_tag, str(m)) for m in get_messages(request)]
+
+    def test_confirmation_refuse_une_cle_absente_des_correspondances_proposees(self):
+        """Une clé qui n'est pas dans les correspondances en session ne doit jamais être
+        liée : formulaire périmé (recherche relancée dans un autre onglet) ou requête
+        envoyée directement. Sans ce contrôle, n'importe quel couple compte ENT / fiche
+        pouvait être lié en rejouant un POST, sans aucune corroboration."""
+        famille = Famille.objects.create(nom="FORGE")
+        cible = Individu.objects.create(nom="FORGE", prenom="Cible", civilite=4)
+        Rattachement.objects.create(individu=cible, famille=famille, categorie=2, titulaire=False)
+
+        # Session vide de toute proposition : la clé est forgée de toutes pièces
+        msgs = self._confirmer([f"ENT-FORGE|{cible.pk}"], [])
+
+        cible.refresh_from_db()
+        self.assertIsNone(
+            cible.ent_id,
+            "Une clé jamais proposée a quand même été liée - la confirmation fait "
+            "confiance au navigateur au lieu de revalider côté serveur.",
+        )
+        self.assertTrue([m for niveau, m in msgs if "ne fait pas partie" in m])
+
+    def test_confirmation_refuse_une_ligne_ecartee_pour_collision(self):
+        """Cas concret du contrôle ci-dessus : une ligne retirée des propositions parce
+        qu'elle est en collision avec une autre famille (ou écartée par le départage) ne
+        doit pas redevenir liable en rejouant l'ancien formulaire."""
+        famille_gagnante = Famille.objects.create(nom="REJOUE A")
+        gagnant = Individu.objects.create(nom="REJOUE", prenom="Julia", civilite=4)
+        Rattachement.objects.create(individu=gagnant, famille=famille_gagnante, categorie=2, titulaire=False)
+
+        famille_ecartee = Famille.objects.create(nom="REJOUE C")
+        ecarte = Individu.objects.create(nom="REJOUE", prenom="Julia", civilite=4)
+        Rattachement.objects.create(individu=ecarte, famille=famille_ecartee, categorie=2, titulaire=False)
+
+        # La session ne contient que la ligne retenue - celle de la famille écartée n'y est
+        # plus, exactement comme après une détection de collision ou un départage.
+        session = [{
+            "famille_id": famille_gagnante.pk, "famille_nom": famille_gagnante.nom,
+            "lignes": [{"cle": f"ENT-J|{gagnant.pk}", "nom_ent": "Julia REJOUE",
+                        "nom_individu": str(gagnant), "role": "Enfant"}],
+        }]
+
+        # L'agent rejoue l'ancien formulaire, qui contenait encore la ligne écartée
+        self._confirmer([f"ENT-J|{ecarte.pk}"], session)
+
+        ecarte.refresh_from_db()
+        self.assertIsNone(
+            ecarte.ent_id,
+            "La fiche écartée pour collision a été liée via un POST rejoué - c'est "
+            "précisément la liaison ambiguë que la détection refusait de proposer.",
+        )
 
     def test_confirmation_liste_les_lignes_ignorees_avec_leur_raison(self):
         """Une ligne cochée qui ne peut pas être liée ne doit jamais être ignorée en
