@@ -18,9 +18,10 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 from django.utils import timezone
 
-from core.models import Assurance, Assureur, Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
+from core.models import Activite, Assurance, Assureur, CategorieTarif, Classe, Ecole, Famille, Groupe, Historique, Individu, Inscription, Rattachement, Scolarite, Structure, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
 from fiche_individu.views.individu_assurances import ReattribuerAssurance
+from fiche_individu.views.individu_inscriptions import ReattribuerInscription
 
 
 def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None, ecole=None, classe=None, ecole_uai=None, ecole_ent_id=None):
@@ -684,3 +685,80 @@ class TestReattributionAssurance(TestCase):
         self.assertIn("ASSUR TRACE ORIGINE", log.detail)
         self.assertIn("ASSUR TRACE CIBLE", log.detail)
         self.assertIsNotNone(log.utilisateur, "La trace ne dit pas quel agent a fait la réattribution.")
+
+
+class TestReattributionInscription(TestCase):
+    """Le bouton "Réattribuer à une autre famille" pour une inscription - même outil que pour
+    les prestations et les assurances. Corrige le cas d'une inscription d'enfant partagé
+    restée ambiguë après une séparation (aucun titulaire clair)."""
+
+    @staticmethod
+    def _creer_inscription(famille, individu):
+        structure = Structure.objects.create(nom="Structure Test")
+        activite = Activite.objects.create(nom="Cantine", abrege="CANT", structure=structure)
+        groupe = Groupe.objects.create(activite=activite, nom="Groupe A", ordre=1)
+        categorie_tarif = CategorieTarif.objects.create(activite=activite, nom="Standard")
+        return Inscription.objects.create(
+            individu=individu, famille=famille, activite=activite, groupe=groupe,
+            categorie_tarif=categorie_tarif, date_debut=date(2026, 9, 1),
+        )
+
+    def _reattribuer(self, inscription, famille_origine, famille_cible, idindividu):
+        request = RequestFactory().post("/", {"idfamille_cible": famille_cible.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = ReattribuerInscription()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_origine.pk, "idindividu": idindividu, "pk": inscription.pk}
+        vue.post(request)
+
+    def test_reattribution_deplace_linscription_vers_la_famille_cible(self):
+        famille_origine = Famille.objects.create(nom="INSCR ORIGINE")
+        famille_cible = Famille.objects.create(nom="INSCR CIBLE")
+        enfant = Individu.objects.create(nom="INSCRIT", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        inscription = self._creer_inscription(famille_origine, enfant)
+
+        self._reattribuer(inscription, famille_origine, famille_cible, enfant.pk)
+
+        inscription.refresh_from_db()
+        self.assertEqual(inscription.famille_id, famille_cible.pk)
+
+    def test_reattribution_refuse_une_famille_non_rattachee(self):
+        famille_origine = Famille.objects.create(nom="INSCR ORIGINE2")
+        famille_etrangere = Famille.objects.create(nom="INSCR ETRANGERE")
+        enfant = Individu.objects.create(nom="INSCRIT2", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+
+        inscription = self._creer_inscription(famille_origine, enfant)
+
+        self._reattribuer(inscription, famille_origine, famille_etrangere, enfant.pk)
+
+        inscription.refresh_from_db()
+        self.assertEqual(
+            inscription.famille_id, famille_origine.pk,
+            "L'inscription a été réattribuée vers une famille à laquelle l'individu n'est "
+            "pas rattaché - la vérification de sécurité côté serveur a été contournée.",
+        )
+
+    def test_reattribution_trace_lagent_dans_lhistorique(self):
+        famille_origine = Famille.objects.create(nom="INSCR TRACE ORIGINE")
+        famille_cible = Famille.objects.create(nom="INSCR TRACE CIBLE")
+        enfant = Individu.objects.create(nom="INSCRITTRACE", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        inscription = self._creer_inscription(famille_origine, enfant)
+
+        self._reattribuer(inscription, famille_origine, famille_cible, enfant.pk)
+
+        log = Historique.objects.filter(individu_id=enfant.pk, titre__icontains="Réattribution").first()
+        self.assertIsNotNone(log, "Aucune trace créée pour la réattribution de l'inscription.")
+        self.assertIn("INSCR TRACE ORIGINE", log.detail)
+        self.assertIn("INSCR TRACE CIBLE", log.detail)
+        self.assertIsNotNone(log.utilisateur)

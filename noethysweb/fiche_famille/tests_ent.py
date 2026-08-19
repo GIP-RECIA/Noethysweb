@@ -19,8 +19,8 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Classe, Cotisation, Deduction, Ecole, Famille, Historique, Individu, Prestation, Rattachement, Scolarite, TypeCotisation, UniteCotisation, Utilisateur
-from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, _importer_eleve_ent
+from core.models import Activite, CategorieTarif, Classe, Cotisation, Deduction, Ecole, Famille, Groupe, Historique, Individu, Inscription, Prestation, Rattachement, Scolarite, Structure, TypeCotisation, UniteCotisation, Utilisateur
+from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -862,3 +862,87 @@ class TestReattributionPrestation(TestCase):
         self.assertIn("Garderie", log.detail)
         self.assertIn("déduction", log.detail.lower())
         self.assertIsNotNone(log.utilisateur, "La trace ne dit pas quel agent a fait la réattribution.")
+
+
+class TestMigrationInscriptionSeparation(TestCase):
+    """L'inscription d'un enfant partagé doit suivre la même règle que sa prestation lors
+    d'une séparation manuelle : suit le parent qui part seulement si celui-ci est l'unique
+    titulaire du dossier (sinon ambiguë, reste par défaut - à réattribuer manuellement)."""
+
+    def _creer_inscription(self, famille, individu):
+        structure = Structure.objects.create(nom="Structure Test")
+        activite = Activite.objects.create(nom="Cantine", abrege="CANT", structure=structure)
+        groupe = Groupe.objects.create(activite=activite, nom="Groupe A", ordre=1)
+        categorie_tarif = CategorieTarif.objects.create(activite=activite, nom="Standard")
+        return Inscription.objects.create(
+            individu=individu, famille=famille, activite=activite, groupe=groupe,
+            categorie_tarif=categorie_tarif, date_debut=date(2026, 9, 1),
+        )
+
+    def _separer(self, famille, id_parent):
+        request = RequestFactory().post("/", {"id_parent": id_parent})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = SeparerFamille()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille.pk}
+        vue.post(request)
+
+    def test_inscription_enfant_suit_le_parent_titulaire_unique(self):
+        famille = Famille.objects.create(nom="INSCR TITULAIRE UNIQUE")
+        parent = Individu.objects.create(nom="MOREAU", prenom="Marc", civilite=1)
+        autre_parent = Individu.objects.create(nom="MOREAU", prenom="Sophie", civilite=3)
+        enfant = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        inscription = self._creer_inscription(famille, enfant)
+
+        self._separer(famille, parent.pk)
+
+        inscription.refresh_from_db()
+        self.assertNotEqual(
+            inscription.famille_id, famille.pk,
+            "L'inscription de l'enfant n'a pas suivi le parent, alors qu'il est l'unique "
+            "titulaire du dossier - même règle que pour les prestations.",
+        )
+
+    def test_inscription_enfant_reste_ambigue_si_deux_titulaires(self):
+        famille = Famille.objects.create(nom="INSCR DEUX TITULAIRES")
+        parent = Individu.objects.create(nom="MOREAU", prenom="Marc", civilite=1)
+        autre_parent = Individu.objects.create(nom="MOREAU", prenom="Sophie", civilite=3)
+        enfant = Individu.objects.create(nom="MOREAU", prenom="Lea", civilite=4)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        inscription = self._creer_inscription(famille, enfant)
+
+        self._separer(famille, parent.pk)
+
+        inscription.refresh_from_db()
+        self.assertEqual(
+            inscription.famille_id, famille.pk,
+            "L'inscription de l'enfant a migré alors qu'aucun titulaire clair ne permettait "
+            "de trancher (2 titulaires) - elle devrait rester ambiguë, comme une prestation.",
+        )
+
+    def test_inscription_du_parent_lui_meme_suit_toujours(self):
+        """Non-régression : l'inscription du parent qui part lui-même doit toujours suivre,
+        peu importe le nombre de titulaires - comportement inchangé."""
+        famille = Famille.objects.create(nom="INSCR PARENT LUI MEME")
+        parent = Individu.objects.create(nom="MOREAU", prenom="Marc", civilite=1)
+        autre_parent = Individu.objects.create(nom="MOREAU", prenom="Sophie", civilite=3)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=True)
+
+        inscription = self._creer_inscription(famille, parent)
+
+        self._separer(famille, parent.pk)
+
+        inscription.refresh_from_db()
+        self.assertNotEqual(inscription.famille_id, famille.pk)

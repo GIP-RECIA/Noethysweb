@@ -1274,9 +1274,13 @@ class SeparerFamille(CustomView, TemplateView):
         if ids_prestations_migrees:
             Deduction.objects.filter(prestation_id__in=ids_prestations_migrees).update(famille=nouvelle_famille)
 
-        # Migration des inscriptions du parent qui part, pour que ses futures réservations
-        # soient bien rattachées à sa nouvelle famille
+        # Migration des inscriptions : même règle que pour les prestations - celles du parent
+        # qui part suivent toujours, celles d'un enfant partagé suivent seulement si le parent
+        # qui part est l'unique titulaire du dossier (sinon ambigu, reste par défaut - à
+        # réattribuer manuellement, voir ReattribuerInscription).
         Inscription.objects.filter(famille=famille_origine, individu=parent).update(famille=nouvelle_famille)
+        if titulaire_unique_id == parent.pk and ids_enfants:
+            Inscription.objects.filter(famille=famille_origine, individu_id__in=ids_enfants).update(famille=nouvelle_famille)
 
         # Migration des données liées à un individu précis (notes, contacts d'urgence, mandats,
         # assurances...) : même règle que pour les prestations.
