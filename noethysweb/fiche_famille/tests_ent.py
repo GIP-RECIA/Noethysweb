@@ -12,16 +12,40 @@ verraient pas les données de la transaction de test).
 """
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Activite, CategorieTarif, Classe, Cotisation, Deduction, Ecole, Famille, Groupe, Historique, Individu, Inscription, Prestation, Rattachement, Scolarite, Structure, TypeCotisation, UniteCotisation, Utilisateur
+from core.models import (
+    Activite, Assurance, Assureur, CategorieTarif, Classe, ContactUrgence, Cotisation, Deduction,
+    Destinataire, DestinataireSMS, Ecole, Facture, Famille, Groupe, Historique, Individu, Inscription,
+    Mandat, Note, Payeur, Piece, PortailRenseignement, Prestation, QuestionnaireQuestion,
+    QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
+    TypeCotisation, UniteCotisation, Utilisateur,
+)
 from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
+
+
+def _fusionner(famille_cible, famille_source, data=None):
+    """Appelle FusionnerFamilles.post() directement (hors client Django), comme
+    fait le reste du fichier pour les vues à base de classe."""
+    payload = {"idfamille_source": famille_source.pk}
+    if data:
+        payload = data
+    request = RequestFactory().post("/", payload)
+    SessionMiddleware(lambda r: None).process_request(request)
+    request.session.save()
+    MessageMiddleware(lambda r: None).process_request(request)
+    request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+    vue = FusionnerFamilles()
+    vue.request = request
+    vue.kwargs = {"idfamille": famille_cible.pk}
+    return vue.post(request)
 
 
 class _SerialExecutor:
@@ -983,3 +1007,362 @@ class TestFusionnerFamillesHistorique(TestCase):
         self.assertIn("FUSION SOURCE", historique.detail)
         self.assertIn(str(id_source), historique.detail)
         self.assertIn("FUSION CIBLE", historique.detail)
+
+
+class TestSeparationPrestationFacturee(TestCase):
+    """La règle de migration des prestations à la séparation manuelle (même principe que
+    pour les inscriptions, voir TestMigrationInscriptionSeparation) ne doit jamais bouger
+    une prestation déjà facturée - facturer.date/montant sont figés sur la facture émise,
+    la déplacer romprait le lien entre la facture et la famille qui l'a réellement reçue."""
+
+    def _separer(self, famille, id_parent):
+        request = RequestFactory().post("/", {"id_parent": id_parent})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = SeparerFamille()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille.pk}
+        vue.post(request)
+
+    def test_prestation_non_facturee_migre_si_titulaire_unique(self):
+        famille = Famille.objects.create(nom="PREST NON FACT")
+        parent = Individu.objects.create(nom="PREST", prenom="Papa", civilite=1)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        prestation = Prestation.objects.create(famille=famille, individu=parent, date=date(2026, 9, 1), label="Cantine")
+
+        self._separer(famille, parent.pk)
+
+        prestation.refresh_from_db()
+        self.assertNotEqual(prestation.famille_id, famille.pk, "La prestation du parent qui part aurait dû migrer.")
+
+    def test_prestation_facturee_ne_migre_jamais(self):
+        famille = Famille.objects.create(nom="PREST FACT")
+        parent = Individu.objects.create(nom="PREST2", prenom="Papa", civilite=1)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        facture = Facture.objects.create(famille=famille, numero=1, date_edition=date(2026, 9, 1), date_debut=date(2026, 9, 1), date_fin=date(2026, 9, 30))
+        prestation = Prestation.objects.create(famille=famille, individu=parent, date=date(2026, 9, 1), label="Cantine", facture=facture)
+
+        self._separer(famille, parent.pk)
+
+        prestation.refresh_from_db()
+        self.assertEqual(
+            prestation.famille_id, famille.pk,
+            "Une prestation déjà facturée ne doit jamais migrer, même pour le parent qui part lui-même.",
+        )
+
+
+class TestSeparationCasParticuliers(TestCase):
+    """Cas limites de SeparerFamille : familles sans enfant, sans titulaire clair, et
+    règles de copie/promotion des rattachements."""
+
+    def _separer(self, famille, id_parent):
+        request = RequestFactory().post("/", {"id_parent": id_parent})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = SeparerFamille()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille.pk}
+        vue.post(request)
+
+    def test_zero_titulaire_rien_ne_migre_pour_les_enfants(self):
+        famille = Famille.objects.create(nom="ZERO TITULAIRE")
+        parent = Individu.objects.create(nom="ZT", prenom="Papa", civilite=1)
+        autre_parent = Individu.objects.create(nom="ZT", prenom="Maman", civilite=3)
+        enfant = Individu.objects.create(nom="ZT", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=False)
+        Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        prestation = Prestation.objects.create(famille=famille, individu=enfant, date=date(2026, 9, 1), label="Cantine")
+
+        self._separer(famille, parent.pk)
+
+        prestation.refresh_from_db()
+        self.assertEqual(
+            prestation.famille_id, famille.pk,
+            "Aucun titulaire clair (0 titulaire) - la prestation de l'enfant devrait rester ambiguë.",
+        )
+
+    def test_tous_les_enfants_sont_copies_dans_la_nouvelle_famille(self):
+        famille = Famille.objects.create(nom="COPIE ENFANTS")
+        parent = Individu.objects.create(nom="CE", prenom="Papa", civilite=1)
+        enfant1 = Individu.objects.create(nom="CE", prenom="Enfant1", civilite=4)
+        enfant2 = Individu.objects.create(nom="CE", prenom="Enfant2", civilite=4)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=enfant1, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant2, famille=famille, categorie=2, titulaire=False)
+
+        self._separer(famille, parent.pk)
+
+        nouvelle_famille = Famille.objects.exclude(pk=famille.pk).get(rattachement__individu=parent)
+        for enfant in (enfant1, enfant2):
+            self.assertTrue(
+                Rattachement.objects.filter(individu=enfant, famille=nouvelle_famille, categorie=2).exists(),
+                f"{enfant} aurait dû être copié dans la nouvelle famille (garde partagée par défaut).",
+            )
+            self.assertTrue(
+                Rattachement.objects.filter(individu=enfant, famille=famille, categorie=2).exists(),
+                f"{enfant} devrait rester rattaché à l'ancienne famille aussi.",
+            )
+
+    def test_promotion_automatique_titulaire_si_plus_aucun_ne_reste(self):
+        famille = Famille.objects.create(nom="PROMOTION")
+        parent = Individu.objects.create(nom="PR", prenom="Papa", civilite=1)
+        autre_parent = Individu.objects.create(nom="PR", prenom="Maman", civilite=3)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        ratt_autre = Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=False)
+
+        self._separer(famille, parent.pk)
+
+        ratt_autre.refresh_from_db()
+        self.assertTrue(
+            ratt_autre.titulaire,
+            "Le parent qui part était l'unique titulaire - l'autre représentant restant "
+            "devrait être promu automatiquement, sinon plus personne n'est titulaire.",
+        )
+
+    def test_separation_famille_sans_enfant_ne_plante_pas(self):
+        famille = Famille.objects.create(nom="SANS ENFANT")
+        parent = Individu.objects.create(nom="SE", prenom="Papa", civilite=1)
+        autre_parent = Individu.objects.create(nom="SE", prenom="Maman", civilite=3)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=autre_parent, famille=famille, categorie=1, titulaire=False)
+
+        self._separer(famille, parent.pk)
+
+        nouvelle_famille = Famille.objects.exclude(pk=famille.pk).get(rattachement__individu=parent)
+        self.assertTrue(Rattachement.objects.filter(individu=parent, famille=nouvelle_famille).exists())
+
+
+class TestMigrationModelesParIndividuSeparation(TestCase):
+    """_migrer_donnees_individu est une fonction générique appliquée aux 12 modèles de
+    MODELES_A_MIGRER_PAR_INDIVIDU. On vérifie ici que chacun suit bien la règle (titulaire
+    unique -> migre pour l'enfant partagé), pas seulement le principe sur un seul modèle."""
+
+    def setUp(self):
+        self.famille = Famille.objects.create(nom="MIGR MODELES")
+        self.parent = Individu.objects.create(nom="MM", prenom="Papa", civilite=1)
+        self.enfant = Individu.objects.create(nom="MM", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=self.parent, famille=self.famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=self.enfant, famille=self.famille, categorie=2, titulaire=False)
+
+        assureur = Assureur.objects.create(nom="Assureur Test")
+        type_cotisation = TypeCotisation.objects.create(nom="Type Test")
+        unite_cotisation = UniteCotisation.objects.create(type_cotisation=type_cotisation, nom="Unité Test")
+        question = QuestionnaireQuestion.objects.create(categorie="famille", ordre=1, label="Question", controle="texte")
+        sondage = Sondage.objects.create(titre="Sondage Test")
+
+        # Une instance de chaque modèle, rattachée à l'enfant partagé (categorie=2)
+        self.instances = {
+            Note: Note.objects.create(famille=self.famille, individu=self.enfant, date_parution=date(2026, 9, 1), texte="Note test"),
+            Piece: Piece.objects.create(famille=self.famille, individu=self.enfant),
+            Historique: Historique.objects.create(famille=self.famille, individu=self.enfant),
+            Destinataire: Destinataire.objects.create(famille=self.famille, individu=self.enfant),
+            DestinataireSMS: DestinataireSMS.objects.create(famille=self.famille, individu=self.enfant),
+            QuestionnaireReponse: QuestionnaireReponse.objects.create(question=question, famille=self.famille, individu=self.enfant),
+            PortailRenseignement: PortailRenseignement.objects.create(famille=self.famille, individu=self.enfant, categorie="individu_civilite", code="test"),
+            ContactUrgence: ContactUrgence.objects.create(nom="Urg", prenom="Ence", lien="Voisin", individu=self.enfant, famille=self.famille),
+            Assurance: Assurance.objects.create(individu=self.enfant, famille=self.famille, assureur=assureur, num_contrat="123", date_debut=date(2026, 9, 1)),
+            SondageRepondant: SondageRepondant.objects.create(sondage=sondage, famille=self.famille, individu=self.enfant),
+            Cotisation: Cotisation.objects.create(famille=self.famille, individu=self.enfant, type_cotisation=type_cotisation, unite_cotisation=unite_cotisation, date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31)),
+            Mandat: Mandat.objects.create(famille=self.famille, rum="RUM-TEST", date=date(2026, 9, 1), individu=self.enfant, iban="FR7630006000011234567890189", bic="AGRIFRPP"),
+        }
+
+    def _separer(self):
+        request = RequestFactory().post("/", {"id_parent": self.parent.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = SeparerFamille()
+        vue.request = request
+        vue.kwargs = {"idfamille": self.famille.pk}
+        vue.post(request)
+
+    def test_chaque_modele_migre_pour_enfant_partage_si_titulaire_unique(self):
+        self._separer()
+
+        nouvelle_famille = Famille.objects.exclude(pk=self.famille.pk).get(rattachement__individu=self.parent)
+
+        for model, instance in self.instances.items():
+            instance.refresh_from_db()
+            self.assertEqual(
+                instance.famille_id, nouvelle_famille.pk,
+                f"{model.__name__} n'a pas migré pour l'enfant partagé alors que le parent "
+                f"qui part est l'unique titulaire du dossier.",
+            )
+
+
+class TestFusionMigrationGenerique(TestCase):
+    """FusionnerFamilles migre TOUT ce qui a une FK vers Famille, via introspection de
+    Famille._meta.related_objects - pas seulement les modèles de la liste séparation.
+    On vérifie ça sur des modèles représentatifs (financier, individuel)."""
+
+    def test_migration_payeur_et_facture(self):
+        famille_cible = Famille.objects.create(nom="FUS GEN CIBLE")
+        famille_source = Famille.objects.create(nom="FUS GEN SOURCE")
+        payeur = Payeur.objects.create(famille=famille_source, nom="Payeur Source")
+        facture = Facture.objects.create(famille=famille_source, numero=1, date_edition=date(2026, 9, 1), date_debut=date(2026, 9, 1), date_fin=date(2026, 9, 30))
+
+        _fusionner(famille_cible, famille_source)
+
+        payeur.refresh_from_db()
+        facture.refresh_from_db()
+        self.assertEqual(payeur.famille_id, famille_cible.pk)
+        self.assertEqual(facture.famille_id, famille_cible.pk)
+
+    def test_migration_note_liee_a_individu(self):
+        famille_cible = Famille.objects.create(nom="FUS NOTE CIBLE")
+        famille_source = Famille.objects.create(nom="FUS NOTE SOURCE")
+        individu = Individu.objects.create(nom="FUSNOTE", prenom="Enfant", civilite=4)
+        note = Note.objects.create(famille=famille_source, individu=individu, date_parution=date(2026, 9, 1), texte="Note")
+
+        _fusionner(famille_cible, famille_source)
+
+        note.refresh_from_db()
+        self.assertEqual(note.famille_id, famille_cible.pk)
+
+
+class TestFusionRattachement(TestCase):
+    """La fusion gère les Rattachement à part (avant la boucle générique) : un enfant
+    partagé présent dans les 2 familles ne doit pas se retrouver en double après fusion."""
+
+    def test_rattachement_duplique_garde_la_version_cible(self):
+        famille_cible = Famille.objects.create(nom="FUS RATT CIBLE")
+        famille_source = Famille.objects.create(nom="FUS RATT SOURCE")
+        enfant = Individu.objects.create(nom="FUSRATT", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False, certification_date=datetime(2026, 1, 1))
+        ratt_source = Rattachement.objects.create(individu=enfant, famille=famille_source, categorie=2, titulaire=False, certification_date=datetime(2026, 6, 1))
+        id_ratt_source = ratt_source.pk
+
+        _fusionner(famille_cible, famille_source)
+
+        self.assertFalse(
+            Rattachement.objects.filter(pk=id_ratt_source).exists(),
+            "Le rattachement en double, côté source, aurait dû être supprimé.",
+        )
+        ratt_final = Rattachement.objects.get(individu=enfant, famille=famille_cible)
+        self.assertEqual(
+            ratt_final.certification_date, datetime(2026, 1, 1),
+            "La fusion doit garder la version de la famille cible en cas de doublon, "
+            "pas écraser avec les infos de la source.",
+        )
+
+    def test_rattachement_non_duplique_migre_normalement(self):
+        famille_cible = Famille.objects.create(nom="FUS RATT2 CIBLE")
+        famille_source = Famille.objects.create(nom="FUS RATT2 SOURCE")
+        parent = Individu.objects.create(nom="FUSRATT2", prenom="Parent", civilite=1)
+        ratt = Rattachement.objects.create(individu=parent, famille=famille_source, categorie=1, titulaire=True)
+
+        _fusionner(famille_cible, famille_source)
+
+        ratt.refresh_from_db()
+        self.assertEqual(ratt.famille_id, famille_cible.pk)
+
+
+class TestFusionCasParticuliers(TestCase):
+    """Cas limites de FusionnerFamilles : réinitialisation du mode_separation, requête
+    incomplète, et non-régression sur un doublon d'inscription pré-existant."""
+
+    def test_mode_separation_reinitialise_sur_la_cible(self):
+        famille_cible = Famille.objects.create(nom="FUS MODE CIBLE", mode_separation="force")
+        famille_source = Famille.objects.create(nom="FUS MODE SOURCE")
+
+        _fusionner(famille_cible, famille_source)
+
+        famille_cible.refresh_from_db()
+        self.assertIsNone(famille_cible.mode_separation)
+
+    def test_idfamille_source_manquant_ne_plante_pas(self):
+        famille_cible = Famille.objects.create(nom="FUS ERR CIBLE")
+
+        request = RequestFactory().post("/", {})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = FusionnerFamilles()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_cible.pk}
+        response = vue.post(request)
+
+        self.assertEqual(response.status_code, 302, "Doit rediriger proprement, pas planter, si aucune famille source n'est sélectionnée.")
+        self.assertTrue(Famille.objects.filter(pk=famille_cible.pk).exists())
+
+    def test_doublon_inscription_preexistant_ne_fait_pas_planter_la_fusion(self):
+        """Non-régression : le doublon lui-même est empêché à la création (voir
+        check_inscriptions_existantes, fiche_individu), mais si un doublon existe déjà
+        (données anciennes, ou activité inscriptions_multiples=True), la fusion ne doit
+        pas planter - elle bascule les deux inscriptions dans la même famille, comme
+        n'importe quelle autre donnée."""
+        structure = Structure.objects.create(nom="Structure Multi")
+        activite = Activite.objects.create(nom="Atelier", abrege="ATEL", structure=structure, inscriptions_multiples=True)
+        groupe = Groupe.objects.create(activite=activite, nom="Groupe", ordre=1)
+        categorie_tarif = CategorieTarif.objects.create(activite=activite, nom="Standard")
+
+        famille_cible = Famille.objects.create(nom="FUS DOUBLON CIBLE")
+        famille_source = Famille.objects.create(nom="FUS DOUBLON SOURCE")
+        enfant = Individu.objects.create(nom="FUSDOUBLON", prenom="Enfant", civilite=4)
+        insc_cible = Inscription.objects.create(individu=enfant, famille=famille_cible, activite=activite, groupe=groupe, categorie_tarif=categorie_tarif, date_debut=date(2026, 9, 1))
+        insc_source = Inscription.objects.create(individu=enfant, famille=famille_source, activite=activite, groupe=groupe, categorie_tarif=categorie_tarif, date_debut=date(2026, 9, 1))
+
+        _fusionner(famille_cible, famille_source)
+
+        insc_cible.refresh_from_db()
+        insc_source.refresh_from_db()
+        self.assertEqual(insc_cible.famille_id, famille_cible.pk)
+        self.assertEqual(insc_source.famille_id, famille_cible.pk)
+
+
+class TestSeparerPuisRefusionner(TestCase):
+    """Cas combiné : les deux parents se séparent puis se réconcilient. Rien ne doit être
+    perdu ni dupliqué à l'arrivée, même si des données ont migré entre-temps."""
+
+    def test_aller_retour_sans_perte_ni_duplication(self):
+        famille_origine = Famille.objects.create(nom="AR ORIGINE")
+        parent_qui_reste = Individu.objects.create(nom="AR", prenom="Maman", civilite=3)
+        parent_qui_part = Individu.objects.create(nom="AR", prenom="Papa", civilite=1)
+        enfant = Individu.objects.create(nom="AR", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=parent_qui_reste, famille=famille_origine, categorie=1, titulaire=False)
+        Rattachement.objects.create(individu=parent_qui_part, famille=famille_origine, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        prestation = Prestation.objects.create(famille=famille_origine, individu=enfant, date=date(2026, 9, 1), label="Cantine")
+
+        # Étape 1 : séparation - parent_qui_part est l'unique titulaire, donc la
+        # prestation de l'enfant partagé migre avec lui vers la nouvelle famille.
+        request = RequestFactory().post("/", {"id_parent": parent_qui_part.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        vue = SeparerFamille()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_origine.pk}
+        vue.post(request)
+
+        nouvelle_famille = Famille.objects.exclude(pk=famille_origine.pk).get(rattachement__individu=parent_qui_part)
+        prestation.refresh_from_db()
+        self.assertEqual(prestation.famille_id, nouvelle_famille.pk, "Pré-requis du test : la prestation doit avoir migré à la séparation.")
+
+        # Étape 2 : les parents se réconcilient - on fusionne la nouvelle famille
+        # (parent_qui_part) dans la famille d'origine.
+        _fusionner(famille_origine, nouvelle_famille)
+
+        prestation.refresh_from_db()
+        self.assertEqual(prestation.famille_id, famille_origine.pk, "La prestation doit revenir dans la famille d'origine après la fusion.")
+
+        self.assertEqual(
+            Rattachement.objects.filter(individu=enfant, famille=famille_origine).count(), 1,
+            "L'enfant ne doit pas se retrouver rattaché en double à la famille d'origine après l'aller-retour.",
+        )
+        self.assertTrue(
+            Rattachement.objects.filter(individu=parent_qui_part, famille=famille_origine, categorie=1).exists(),
+            "Le parent qui était parti devrait être de retour, rattaché à la famille d'origine.",
+        )
