@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404
 from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
-from core.models import Famille, Prestation, Tarif, Inscription, Consommation, Rattachement
+from core.models import Deduction, Famille, Prestation, Tarif, Inscription, Consommation, Rattachement
 from fiche_famille.forms.famille_prestations import Formulaire, FORMSET_DEDUCTIONS
 from fiche_famille.views.famille import Onglet
 from core.utils import utils_texte
@@ -251,6 +251,11 @@ class ReattribuerPrestation(CustomView, TemplateView):
 
         prestation.famille = famille_cible
         prestation.save()
+
+        # Les déductions (aides financières) rattachées à cette prestation doivent suivre -
+        # même règle que la migration automatique lors d'une séparation de famille. Sans ça,
+        # la prestation et sa propre aide se retrouveraient dans deux familles différentes.
+        Deduction.objects.filter(prestation=prestation).update(famille=famille_cible)
 
         messages.success(request, f"La prestation a été réattribuée à la famille {famille_cible.nom}.")
         return HttpResponseRedirect(reverse("famille_prestations_liste", kwargs={"idfamille": famille_cible.pk}))

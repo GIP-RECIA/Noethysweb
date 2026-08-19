@@ -19,8 +19,9 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
+from core.models import Classe, Deduction, Ecole, Famille, Historique, Individu, Prestation, Rattachement, Scolarite, Utilisateur
 from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, _importer_eleve_ent
+from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
 class _SerialExecutor:
@@ -739,3 +740,68 @@ class TestImporterFamilleEntEcoleNonReconnue(TestCase):
         ids = [r["id"] for r in resultats]
         self.assertIn("ENT-OK", ids)
         self.assertNotIn("ENT-KO", ids)
+
+
+class TestReattributionPrestation(TestCase):
+    """Le bouton "Réattribuer une prestation" (ReattribuerPrestation) sert à corriger
+    manuellement une prestation restée ambiguë après une séparation de famille (enfant
+    partagé, aucun titulaire clair). Doit déplacer aussi les déductions (aides financières)
+    rattachées à cette prestation - sinon prestation et aide se retrouvent dans 2 familles
+    différentes, comme si elles n'avaient plus rien à voir l'une avec l'autre."""
+
+    def _reattribuer(self, prestation, famille_origine, famille_cible):
+        request = RequestFactory().post("/", {"idfamille_cible": famille_cible.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = ReattribuerPrestation()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_origine.pk, "pk": prestation.pk}
+        vue.post(request)
+
+    def test_reattribution_deplace_aussi_la_deduction_associee(self):
+        famille_origine = Famille.objects.create(nom="ORIGINE")
+        famille_cible = Famille.objects.create(nom="CIBLE")
+        enfant = Individu.objects.create(nom="PARTAGE", prenom="Enfant", civilite=4)
+        # L'enfant doit être rattaché aux deux familles pour que la réattribution soit
+        # autorisée (vérification de sécurité côté serveur, cas d'un enfant partagé).
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        prestation = Prestation.objects.create(
+            date=date(2026, 9, 1), label="Garderie", montant=20, famille=famille_origine, individu=enfant,
+        )
+        deduction = Deduction.objects.create(
+            prestation=prestation, famille=famille_origine, date=date(2026, 9, 1), montant=5, label="Aide CAF",
+        )
+
+        self._reattribuer(prestation, famille_origine, famille_cible)
+
+        prestation.refresh_from_db()
+        deduction.refresh_from_db()
+        self.assertEqual(prestation.famille_id, famille_cible.pk)
+        self.assertEqual(
+            deduction.famille_id, famille_cible.pk,
+            "La déduction n'a pas suivi sa prestation lors de la réattribution manuelle - "
+            "elle reste dans l'ancienne famille alors que sa prestation est partie.",
+        )
+
+    def test_reattribution_sans_deduction_ne_plante_pas(self):
+        """Non-régression : une prestation sans aucune déduction associée doit toujours
+        pouvoir être réattribuée normalement."""
+        famille_origine = Famille.objects.create(nom="ORIGINE2")
+        famille_cible = Famille.objects.create(nom="CIBLE2")
+        enfant = Individu.objects.create(nom="SANSAIDE", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        prestation = Prestation.objects.create(
+            date=date(2026, 9, 1), label="Piscine", montant=15, famille=famille_origine, individu=enfant,
+        )
+
+        self._reattribuer(prestation, famille_origine, famille_cible)
+
+        prestation.refresh_from_db()
+        self.assertEqual(prestation.famille_id, famille_cible.pk)
