@@ -19,7 +19,7 @@ from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
-from core.models import Classe, Deduction, Ecole, Famille, Historique, Individu, Prestation, Rattachement, Scolarite, Utilisateur
+from core.models import Classe, Cotisation, Deduction, Ecole, Famille, Historique, Individu, Prestation, Rattachement, Scolarite, TypeCotisation, UniteCotisation, Utilisateur
 from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
@@ -805,3 +805,35 @@ class TestReattributionPrestation(TestCase):
 
         prestation.refresh_from_db()
         self.assertEqual(prestation.famille_id, famille_cible.pk)
+
+    def test_reattribution_deplace_aussi_la_cotisation_liee(self):
+        """Une Cotisation (adhésion) a un lien un-pour-un avec sa prestation - même
+        problème que la déduction : sans correctif, la carte d'adhérent reste dans
+        l'ancienne famille pendant que la prestation qui la finance part dans l'autre."""
+        famille_origine = Famille.objects.create(nom="ORIGINE3")
+        famille_cible = Famille.objects.create(nom="CIBLE3")
+        enfant = Individu.objects.create(nom="ADHERENT", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        prestation = Prestation.objects.create(
+            date=date(2026, 9, 1), label="Adhésion Ados Loisirs", montant=25,
+            famille=famille_origine, individu=enfant,
+        )
+        type_cotisation = TypeCotisation.objects.create(nom="Ados Loisirs")
+        unite_cotisation = UniteCotisation.objects.create(type_cotisation=type_cotisation, nom="Année", montant=25)
+        cotisation = Cotisation.objects.create(
+            famille=famille_origine, individu=enfant, type_cotisation=type_cotisation, unite_cotisation=unite_cotisation,
+            date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31), prestation=prestation,
+        )
+
+        self._reattribuer(prestation, famille_origine, famille_cible)
+
+        prestation.refresh_from_db()
+        cotisation.refresh_from_db()
+        self.assertEqual(prestation.famille_id, famille_cible.pk)
+        self.assertEqual(
+            cotisation.famille_id, famille_cible.pk,
+            "La cotisation n'a pas suivi sa prestation lors de la réattribution manuelle - "
+            "la carte d'adhérent reste dans l'ancienne famille alors que sa prestation est partie.",
+        )
