@@ -1157,6 +1157,16 @@ class FusionnerFamilles(CustomView, TemplateView):
             champ = related.field.name
             related.related_model.objects.filter(**{champ: famille_source}).update(**{champ: famille_cible})
 
+        # Traçabilité : la famille source va être supprimée, donc son nom/ID ne seront
+        # plus retrouvables nulle part ensuite. C'est une action critique (factures,
+        # règlements et payeur des deux familles regroupés sans distinction possible après
+        # coup) - on garde une trace dans l'historique avant que ça disparaisse.
+        detail = (
+            f"Famille source : {famille_source.nom} (ID {famille_source.pk}). "
+            f"Famille cible : {famille_cible.nom} (ID {famille_cible.pk})."
+        )
+        utils_historique.Ajouter(titre="Fusion de familles", detail=detail, utilisateur=request.user, famille=famille_cible.pk)
+
         # Supprimer la famille source
         famille_source.delete()
 

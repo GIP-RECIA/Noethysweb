@@ -20,7 +20,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
 from core.models import Activite, CategorieTarif, Classe, Cotisation, Deduction, Ecole, Famille, Groupe, Historique, Individu, Inscription, Prestation, Rattachement, Scolarite, Structure, TypeCotisation, UniteCotisation, Utilisateur
-from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _importer_eleve_ent
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -946,3 +946,40 @@ class TestMigrationInscriptionSeparation(TestCase):
 
         inscription.refresh_from_db()
         self.assertNotEqual(inscription.famille_id, famille.pk)
+
+
+class TestFusionnerFamillesHistorique(TestCase):
+    """La fusion supprime la famille source (nom, ID) sans laisser de trace ailleurs -
+    action critique puisque factures/prestations/règlements/payeur des deux familles
+    sont regroupés sans distinction possible après coup. Un Historique doit être créé,
+    sur la famille cible, avant que la famille source ne disparaisse."""
+
+    def _fusionner(self, famille_cible, famille_source):
+        request = RequestFactory().post("/", {"idfamille_source": famille_source.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = FusionnerFamilles()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_cible.pk}
+        vue.post(request)
+
+    def test_historique_garde_trace_de_la_fusion(self):
+        famille_cible = Famille.objects.create(nom="FUSION CIBLE")
+        famille_source = Famille.objects.create(nom="FUSION SOURCE")
+        id_source = famille_source.pk
+        enfant = Individu.objects.create(nom="FUSION", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_source, categorie=2, titulaire=False)
+
+        self._fusionner(famille_cible, famille_source)
+
+        self.assertFalse(Famille.objects.filter(pk=id_source).exists(), "La famille source aurait dû être supprimée.")
+
+        historique = Historique.objects.filter(titre="Fusion de familles", famille=famille_cible).order_by("-idaction").first()
+        self.assertIsNotNone(historique, "Aucune trace de la fusion dans l'historique - action critique non tracée.")
+        self.assertIn("FUSION SOURCE", historique.detail)
+        self.assertIn(str(id_source), historique.detail)
+        self.assertIn("FUSION CIBLE", historique.detail)
