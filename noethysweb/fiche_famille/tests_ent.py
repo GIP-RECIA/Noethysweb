@@ -837,3 +837,28 @@ class TestReattributionPrestation(TestCase):
             "La cotisation n'a pas suivi sa prestation lors de la réattribution manuelle - "
             "la carte d'adhérent reste dans l'ancienne famille alors que sa prestation est partie.",
         )
+
+    def test_reattribution_trace_lagent_dans_lhistorique(self):
+        """Traçabilité (exigence de sécurité/légale, même principe que pour les liaisons
+        ENT) : réattribuer une prestation déplace de l'argent d'une famille à une autre -
+        il faut pouvoir remonter à l'agent qui l'a fait."""
+        famille_origine = Famille.objects.create(nom="TRACE ORIGINE")
+        famille_cible = Famille.objects.create(nom="TRACE CIBLE")
+        enfant = Individu.objects.create(nom="TRACE", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        prestation = Prestation.objects.create(
+            date=date(2026, 9, 1), label="Garderie", montant=20, famille=famille_origine, individu=enfant,
+        )
+        Deduction.objects.create(prestation=prestation, famille=famille_origine, date=date(2026, 9, 1), montant=5, label="Aide CAF")
+
+        self._reattribuer(prestation, famille_origine, famille_cible)
+
+        log = Historique.objects.filter(individu_id=enfant.pk, titre__icontains="Réattribution").first()
+        self.assertIsNotNone(log, "Aucune trace créée pour la réattribution de la prestation.")
+        self.assertIn("TRACE ORIGINE", log.detail)
+        self.assertIn("TRACE CIBLE", log.detail)
+        self.assertIn("Garderie", log.detail)
+        self.assertIn("déduction", log.detail.lower())
+        self.assertIsNotNone(log.utilisateur, "La trace ne dit pas quel agent a fait la réattribution.")

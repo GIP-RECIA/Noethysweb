@@ -661,3 +661,26 @@ class TestReattributionAssurance(TestCase):
             "L'assurance a été réattribuée vers une famille à laquelle l'individu n'est "
             "pas rattaché - la vérification de sécurité côté serveur a été contournée.",
         )
+
+    def test_reattribution_trace_lagent_dans_lhistorique(self):
+        """Même exigence de traçabilité que pour les prestations : réattribuer une assurance
+        déplace une donnée sensible d'une famille à une autre."""
+        famille_origine = Famille.objects.create(nom="ASSUR TRACE ORIGINE")
+        famille_cible = Famille.objects.create(nom="ASSUR TRACE CIBLE")
+        enfant = Individu.objects.create(nom="ASSURTRACE", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        assureur = Assureur.objects.create(nom="MAIF")
+        assurance = Assurance.objects.create(
+            individu=enfant, famille=famille_origine, assureur=assureur,
+            num_contrat="CTR789", date_debut=date(2026, 9, 1),
+        )
+
+        self._reattribuer(assurance, famille_origine, famille_cible, enfant.pk)
+
+        log = Historique.objects.filter(individu_id=enfant.pk, titre__icontains="Réattribution").first()
+        self.assertIsNotNone(log, "Aucune trace créée pour la réattribution de l'assurance.")
+        self.assertIn("ASSUR TRACE ORIGINE", log.detail)
+        self.assertIn("ASSUR TRACE CIBLE", log.detail)
+        self.assertIsNotNone(log.utilisateur, "La trace ne dit pas quel agent a fait la réattribution.")

@@ -14,6 +14,7 @@ from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
 from core.models import Assurance, Famille, Rattachement
+from core.utils import utils_historique
 from fiche_individu.forms.individu_assurances import Formulaire
 from fiche_individu.views.individu import Onglet
 from fiche_individu.forms.assureurs import Formulaire as Formulaire_assureur
@@ -222,8 +223,18 @@ class ReattribuerAssurance(CustomView, TemplateView):
             messages.error(request, "Cette famille n'est pas autorisée pour cette assurance.")
             return HttpResponseRedirect(reverse("individu_assurances_reattribuer", kwargs=self.kwargs))
 
+        famille_origine = assurance.famille
         assurance.famille = famille_cible
         assurance.save()
+
+
+        # Traçabilité (même principe que pour les liaisons ENT et la réattribution de
+        # prestation) : pouvoir remonter à l'agent qui a déplacé cette donnée entre 2 familles.
+        utils_historique.Ajouter(
+            titre="Réattribution manuelle d'une assurance",
+            detail=f"Assurance « {assurance.assureur} » (contrat {assurance.num_contrat}) déplacée de « {famille_origine.nom if famille_origine else '?'} » vers « {famille_cible.nom} ».",
+            utilisateur=request.user, famille=famille_cible.pk, individu=assurance.individu_id,
+        )
 
         messages.success(request, f"L'assurance a été réattribuée à la famille {famille_cible.nom}.")
         return HttpResponseRedirect(reverse("individu_assurances_liste", kwargs={"idfamille": famille_cible.pk, "idindividu": self.kwargs["idindividu"]}))

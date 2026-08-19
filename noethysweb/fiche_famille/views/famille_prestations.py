@@ -17,7 +17,7 @@ from core.views import crud
 from core.models import Cotisation, Deduction, Famille, Prestation, Tarif, Inscription, Consommation, Rattachement
 from fiche_famille.forms.famille_prestations import Formulaire, FORMSET_DEDUCTIONS
 from fiche_famille.views.famille import Onglet
-from core.utils import utils_texte
+from core.utils import utils_texte, utils_historique
 
 
 def Supprimer_consommation(request):
@@ -249,18 +249,32 @@ class ReattribuerPrestation(CustomView, TemplateView):
             messages.error(request, "Cette famille n'est pas autorisée pour cette prestation.")
             return HttpResponseRedirect(reverse("famille_prestations_reattribuer", kwargs={"idfamille": self.kwargs["idfamille"], "pk": prestation.pk}))
 
+        famille_origine = prestation.famille
         prestation.famille = famille_cible
         prestation.save()
 
         # Les déductions (aides financières) rattachées à cette prestation doivent suivre -
         # même règle que la migration automatique lors d'une séparation de famille. Sans ça,
         # la prestation et sa propre aide se retrouveraient dans deux familles différentes.
-        Deduction.objects.filter(prestation=prestation).update(famille=famille_cible)
+        nb_deductions = Deduction.objects.filter(prestation=prestation).update(famille=famille_cible)
 
         # Une cotisation (adhésion) a un lien direct un-pour-un avec sa prestation - même
         # raisonnement que pour les déductions : sans ça, la carte d'adhérent resterait dans
         # l'ancienne famille pendant que le paiement qui la finance part dans l'autre.
-        Cotisation.objects.filter(prestation=prestation).update(famille=famille_cible)
+        nb_cotisations = Cotisation.objects.filter(prestation=prestation).update(famille=famille_cible)
+
+        # Traçabilité (exigence de sécurité/légale, même principe que pour les liaisons ENT) :
+        # ce déplacement touche de l'argent (prestation + éventuellement déduction/cotisation
+        # liées) entre deux familles - il faut pouvoir remonter à l'agent qui l'a fait.
+        detail = f"Prestation « {prestation.label} » ({prestation.montant} €) déplacée de « {famille_origine.nom if famille_origine else '?'} » vers « {famille_cible.nom} »."
+        if nb_deductions:
+            detail += f" {nb_deductions} déduction(s) déplacée(s) avec elle."
+        if nb_cotisations:
+            detail += f" {nb_cotisations} cotisation(s) déplacée(s) avec elle."
+        utils_historique.Ajouter(
+            titre="Réattribution manuelle d'une prestation", detail=detail,
+            utilisateur=request.user, famille=famille_cible.pk, individu=prestation.individu_id,
+        )
 
         messages.success(request, f"La prestation a été réattribuée à la famille {famille_cible.nom}.")
         return HttpResponseRedirect(reverse("famille_prestations_liste", kwargs={"idfamille": famille_cible.pk}))
