@@ -8,9 +8,12 @@ from django.urls import reverse_lazy, reverse
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponseRedirect
 from django.views.generic import TemplateView
+from django.contrib import messages
+from django.shortcuts import get_object_or_404
+from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
-from core.models import Assurance
+from core.models import Assurance, Famille, Rattachement
 from fiche_individu.forms.individu_assurances import Formulaire
 from fiche_individu.views.individu import Onglet
 from fiche_individu.forms.assureurs import Formulaire as Formulaire_assureur
@@ -123,6 +126,16 @@ class Liste(Page, crud.Liste):
                 self.Create_bouton_modifier(url=reverse(view.url_modifier, kwargs=kwargs)),
                 self.Create_bouton_supprimer(url=reverse(view.url_supprimer, kwargs=kwargs)),
             ]
+            # Réattribution manuelle : uniquement si l'individu est rattaché à plusieurs
+            # familles (ex: enfant partagé après une séparation) - même règle que pour les
+            # prestations (ReattribuerPrestation).
+            if instance.individu_id:
+                nb_familles = Rattachement.objects.filter(individu_id=instance.individu_id).values("famille_id").distinct().count()
+                if nb_familles > 1:
+                    html.append(self.Create_bouton(
+                        url=reverse("individu_assurances_reattribuer", kwargs=kwargs),
+                        title="Réattribuer à une autre famille", icone="fa-exchange"
+                    ))
             return self.Create_boutons_actions(html)
 
 
@@ -166,3 +179,51 @@ class Importer(Page, TemplateView):
                 assurance.save()
 
         return HttpResponseRedirect(reverse_lazy("individu_assurances_liste", args=(self.kwargs['idfamille'], self.kwargs['idindividu'])))
+
+
+class ReattribuerAssurance(CustomView, TemplateView):
+    """
+    Corrige manuellement une assurance restée ambiguë après une séparation de famille (enfant
+    partagé, aucun titulaire clair pour trancher automatiquement) - même outil que pour les
+    prestations (ReattribuerPrestation), appliqué ici à l'assurance.
+    """
+    template_name = "fiche_individu/individu_assurances_reattribuer.html"
+    menu_code = "individus_toc"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        assurance = get_object_or_404(Assurance, pk=self.kwargs["pk"])
+
+        context["page_titre"] = "Réattribuer une assurance"
+        context["box_titre"] = "Réattribution manuelle"
+        context["box_introduction"] = "Sélectionnez la famille à laquelle vous souhaitez réattribuer cette assurance."
+        context["idfamille"] = self.kwargs["idfamille"]
+        context["idindividu"] = self.kwargs["idindividu"]
+        context["assurance"] = assurance
+        context["familles"] = Famille.objects.filter(rattachement__individu_id=assurance.individu_id).distinct()
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return self.render_to_response(self.get_context_data())
+
+    def post(self, request, *args, **kwargs):
+        assurance = get_object_or_404(Assurance, pk=self.kwargs["pk"])
+        idfamille_cible = request.POST.get("idfamille_cible")
+
+        if not idfamille_cible:
+            messages.error(request, "Veuillez sélectionner une famille.")
+            return HttpResponseRedirect(reverse("individu_assurances_reattribuer", kwargs=self.kwargs))
+
+        famille_cible = get_object_or_404(Famille, pk=idfamille_cible)
+
+        # Vérifie que l'individu est bien rattaché à cette famille cible (sécurité) - même
+        # garde-fou que pour les prestations.
+        if not Rattachement.objects.filter(individu_id=assurance.individu_id, famille=famille_cible).exists():
+            messages.error(request, "Cette famille n'est pas autorisée pour cette assurance.")
+            return HttpResponseRedirect(reverse("individu_assurances_reattribuer", kwargs=self.kwargs))
+
+        assurance.famille = famille_cible
+        assurance.save()
+
+        messages.success(request, f"L'assurance a été réattribuée à la famille {famille_cible.nom}.")
+        return HttpResponseRedirect(reverse("individu_assurances_liste", kwargs={"idfamille": famille_cible.pk, "idindividu": self.kwargs["idindividu"]}))

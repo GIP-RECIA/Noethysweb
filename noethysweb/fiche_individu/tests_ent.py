@@ -18,8 +18,9 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 from django.utils import timezone
 
-from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
+from core.models import Assurance, Assureur, Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
+from fiche_individu.views.individu_assurances import ReattribuerAssurance
 
 
 def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None, ecole=None, classe=None, ecole_uai=None, ecole_ent_id=None):
@@ -594,3 +595,69 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         self.enfant.refresh_from_db()
         self.assertIsNone(self.enfant.ent_id)
         self.assertEqual(Historique.objects.filter(individu_id=self.enfant.pk).count(), 0)
+
+
+class TestReattributionAssurance(TestCase):
+    """Le bouton "Réattribuer à une autre famille" pour une assurance - même outil que pour
+    les prestations, mais pour une donnée qui n'a aucun lien à une prestation précise (une
+    assurance existe toute seule). Sert à corriger le cas d'un enfant partagé après une
+    séparation, resté ambigu faute de titulaire clair."""
+
+    def _reattribuer(self, assurance, famille_origine, famille_cible, idindividu):
+        request = RequestFactory().post("/", {"idfamille_cible": famille_cible.pk})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = ReattribuerAssurance()
+        vue.request = request
+        vue.kwargs = {"idfamille": famille_origine.pk, "idindividu": idindividu, "pk": assurance.pk}
+        vue.post(request)
+
+    def test_reattribution_deplace_lassurance_vers_la_famille_cible(self):
+        famille_origine = Famille.objects.create(nom="ASSUR ORIGINE")
+        famille_cible = Famille.objects.create(nom="ASSUR CIBLE")
+        enfant = Individu.objects.create(nom="ASSURE", prenom="Enfant", civilite=4)
+        # Rattaché aux deux familles (enfant partagé) - condition nécessaire pour que la
+        # réattribution soit autorisée vers cette famille cible précisément.
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_cible, categorie=2, titulaire=False)
+
+        assureur = Assureur.objects.create(nom="MAIF")
+        assurance = Assurance.objects.create(
+            individu=enfant, famille=famille_origine, assureur=assureur,
+            num_contrat="CTR123", date_debut=date(2026, 9, 1),
+        )
+
+        self._reattribuer(assurance, famille_origine, famille_cible, enfant.pk)
+
+        assurance.refresh_from_db()
+        self.assertEqual(
+            assurance.famille_id, famille_cible.pk,
+            "L'assurance n'a pas été réattribuée à la famille cible.",
+        )
+
+    def test_reattribution_refuse_une_famille_non_rattachee(self):
+        """Sécurité côté serveur : impossible de réattribuer vers une famille à laquelle
+        l'individu n'est pas rattaché (contournement direct du formulaire)."""
+        famille_origine = Famille.objects.create(nom="ASSUR ORIGINE2")
+        famille_etrangere = Famille.objects.create(nom="ASSUR ETRANGERE")
+        enfant = Individu.objects.create(nom="ASSURE2", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_origine, categorie=2, titulaire=False)
+        # Pas de rattachement à famille_etrangere - l'enfant n'y appartient pas du tout.
+
+        assureur = Assureur.objects.create(nom="MAIF")
+        assurance = Assurance.objects.create(
+            individu=enfant, famille=famille_origine, assureur=assureur,
+            num_contrat="CTR456", date_debut=date(2026, 9, 1),
+        )
+
+        self._reattribuer(assurance, famille_origine, famille_etrangere, enfant.pk)
+
+        assurance.refresh_from_db()
+        self.assertEqual(
+            assurance.famille_id, famille_origine.pk,
+            "L'assurance a été réattribuée vers une famille à laquelle l'individu n'est "
+            "pas rattaché - la vérification de sécurité côté serveur a été contournée.",
+        )
