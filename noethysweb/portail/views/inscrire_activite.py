@@ -65,7 +65,10 @@ def Valid_form(request):
             if int(json.loads(demande.nouvelle_valeur).split(";")[0]) == activite.pk:
                 return JsonResponse({"erreur": "Une demande en attente de traitement existe déjà pour cet individu et cette activité"}, status=401)
 
-        # Avertissement si l'individu est déjà inscrit via une autre famille (parents séparés)
+        # Avertissement (contournable) si l'individu est déjà inscrit via une autre famille
+        # (parents séparés). Le portail n'a pas les dates de la nouvelle demande pour juger
+        # d'un vrai chevauchement : c'est l'agent qui tranche à la validation de la demande,
+        # avec les dates réelles (voir check_inscriptions_existantes côté fiche individu).
         if not request.POST.get("confirmer"):
             inscrit_autre_famille = Inscription.objects.filter(individu=individu, activite=activite).exclude(famille=famille).exists()
             if not inscrit_autre_famille:

@@ -21,7 +21,7 @@ from django.utils import timezone
 from core.models import Activite, Assurance, Assureur, CategorieTarif, Classe, Ecole, Famille, Groupe, Historique, Individu, Inscription, Rattachement, Scolarite, Structure, Utilisateur
 from fiche_individu.views.individu_ent import LierCompteEnt
 from fiche_individu.views.individu_assurances import ReattribuerAssurance
-from fiche_individu.views.individu_inscriptions import ReattribuerInscription
+from fiche_individu.views.individu_inscriptions import Ajouter, ReattribuerInscription
 
 
 def _resultat_eleve(ent_id, nom, prenom, birth=None, parents=None, ecole=None, classe=None, ecole_uai=None, ecole_ent_id=None):
@@ -762,3 +762,97 @@ class TestReattributionInscription(TestCase):
         self.assertIn("INSCR TRACE ORIGINE", log.detail)
         self.assertIn("INSCR TRACE CIBLE", log.detail)
         self.assertIsNotNone(log.utilisateur)
+
+
+class _FakeForm:
+    """Simule un formulaire déjà validé : check_inscriptions_existantes ne lit que
+    form.cleaned_data, pas besoin d'un vrai Formulaire Django pour ces tests."""
+    def __init__(self, cleaned_data):
+        self.cleaned_data = cleaned_data
+
+
+class TestControleInscriptionCroiseeFamilles(TestCase):
+    """check_inscriptions_existantes doit détecter un enfant déjà inscrit à la même activité
+    sur une période qui se chevauche, que ce soit dans la même famille (déjà existant) ou une
+    AUTRE famille (nouveau - sans ça, rien n'empêchait un enfant partagé d'être inscrit deux
+    fois à la même activité, une fois par famille, jusqu'à ce qu'une fusion réunisse les deux
+    prestations en double, impossibles à nettoyer une fois des consommations accrochées)."""
+
+    def setUp(self):
+        structure = Structure.objects.create(nom="Structure Test")
+        self.activite = Activite.objects.create(nom="Cantine", abrege="CANT", structure=structure)
+        self.groupe = Groupe.objects.create(activite=self.activite, nom="Groupe A", ordre=1)
+        self.categorie_tarif = CategorieTarif.objects.create(activite=self.activite, nom="Standard")
+
+    def _verifier(self, individu, famille, date_debut, date_fin=None, activite=None):
+        request = RequestFactory().post("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+
+        vue = Ajouter()
+        vue.request = request
+        form = _FakeForm({
+            "activite": activite or self.activite, "individu": individu, "famille": famille,
+            "date_debut": date_debut, "date_fin": date_fin,
+        })
+        return vue.check_inscriptions_existantes(form=form, instance=None)
+
+    # ------------------------------------------------------------- même famille (non-régression)
+
+    def test_bloque_meme_famille_periodes_qui_se_chevauchent(self):
+        famille = Famille.objects.create(nom="CTRL1")
+        enfant = Individu.objects.create(nom="CTRL1", prenom="Enfant", civilite=4)
+        Inscription.objects.create(individu=enfant, famille=famille, activite=self.activite, groupe=self.groupe, categorie_tarif=self.categorie_tarif, date_debut=date(2026, 9, 1))
+
+        self.assertFalse(self._verifier(enfant, famille, date(2026, 9, 15)))
+
+    def test_autorise_meme_famille_periodes_disjointes(self):
+        famille = Famille.objects.create(nom="CTRL2")
+        enfant = Individu.objects.create(nom="CTRL2", prenom="Enfant", civilite=4)
+        Inscription.objects.create(individu=enfant, famille=famille, activite=self.activite, groupe=self.groupe, categorie_tarif=self.categorie_tarif, date_debut=date(2023, 9, 1), date_fin=date(2024, 8, 31))
+
+        self.assertTrue(self._verifier(enfant, famille, date(2026, 9, 1)))
+
+    # ------------------------------------------------------------- autre famille (nouveau)
+
+    def test_bloque_autre_famille_periodes_qui_se_chevauchent(self):
+        famille_a = Famille.objects.create(nom="CTRL3A")
+        famille_b = Famille.objects.create(nom="CTRL3B")
+        enfant = Individu.objects.create(nom="CTRL3", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille_a, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=enfant, famille=famille_b, categorie=2, titulaire=False)
+        Inscription.objects.create(individu=enfant, famille=famille_a, activite=self.activite, groupe=self.groupe, categorie_tarif=self.categorie_tarif, date_debut=date(2026, 9, 1))
+
+        self.assertFalse(
+            self._verifier(enfant, famille_b, date(2026, 9, 15)),
+            "Le doublon inter-familles n'a pas été détecté - c'est exactement le cas qui "
+            "génère des prestations en double, impossibles à nettoyer après une fusion.",
+        )
+
+    def test_autorise_autre_famille_periodes_disjointes(self):
+        famille_a = Famille.objects.create(nom="CTRL4A")
+        famille_b = Famille.objects.create(nom="CTRL4B")
+        enfant = Individu.objects.create(nom="CTRL4", prenom="Enfant", civilite=4)
+        Inscription.objects.create(individu=enfant, famille=famille_a, activite=self.activite, groupe=self.groupe, categorie_tarif=self.categorie_tarif, date_debut=date(2023, 9, 1), date_fin=date(2024, 8, 31))
+
+        self.assertTrue(
+            self._verifier(enfant, famille_b, date(2026, 9, 1)),
+            "Une vieille inscription terminée, dans une autre famille, bloque à tort une "
+            "nouvelle inscription qui n'a pourtant aucun rapport (périodes disjointes).",
+        )
+
+    def test_autorise_autre_famille_si_inscriptions_multiples_active(self):
+        structure = Structure.objects.create(nom="Structure Multi")
+        activite_multi = Activite.objects.create(nom="Atelier", abrege="ATEL", structure=structure, inscriptions_multiples=True)
+        groupe = Groupe.objects.create(activite=activite_multi, nom="Groupe", ordre=1)
+        categorie_tarif = CategorieTarif.objects.create(activite=activite_multi, nom="Standard")
+        famille_a = Famille.objects.create(nom="CTRL5A")
+        famille_b = Famille.objects.create(nom="CTRL5B")
+        enfant = Individu.objects.create(nom="CTRL5", prenom="Enfant", civilite=4)
+        Inscription.objects.create(individu=enfant, famille=famille_a, activite=activite_multi, groupe=groupe, categorie_tarif=categorie_tarif, date_debut=date(2026, 9, 1))
+
+        self.assertTrue(
+            self._verifier(enfant, famille_b, date(2026, 9, 15), activite=activite_multi),
+            "inscriptions_multiples=True doit toujours autoriser, même entre 2 familles.",
+        )

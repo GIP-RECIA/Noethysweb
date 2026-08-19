@@ -102,18 +102,39 @@ class Page(Onglet):
         return reverse_lazy(url, kwargs={'idindividu': self.Get_idindividu(), 'idfamille': self.kwargs.get('idfamille', None)})
 
     def check_inscriptions_existantes(self, form=None, instance=None):
-        # On vérifie si l'individu est déjà inscrit à cette activité sur cette famille
+        # On vérifie si l'individu est déjà inscrit à cette activité sur cette période - sur
+        # cette famille, ou sur une AUTRE de ses familles (enfant partagé entre 2 familles
+        # après une séparation). Sans ce 2e contrôle, rien n'empêchait de créer une inscription
+        # en double dans chaque famille séparément - chacune générant ses propres prestations,
+        # jusqu'à ce qu'une fusion de familles réunisse les deux sans que le doublon soit
+        # détectable, ni simple à nettoyer une fois que des consommations y sont accrochées.
+        # C'est ici, et uniquement ici, que toute inscription réelle est créée - qu'elle vienne
+        # d'une demande du portail ou d'une saisie directe par l'agent (une demande "inscrire_
+        # activite" redirige toujours vers cet écran, jamais de validation automatique).
         activite = form.cleaned_data["activite"]
         if not activite.inscriptions_multiples:
+            individu = form.cleaned_data["individu"]
             date_debut = form.cleaned_data["date_debut"]
             date_fin = form.cleaned_data["date_fin"] if form.cleaned_data["date_fin"] else datetime.date(2999, 12, 31)
-            inscriptions_paralleles = []
-            for inscription in Inscription.objects.filter(individu=form.cleaned_data["individu"], famille=form.cleaned_data["famille"], activite=form.cleaned_data["activite"]):
+
+            def _chevauche(inscription):
                 date_fin_temp = inscription.date_fin if inscription.date_fin else datetime.date(2999, 12, 31)
-                if inscription.date_debut <= date_fin and date_fin_temp >= date_debut and inscription != instance:
-                    inscriptions_paralleles.append(inscription)
-            if inscriptions_paralleles:
+                return inscription.date_debut <= date_fin and date_fin_temp >= date_debut and inscription != instance
+
+            inscriptions_meme_famille = [
+                i for i in Inscription.objects.filter(individu=individu, famille=form.cleaned_data["famille"], activite=activite)
+                if _chevauche(i)
+            ]
+            if inscriptions_meme_famille:
                 messages.add_message(self.request, messages.ERROR, "Inscription impossible : Cet individu est déjà inscrit à cette activité sur cette période et sur cette famille")
+                return False
+
+            inscriptions_autre_famille = [
+                i for i in Inscription.objects.filter(individu=individu, activite=activite).exclude(famille=form.cleaned_data["famille"])
+                if _chevauche(i)
+            ]
+            if inscriptions_autre_famille:
+                messages.add_message(self.request, messages.ERROR, "Inscription impossible : Cet individu est déjà inscrit à cette activité sur cette période via une autre famille")
                 return False
         return True
 
