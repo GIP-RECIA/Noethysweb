@@ -367,6 +367,7 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         context["last_name"] = kwargs.get("last_name", "")
         context["first_name"] = kwargs.get("first_name", "")
         context["erreur"] = kwargs.get("erreur", None)
+        context["nb_masques_ecole_inconnue"] = kwargs.get("nb_masques_ecole_inconnue", 0)
         return context
 
     def get(self, request, *args, **kwargs):
@@ -375,12 +376,14 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         last_name = request.session.pop("ent_last_name", "")
         first_name = request.session.pop("ent_first_name", "")
         erreur = request.session.pop("ent_erreur", None)
+        nb_masques_ecole_inconnue = request.session.pop("ent_nb_masques_ecole_inconnue", 0)
 
         return self.render_to_response(self.get_context_data(
             resultats=resultats,
             last_name=last_name,
             first_name=first_name,
             erreur=erreur,
+            nb_masques_ecole_inconnue=nb_masques_ecole_inconnue,
         ))
 
     def post(self, request, *args, **kwargs):
@@ -469,7 +472,21 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         donnees_parents = _get_users_parallel(ids_parents_a_recuperer)
 
         resultats = []
+        nb_masques_ecole_inconnue = 0
         for enfant in familles.values():
+            # École pas encore importée dans Noethys - une collectivité ne doit voir/gérer que
+            # les écoles qu'elle connaît vraiment (décision d'équipe, voir _trouver_ecole). Ne
+            # s'applique que si l'ENT donne bien une école pour cet élève (sinon rien à
+            # vérifier). Masqué entièrement, pas juste bloqué à l'import - même règle et même
+            # comportement que l'import en masse (ImporterEnMasseEnt) : remonter une fiche
+            # bloquée reviendrait déjà à donner une information sur un enfant hors du périmètre
+            # de l'organisateur, ce que la règle interdit précisément.
+            if enfant.get("ecole_nom") and not _trouver_ecole(
+                enfant.get("ecole_nom"), enfant.get("ecole_uai"), enfant.get("ecole_ent_id")
+            ):
+                nb_masques_ecole_inconnue += 1
+                continue
+
             # Vérifier si déjà importé
             individu_existant = Individu.objects.filter(ent_id=enfant["id"]).first()
             if individu_existant:
@@ -479,13 +496,6 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             else:
                 enfant["deja_importe"] = False
                 enfant["famille_id"] = None
-
-            # École pas encore importée dans Noethys - on ne peut pas importer cet élève sans
-            # elle (décision d'équipe, voir _trouver_ecole). Ne s'applique que si l'ENT donne
-            # bien une école pour cet élève (sinon rien à vérifier).
-            enfant["ecole_non_reconnue"] = bool(enfant.get("ecole_nom")) and not _trouver_ecole(
-                enfant.get("ecole_nom"), enfant.get("ecole_uai"), enfant.get("ecole_ent_id")
-            )
 
             # Récupérer les détails des parents (déjà récupérés en parallèle à la phase 3)
             parents_details = []
@@ -525,6 +535,21 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                         enfant["parents_existants_msg"] = f"Les parents {noms} existent déjà. {enfant.get('firstName', '')} sera ajouté à la famille {noms_familles}."
 
             resultats.append(enfant)
+
+        request.session["ent_nb_masques_ecole_inconnue"] = nb_masques_ecole_inconnue
+
+        if not resultats:
+            # Soit rien n'a été trouvé, soit tout a été masqué (école(s) non reconnue(s)) - dans
+            # les deux cas l'agent doit comprendre pourquoi la liste est vide, pas juste la voir
+            # disparaître.
+            if nb_masques_ecole_inconnue:
+                request.session["ent_erreur"] = (
+                    f"{nb_masques_ecole_inconnue} résultat(s) masqué(s) : "
+                    f"école(s) pas encore importée(s) dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT)."
+                )
+            else:
+                request.session["ent_erreur"] = f"Aucune famille trouvée pour « {first_name} {last_name} » dans l'ENT."
+            return
 
         request.session["ent_resultats"] = resultats
 

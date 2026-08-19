@@ -20,7 +20,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
 from core.models import Classe, Ecole, Famille, Historique, Individu, Rattachement, Scolarite, Utilisateur
-from fiche_famille.views.famille_ent import PreLiaisonEnt, _importer_eleve_ent
+from fiche_famille.views.famille_ent import ImporterFamilleEnt, PreLiaisonEnt, _importer_eleve_ent
 
 
 class _SerialExecutor:
@@ -649,3 +649,93 @@ class TestImporterEleveEnt(TestCase):
         eleve = Individu.objects.get(ent_id="ENT-SANSTRACE")
         self.assertIsNone(eleve.ent_lie_par)
         self.assertIsNone(eleve.ent_lie_le)
+
+
+class TestImporterFamilleEntEcoleNonReconnue(TestCase):
+    """Tests de l'écran 'Importer une famille depuis l'ENT' (recherche unitaire) - règle du
+    masquage des écoles non reconnues. Décision d'équipe (CR du 17/07) :
+    "on ne doit même pas voir les enfants qui appartiennent a d'autres écoles" - déjà respectée
+    par l'import en masse (ImporterEnMasseEnt), mais cet écran-ci se contentait jusqu'ici de
+    bloquer le bouton d'import en affichant quand même la fiche (nom, école, parents...), ce qui
+    revient déjà à remonter l'information que la règle interdit."""
+
+    def _lancer_recherche(self, eleves_ent):
+        """eleves_ent : liste de dicts complets façon get_user (id, type, structures...).
+        search_by_name renvoie la version brève (id/type) que l'ENT donne réellement, get_user
+        renvoie le détail complet - reproduit la vraie séparation en 2 appels du code."""
+        briefs = [{"id": e["id"], "type": e.get("type", "Student")} for e in eleves_ent]
+        par_id = {e["id"]: e for e in eleves_ent}
+
+        request = RequestFactory().post("/", {"action": "rechercher", "first_name": "Test", "last_name": "Test"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_famille.views.famille_ent.search_by_name", return_value=briefs), \
+             patch("fiche_famille.views.famille_ent.get_user", side_effect=lambda ent_id: par_id.get(ent_id)), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            ImporterFamilleEnt()._effectuer_recherche(request, "Test", "Test")
+
+        return (
+            request.session.get("ent_resultats"),
+            request.session.get("ent_nb_masques_ecole_inconnue", 0),
+            request.session.get("ent_erreur"),
+        )
+
+    @staticmethod
+    def _eleve(ent_id, prenom, nom, ecole_nom, ecole_uai, ecole_ent_id):
+        return {
+            "id": ent_id, "type": "Student", "firstName": prenom, "lastName": nom,
+            "structures": [{"name": ecole_nom, "uai": ecole_uai, "id": ecole_ent_id}],
+            "parents": [],
+        }
+
+    def test_eleve_ecole_reconnue_est_affiche(self):
+        Ecole.objects.create(nom="École Test", uai="UAI999", ent_id="ENT-ECOLE-1")
+        eleve = self._eleve("ENT-E1", "Alice", "DUPONT", "École Test", "UAI999", "ENT-ECOLE-1")
+
+        resultats, nb_masques, erreur = self._lancer_recherche([eleve])
+
+        self.assertEqual(nb_masques, 0)
+        self.assertTrue(resultats)
+        self.assertEqual(resultats[0]["id"], "ENT-E1")
+
+    def test_eleve_ecole_non_reconnue_est_masque_pas_juste_bloque(self):
+        """Le point signalé par l'équipe : l'élève ne doit même pas apparaître, pas juste avoir
+        son bouton d'import désactivé avec un message rouge."""
+        eleve = self._eleve("ENT-E2", "Bob", "MARTIN", "Ecole Inconnue", "UAI000", "ENT-ECOLE-X")
+
+        resultats, nb_masques, erreur = self._lancer_recherche([eleve])
+
+        self.assertEqual(nb_masques, 1)
+        self.assertFalse(
+            resultats,
+            "L'élève d'une école non reconnue apparaît quand même dans les résultats - "
+            "il devrait être masqué entièrement, comme le fait déjà l'import en masse.",
+        )
+
+    def test_message_quand_tout_est_masque_ne_suggere_pas_de_creer_la_famille(self):
+        """Si tous les résultats sont masqués, le message ne doit pas laisser croire que la
+        famille n'existe pas dans l'ENT - "Aucun résultat"/"Aucune famille" déclenche à
+        l'écran une suggestion de création manuelle, qui ferait un doublon dès que l'école
+        sera importée."""
+        eleve = self._eleve("ENT-E3", "Chloe", "LEGRAND", "Ecole Inconnue", "UAI000", "ENT-ECOLE-X")
+
+        resultats, nb_masques, erreur = self._lancer_recherche([eleve])
+
+        self.assertIsNone(resultats)
+        self.assertIn("masqué", erreur)
+        self.assertNotIn("Aucune famille", erreur)
+        self.assertNotIn("Aucun résultat", erreur)
+
+    def test_cas_mixte_seul_lenfant_dune_ecole_reconnue_reste_affiche(self):
+        Ecole.objects.create(nom="École Test", uai="UAI999", ent_id="ENT-ECOLE-1")
+        eleve_ok = self._eleve("ENT-OK", "OK", "PERSON", "École Test", "UAI999", "ENT-ECOLE-1")
+        eleve_masque = self._eleve("ENT-KO", "KO", "PERSON", "Ecole Inconnue", "UAI000", "ENT-ECOLE-X")
+
+        resultats, nb_masques, erreur = self._lancer_recherche([eleve_ok, eleve_masque])
+
+        self.assertEqual(nb_masques, 1)
+        ids = [r["id"] for r in resultats]
+        self.assertIn("ENT-OK", ids)
+        self.assertNotIn("ENT-KO", ids)

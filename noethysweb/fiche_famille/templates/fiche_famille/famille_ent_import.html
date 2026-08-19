@@ -54,6 +54,11 @@
 
     {# Résultats #}
     {% if resultats is not None %}
+        {% if nb_masques_ecole_inconnue %}
+            <div class="alert alert-secondary mt-3">
+                <i class="fa fa-info-circle"></i> {{ nb_masques_ecole_inconnue }} résultat{{ nb_masques_ecole_inconnue|pluralize }} masqué{{ nb_masques_ecole_inconnue|pluralize }} : école{{ nb_masques_ecole_inconnue|pluralize }} pas encore importée{{ nb_masques_ecole_inconnue|pluralize }} dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).
+            </div>
+        {% endif %}
         {% if resultats %}
             <hr>
             <h5>{{ resultats|length }} résultat{{ resultats|length|pluralize }} trouvé{{ resultats|length|pluralize }}</h5>
@@ -129,13 +134,6 @@
                                         <i class="fa fa-eye"></i> Voir la fiche famille
                                     </a>
                                 {% endif %}
-                            </div>
-                        {% elif eleve.ecole_non_reconnue %}
-                            <div class="alert alert-danger">
-                                <i class="fa fa-times-circle"></i> Impossible d'importer : l'école « {{ eleve.ecole_nom }} » n'est pas encore importée dans Noethys.
-                                <a href="{% url 'ent_importer_ecole' %}" class="btn btn-sm btn-primary ml-2">
-                                    <i class="fa fa-download"></i> Importer cette école
-                                </a>
                             </div>
                         {% else %}
                             <form method="post" class="form_spinner">
