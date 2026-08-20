@@ -195,6 +195,12 @@ def _get_ou_creer_classe(ecole, classe_nom, date_debut_ent, date_fin_ent):
     if not ecole or not classe_nom:
         return None
     classe = Classe.objects.filter(ecole=ecole, nom=classe_nom).first()
+    if not classe:
+        # Repli insensible aux accents/casse, comme pour les écoles (_trouver_ecole) -
+        # précaution : aucun doublon observé sur les données réelles testées, mais évite le
+        # même risque qui avait touché les écoles avant leur fix (doublons faute de repli).
+        nom_normalise = _normaliser_texte(classe_nom)
+        classe = next((c for c in Classe.objects.filter(ecole=ecole) if _normaliser_texte(c.nom) == nom_normalise), None)
     if classe:
         return classe
     date_debut_defaut, date_fin_defaut = _get_annee_scolaire_par_defaut()

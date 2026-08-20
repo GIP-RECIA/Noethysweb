@@ -26,7 +26,7 @@ from core.models import (
     QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
     TypeCotisation, UniteCotisation, Utilisateur,
 )
-from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _importer_eleve_ent
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
@@ -1436,6 +1436,40 @@ class TestAdressesDifferentesNormalisation(TestCase):
     def test_les_deux_adresses_vides_nest_pas_differente(self):
         """Non-régression : comportement déjà existant, ne doit pas changer."""
         self.assertFalse(_adresses_differentes({"address": "", "zipCode": ""}, {"address": "", "zipCode": ""}))
+
+
+class TestGetOuCreerClasseNormalisation(TestCase):
+    """_get_ou_creer_classe ne comparait les noms de classe qu'au caractère près,
+    contrairement aux écoles (_trouver_ecole) - même risque de doublon que celui déjà
+    corrigé pour les écoles ("New Oak 1D" x5 en base avant son fix). Mesuré sur 32 couples
+    école/classe réels : 0 variante d'écriture actuellement, mais précaution avant qu'une
+    vraie collectivité n'en produise une."""
+
+    def test_reutilise_la_classe_existante_malgre_accent_different(self):
+        ecole = Ecole.objects.create(nom="École Test Classe")
+        classe = Classe.objects.create(ecole=ecole, nom="Première Année", date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31))
+
+        resultat = _get_ou_creer_classe(ecole, "Premiere Annee", None, None)
+
+        self.assertEqual(resultat.pk, classe.pk)
+        self.assertEqual(Classe.objects.filter(ecole=ecole).count(), 1, "Ne doit pas créer une deuxième classe pour la même, juste écrite différemment.")
+
+    def test_reutilise_la_classe_existante_malgre_casse_differente(self):
+        ecole = Ecole.objects.create(nom="École Test Classe2")
+        classe = Classe.objects.create(ecole=ecole, nom="CE2 A", date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31))
+
+        resultat = _get_ou_creer_classe(ecole, "ce2 a", None, None)
+
+        self.assertEqual(resultat.pk, classe.pk)
+
+    def test_classe_vraiment_differente_est_bien_creee(self):
+        ecole = Ecole.objects.create(nom="École Test Classe3")
+        Classe.objects.create(ecole=ecole, nom="CE2 A", date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31))
+
+        resultat = _get_ou_creer_classe(ecole, "CM1 B", None, None)
+
+        self.assertNotEqual(resultat.nom, "CE2 A")
+        self.assertEqual(Classe.objects.filter(ecole=ecole).count(), 2)
 
 
 class TestReattributionPrestation(TestCase):
