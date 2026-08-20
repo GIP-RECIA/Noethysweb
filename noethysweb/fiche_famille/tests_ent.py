@@ -26,7 +26,7 @@ from core.models import (
     QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
     TypeCotisation, UniteCotisation, Utilisateur,
 )
-from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _importer_eleve_ent
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -903,6 +903,65 @@ class TestImporterFamilleEntEcoleNonReconnue(TestCase):
         ids = [r["id"] for r in resultats]
         self.assertIn("ENT-OK", ids)
         self.assertNotIn("ENT-KO", ids)
+
+
+class TestImporterEnMasseRevalideEcoleAuClic(TestCase):
+    """L'import en masse masque déjà les élèves d'école non reconnue à l'AFFICHAGE
+    (get_context_data), mais ne revérifiait pas l'école au moment du clic "Importer"
+    (post) - contrairement à l'import unitaire. Si la page reste ouverte et que l'école est
+    supprimée entre-temps (Paramétrage > Écoles > Supprimer existe bien), un élève coché
+    avant la suppression était importé quand même, sans scolarité, en silence."""
+
+    @staticmethod
+    def _eleve(ent_id, prenom, nom, ecole_nom, ecole_uai, ecole_ent_id):
+        return {
+            "id": ent_id, "type": "Student", "firstName": prenom, "lastName": nom,
+            "structures": [{"name": ecole_nom, "uai": ecole_uai, "id": ecole_ent_id}],
+            "parents": [],
+        }
+
+    def _importer(self, eleves_ent, ids_selectionnes):
+        par_id = {e["id"]: e for e in eleves_ent}
+        request = RequestFactory().post("/", {"eleves_ent_id": ids_selectionnes})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_famille.views.famille_ent.get_user", side_effect=lambda ent_id: par_id.get(ent_id)), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            ImporterEnMasseEnt().post(request)
+
+    def test_ecole_supprimee_entre_temps_nest_pas_importe_silencieusement(self):
+        """École jamais connue de Noethys au moment du clic (simule une suppression entre
+        l'affichage et le clic, puisque post() ne relit jamais la liste affichée)."""
+        eleve = self._eleve("ENT-MASSE-KO", "Retire", "TESTMASSE", "Ecole Retiree Entretemps", "UAI777", "ENT-ECOLE-777")
+
+        self._importer([eleve], ["ENT-MASSE-KO"])
+
+        self.assertFalse(
+            Individu.objects.filter(ent_id="ENT-MASSE-KO").exists(),
+            "L'élève a été importé alors que son école n'est plus reconnue - devrait être refusé au clic, comme l'import unitaire.",
+        )
+
+    def test_ecole_toujours_reconnue_importe_normalement(self):
+        """Non-régression : le cas normal (école toujours là) doit continuer à fonctionner."""
+        Ecole.objects.create(nom="École Toujours La", uai="UAI888", ent_id="ENT-ECOLE-888")
+        eleve = self._eleve("ENT-MASSE-OK", "Reste", "TESTMASSE", "École Toujours La", "UAI888", "ENT-ECOLE-888")
+
+        self._importer([eleve], ["ENT-MASSE-OK"])
+
+        self.assertTrue(Individu.objects.filter(ent_id="ENT-MASSE-OK").exists())
+
+    def test_cas_mixte_seul_lelevel_ecole_connue_est_importe(self):
+        Ecole.objects.create(nom="École Connue Mix", uai="UAI999", ent_id="ENT-ECOLE-999")
+        eleve_ok = self._eleve("ENT-MIX-OK", "Ok", "TESTMIX", "École Connue Mix", "UAI999", "ENT-ECOLE-999")
+        eleve_ko = self._eleve("ENT-MIX-KO", "Ko", "TESTMIX", "Ecole Inconnue Mix", "UAI000", "ENT-ECOLE-000")
+
+        self._importer([eleve_ok, eleve_ko], ["ENT-MIX-OK", "ENT-MIX-KO"])
+
+        self.assertTrue(Individu.objects.filter(ent_id="ENT-MIX-OK").exists())
+        self.assertFalse(Individu.objects.filter(ent_id="ENT-MIX-KO").exists())
 
 
 class TestImporterFamilleEntFicheExistanteNonLiee(TestCase):

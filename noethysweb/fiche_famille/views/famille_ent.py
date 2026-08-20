@@ -1115,10 +1115,28 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         nb_nouvelles_familles, nb_familles_existantes = 0, 0
         erreurs_detail = []
         for eleve_ent_id in ids_selectionnes:
+            eleve_data = eleves_data.get(eleve_ent_id)
+
+            # Revérifie l'école au moment du clic, pas seulement à l'affichage de la page
+            # (celle-ci a pu rester ouverte un moment, ou l'école avoir été supprimée
+            # entre-temps par un autre agent) - même contrôle que l'import unitaire, qui le
+            # fait déjà à ce même instant, juste avant d'importer.
+            if eleve_data:
+                eleve_data_norm = _normaliser_enfant(dict(eleve_data))
+                if eleve_data_norm.get("ecole_nom") and not _trouver_ecole(
+                    eleve_data_norm.get("ecole_nom"), eleve_data_norm.get("ecole_uai"), eleve_data_norm.get("ecole_ent_id")
+                ):
+                    nb_erreurs += 1
+                    erreurs_detail.append(
+                        f"{eleve_data.get('firstName', '')} {eleve_data.get('lastName', '')} : "
+                        f"école « {eleve_data_norm['ecole_nom']} » non reconnue (a peut-être été retirée entre-temps)"
+                    )
+                    continue
+
             # "auto" et non l'agent : l'import en masse traite potentiellement des centaines
             # d'élèves sans qu'aucun ne soit revu individuellement - contrairement à l'import
             # unitaire ci-dessus, où l'agent choisit et voit précisément qui il importe.
-            resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleves_data.get(eleve_ent_id), parents_cache=parents_cache, lie_par="auto")
+            resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleve_data, parents_cache=parents_cache, lie_par="auto")
             if resultat["statut"] == "importe":
                 nb_eleves_importes += 1
                 if resultat["type"] == "famille_existante":
