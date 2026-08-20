@@ -41,8 +41,10 @@
                                 </a>
                             </div>
                             <div>
-                                {% if ligne.erreur %}
-                                    <span class="text-muted"><i class="fa fa-exclamation-triangle"></i> Introuvable dans l'ENT</span>
+                                {% if ligne.introuvable %}
+                                    <span class="text-muted"><i class="fa fa-user-times"></i> N'existe plus dans l'ENT</span>
+                                {% elif ligne.erreur %}
+                                    <span class="text-muted"><i class="fa fa-exclamation-triangle"></i> Connexion à l'ENT en échec</span>
                                 {% elif ligne.nb_diff > 0 %}
                                     <span class="badge badge-warning">{{ ligne.nb_diff }} champ{{ ligne.nb_diff|pluralize }} différent{{ ligne.nb_diff|pluralize }}</span>
                                 {% else %}

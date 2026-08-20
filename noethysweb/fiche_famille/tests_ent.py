@@ -27,6 +27,7 @@ from core.models import (
     TypeCotisation, UniteCotisation, Utilisateur,
 )
 from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _importer_eleve_ent
+from fiche_famille.views.famille_ent_synchro import ListeSynchro
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -2037,3 +2038,72 @@ class TestSeparerPuisRefusionner(TestCase):
             Rattachement.objects.filter(individu=parent_qui_part, famille=famille_origine, categorie=1).exists(),
             "Le parent qui était parti devrait être de retour, rattaché à la famille d'origine.",
         )
+
+
+class TestListeSynchroIntrouvable(TestCase):
+    """Synchro en masse : distingue une vraie panne d'une confirmation ENT (compte
+    disparu), et ne dit plus "Aucun champ sélectionné" quand l'agent avait bien coché des
+    champs qui ont simplement échoué (avant : échec totalement silencieux, message final
+    carrément faux dans ce cas)."""
+
+    def _get_context(self, side_effect):
+        vue = ListeSynchro()
+        vue.request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(vue.request)
+        vue.request.session.save()
+        vue.request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        with patch("fiche_famille.views.famille_ent_synchro.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_famille.views.famille_ent_synchro.get_user_ou_introuvable", side_effect=side_effect):
+            return vue.get_context_data()
+
+    def test_affichage_distingue_introuvable_de_panne(self):
+        individu_parti = Individu.objects.create(nom="PARTI", prenom="Eleve", civilite=4, ent_id="ENT-PARTI-MASSE")
+        individu_panne = Individu.objects.create(nom="PANNE", prenom="Eleve", civilite=4, ent_id="ENT-PANNE-MASSE")
+
+        def fake(ent_id):
+            return (None, True) if ent_id == "ENT-PARTI-MASSE" else (None, False)
+
+        context = self._get_context(fake)
+
+        lignes = {l["individu"].pk: l for l in context["lignes"]}
+        self.assertTrue(lignes[individu_parti.pk]["introuvable"])
+        self.assertFalse(lignes[individu_panne.pk]["introuvable"])
+        self.assertTrue(lignes[individu_panne.pk]["erreur"])
+
+    def _post(self, individus_champs, side_effect):
+        data = {f"champs_{individu.pk}": champs for individu, champs in individus_champs.items()}
+        request = RequestFactory().post("/", data)
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        with patch("fiche_famille.views.famille_ent_synchro.get_user_ou_introuvable", side_effect=side_effect):
+            ListeSynchro().post(request)
+        from django.contrib.messages import get_messages
+        return [(m.level_tag, str(m)) for m in get_messages(request)]
+
+    def test_echec_ne_dit_plus_aucun_champ_selectionne(self):
+        individu = Individu.objects.create(nom="ECHECMASSE", prenom="Eleve", civilite=4, ent_id="ENT-ECHEC-MASSE")
+
+        msgs = self._post({individu: ["nom"]}, side_effect=lambda ent_id: (None, True))
+
+        self.assertFalse(
+            any("Aucun champ sélectionné" in m for _, m in msgs),
+            "Ne devrait plus dire ça - l'agent avait bien coché un champ, il a juste échoué.",
+        )
+        self.assertTrue(any("non synchronisé" in m and "n'existe plus dans l'ENT" in m for _, m in msgs))
+
+    def test_aucun_champ_coche_dit_bien_aucun_champ_selectionne(self):
+        """Non-régression : le vrai cas "rien coché du tout" garde son message."""
+        msgs = self._post({}, side_effect=lambda ent_id: (None, False))
+
+        self.assertTrue(any("Aucun champ sélectionné" in m for _, m in msgs))
+
+    def test_succes_normal_fonctionne_toujours(self):
+        individu = Individu.objects.create(nom="OKMASSE", prenom="Eleve", civilite=4, ent_id="ENT-OK-MASSE", mail="ancien@test.fr")
+
+        msgs = self._post({individu: ["mail"]}, side_effect=lambda ent_id: ({"email": "nouveau@test.fr"}, False))
+
+        individu.refresh_from_db()
+        self.assertEqual(individu.mail, "nouveau@test.fr")
+        self.assertTrue(any("synchronisé" in m for _, m in msgs))
