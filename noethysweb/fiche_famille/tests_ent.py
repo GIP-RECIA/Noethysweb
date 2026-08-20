@@ -629,6 +629,111 @@ class TestCorroborationPreLiaison(TestCase):
         )
         self.assertIn("3 liaison(s)", nouveaux.first().detail)
 
+    # ------------------------------------------------------------------ cas restants
+
+    def test_aucun_resultat_bascule_en_non_resolu(self):
+        famille = Famille.objects.create(nom="A51")
+        enfant = Individu.objects.create(nom="A51", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        groupes, non_resolus = self._lancer_recherche({"Enfant": lambda: []})
+
+        self.assertFalse(self._cles_proposees(groupes))
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons)
+        self.assertIn("orthographié", raisons[0])
+
+    def test_plusieurs_candidats_corroborent_reste_ambigu(self):
+        """Cas réel documenté du projet (ex: 2 "Julia" différentes côté ENT dont le nom
+        de parent correspond par coïncidence à la même famille Noethys)."""
+        famille = Famille.objects.create(nom="A53")
+        enfant = Individu.objects.create(nom="A53", prenom="Julia", civilite=4)
+        parent = Individu.objects.create(nom="A53", prenom="Gabriel", civilite=1)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+        def deux_candidats():
+            return [
+                _resultat_eleve("ENT-J1", "A53", "Julia", parents=[{"firstName": "Gabriel", "lastName": "A53", "id": "ENT-G1"}]),
+                _resultat_eleve("ENT-J2", "A53", "Julia", parents=[{"firstName": "Gabriel", "lastName": "A53", "id": "ENT-G2"}]),
+            ]
+        groupes, non_resolus = self._lancer_recherche({"Julia": deux_candidats})
+
+        self.assertFalse(self._cles_proposees(groupes))
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons)
+        self.assertIn("ambigu", raisons[0].lower())
+
+    def test_un_seul_corrobore_parmi_plusieurs_est_propose(self):
+        famille = Famille.objects.create(nom="A54")
+        enfant = Individu.objects.create(nom="A54", prenom="Julia", civilite=4)
+        parent = Individu.objects.create(nom="A54", prenom="Gabriel", civilite=1)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+        def deux_candidats():
+            return [
+                _resultat_eleve("ENT-J1B", "A54", "Julia", parents=[{"firstName": "Gabriel", "lastName": "A54", "id": "ENT-G1B"}]),
+                _resultat_eleve("ENT-J2B", "A54", "Julia", parents=[{"firstName": "Inconnu", "lastName": "ZZZAUCUNMATCH", "id": "ENT-X"}]),
+            ]
+        groupes, non_resolus = self._lancer_recherche({"Julia": deux_candidats})
+
+        self.assertIn(f"ENT-J1B|{enfant.pk}", self._cles_proposees(groupes))
+
+    def test_date_contredit_message_precis_en_preliaison(self):
+        """Le message doit citer les 2 dates (pas "aucun parent ne correspond", qui
+        serait faux puisqu'un nom corrobore bien)."""
+        famille = Famille.objects.create(nom="A55")
+        enfant = Individu.objects.create(nom="A55", prenom="Enfant", civilite=4, date_naiss=date(2010, 1, 1))
+        parent = Individu.objects.create(nom="A55", prenom="Papa", civilite=1)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+        def candidat():
+            return [_resultat_eleve("ENT-DATEKO", "A55", "Enfant", birth="2011-06-01", parents=[{"firstName": "Papa", "lastName": "A55", "id": "ENT-PAPA"}])]
+        groupes, non_resolus = self._lancer_recherche({"Enfant": candidat})
+
+        raisons = [p["raison"] for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(raisons)
+        self.assertIn("date de naissance", raisons[0])
+        self.assertNotIn("aucun parent ne correspond", raisons[0])
+
+    def test_confirmation_fiche_supprimee_entre_temps_est_signalee(self):
+        famille = Famille.objects.create(nom="A519")
+        enfant = Individu.objects.create(nom="A519", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        cle = f"ENT-A519|{enfant.pk}"
+        session = [{"famille_id": famille.pk, "famille_nom": famille.nom, "lignes": [{"cle": cle, "nom_ent": "Enfant A519", "nom_individu": str(enfant), "role": "Enfant"}]}]
+
+        enfant.delete()
+
+        msgs = self._confirmer([cle], session)
+
+        self.assertTrue([m for niveau, m in msgs if "n'existe plus" in m])
+
+    def test_beaucoup_de_lignes_est_plafonne_a_10(self):
+        cles = [f"ENT-PLAF{i}|9990{i}" for i in range(12)]
+
+        msgs = self._confirmer(cles, [])
+
+        detail = next(m for niveau, m in msgs if "liaison(s) non effectuée" in m)
+        self.assertIn("et 2 autre(s)", detail)
+
+    def test_session_ancien_format_ne_plante_pas(self):
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session[PreLiaisonEnt.SESSION_KEY] = ["ancien", "format", "liste"]
+        request.session.save()
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        vue = PreLiaisonEnt()
+        vue.request = request
+        vue.kwargs = {}
+        context = vue.get_context_data()
+
+        self.assertEqual(context["groupes"], [])
+        self.assertEqual(context["non_resolus"], [])
+
 
 class TestImporterEleveEnt(TestCase):
     """Tests directs de _importer_eleve_ent (logique partagée entre l'import unitaire et
@@ -700,6 +805,164 @@ class TestImporterEleveEntErreurTechnique(TestCase):
                 _importer_eleve_ent("ENT-CRASH2", eleve_data=self._eleve_data("ENT-CRASH2"))
 
         self.assertTrue(any("boom technique interne" in msg for msg in cm.output))
+
+
+class TestImporterFamilleEntRecherche(TestCase):
+    """Cas de ImporterFamilleEnt.post()/_effectuer_recherche()/_importer() jamais testés
+    jusqu'ici : validation du formulaire, connexion, panne, résultat parent, revérification
+    de l'école au clic, élève introuvable."""
+
+    def _post_rechercher(self, last_name, first_name, get_headers_ret="ok", search_ret=None):
+        request = RequestFactory().post("/", {"action": "rechercher", "last_name": last_name, "first_name": first_name})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        headers_value = None if get_headers_ret is None else {"Authorization": "Bearer test"}
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value=headers_value), \
+             patch("fiche_famille.views.famille_ent.search_by_name", return_value=search_ret):
+            ImporterFamilleEnt().post(request)
+        return request.session
+
+    def test_prenom_ou_nom_vide(self):
+        session = self._post_rechercher("", "Test")
+        self.assertEqual(session.get("ent_erreur"), "Veuillez saisir le prénom ET le nom.")
+
+    def test_connexion_impossible(self):
+        session = self._post_rechercher("X", "Y", get_headers_ret=None)
+        self.assertIn("Impossible de se connecter", session.get("ent_erreur"))
+
+    def test_panne_pendant_la_recherche(self):
+        """search_by_name renvoie None (panne en cours d'appel) - distinct du cas
+        get_headers()=None (panne détectée avant même d'essayer)."""
+        session = self._post_rechercher("X", "Y", search_ret=None)
+        self.assertIn("échoué", session.get("ent_erreur"))
+
+    def test_aucun_resultat(self):
+        session = self._post_rechercher("X", "Y", search_ret=[])
+        self.assertIn("Aucun résultat", session.get("ent_erreur"))
+
+    def test_recherche_par_parent_remonte_a_ses_enfants(self):
+        """Chercher un parent (Relative) doit proposer ses enfants, pas rien."""
+        par_id = {
+            "ENT-PARENT": {"id": "ENT-PARENT", "type": "Relative", "children": [{"id": "ENT-ENFANT"}]},
+            "ENT-ENFANT": {"id": "ENT-ENFANT", "type": "Student", "firstName": "XE", "lastName": "TESTPARENT", "parents": []},
+        }
+        request = RequestFactory().post("/", {"action": "rechercher", "last_name": "TESTPARENT", "first_name": "XP"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_famille.views.famille_ent.search_by_name", return_value=[{"id": "ENT-PARENT", "type": "Relative"}]), \
+             patch("fiche_famille.views.famille_ent.get_user", side_effect=lambda ent_id: par_id.get(ent_id)):
+            ImporterFamilleEnt().post(request)
+
+        resultats = request.session.get("ent_resultats")
+        self.assertTrue(resultats, "La recherche par parent n'a remonté aucun enfant.")
+        self.assertEqual(resultats[0]["id"], "ENT-ENFANT")
+
+    def test_importer_refuse_si_ecole_non_reconnue_au_clic(self):
+        eleve_data = {
+            "id": "ENT-ECOLEKO", "type": "Student", "firstName": "XE", "lastName": "TESTECOLEKO",
+            "structures": [{"name": "Ecole Jamais Connue Import", "uai": "UAI-X1", "id": "ENT-ECOLE-X1"}],
+            "parents": [],
+        }
+        request = RequestFactory().post("/", {"action": "importer", "eleve_ent_id": "ENT-ECOLEKO"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        with patch("fiche_famille.views.famille_ent.get_user", return_value=eleve_data):
+            ImporterFamilleEnt().post(request)
+
+        self.assertFalse(
+            Individu.objects.filter(ent_id="ENT-ECOLEKO").exists(),
+            "L'élève a été importé alors que son école n'est pas reconnue - devrait être refusé au clic.",
+        )
+
+    def test_importer_erreur_si_donnees_elve_introuvables(self):
+        request = RequestFactory().post("/", {"action": "importer", "eleve_ent_id": "ENT-INTROUVABLE"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        with patch("fiche_famille.views.famille_ent.get_user", return_value=None):
+            ImporterFamilleEnt().post(request)
+
+        self.assertFalse(Individu.objects.filter(ent_id="ENT-INTROUVABLE").exists())
+
+
+class TestConstitutionFamilleImport(TestCase):
+    """Cas de constitution de famille de _importer_eleve_ent jamais testés directement :
+    même adresse, adresses différentes (déclenchement complet, pas juste la fonction de
+    comparaison), un seul parent, aucun parent, scolarité, atomicité de la transaction."""
+
+    def test_meme_adresse_cree_une_seule_famille(self):
+        parents_cache = {
+            "ENT-XP-A22": {"id": "ENT-XP-A22", "lastName": "XP", "firstName": "Papa", "address": "12 rue Test", "zipCode": "45000"},
+            "ENT-XM-A22": {"id": "ENT-XM-A22", "lastName": "XM", "firstName": "Maman", "address": "12 rue Test", "zipCode": "45000"},
+        }
+        eleve_data = {"id": "ENT-XE-A22", "type": "Student", "firstName": "XE", "lastName": "TESTA22", "parents": [{"id": "ENT-XP-A22"}, {"id": "ENT-XM-A22"}]}
+
+        resultat = _importer_eleve_ent("ENT-XE-A22", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["type"], "nouvelle_famille")
+        self.assertEqual(Rattachement.objects.filter(famille_id=resultat["famille_id"], categorie=1, titulaire=True).count(), 2)
+
+    def test_adresses_differentes_cree_deux_familles_separees(self):
+        parents_cache = {
+            "ENT-XP-A23": {"id": "ENT-XP-A23", "lastName": "XP", "firstName": "Papa", "address": "12 rue Test", "zipCode": "45000"},
+            "ENT-XM-A23": {"id": "ENT-XM-A23", "lastName": "XM", "firstName": "Maman", "address": "9 avenue Autre", "zipCode": "45100"},
+        }
+        eleve_data = {"id": "ENT-XE-A23", "type": "Student", "firstName": "XE", "lastName": "TESTA23", "parents": [{"id": "ENT-XP-A23"}, {"id": "ENT-XM-A23"}]}
+
+        resultat = _importer_eleve_ent("ENT-XE-A23", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["type"], "nouvelle_famille_separee")
+        eleve = Individu.objects.get(ent_id="ENT-XE-A23")
+        familles_ids = list(Rattachement.objects.filter(individu=eleve, categorie=2).values_list("famille_id", flat=True))
+        self.assertEqual(len(familles_ids), 2, "l'enfant doit être rattaché aux 2 familles séparées")
+        for famille_id in familles_ids:
+            self.assertEqual(Famille.objects.get(pk=famille_id).mode_separation, "automatique")
+
+    def test_un_seul_parent_connu_cree_famille_unique(self):
+        parents_cache = {"ENT-XP-A25": {"id": "ENT-XP-A25", "lastName": "XP", "firstName": "Papa"}}
+        eleve_data = {"id": "ENT-XE-A25", "type": "Student", "firstName": "XE", "lastName": "TESTA25", "parents": [{"id": "ENT-XP-A25"}]}
+
+        resultat = _importer_eleve_ent("ENT-XE-A25", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["type"], "nouvelle_famille")
+        self.assertEqual(Rattachement.objects.filter(famille_id=resultat["famille_id"], categorie=1).count(), 1)
+
+    def test_aucun_parent_cree_famille_avec_enfant_seul(self):
+        eleve_data = {"id": "ENT-XE-A26", "type": "Student", "firstName": "XE", "lastName": "TESTA26", "parents": []}
+
+        resultat = _importer_eleve_ent("ENT-XE-A26", eleve_data=eleve_data, parents_cache={})
+
+        self.assertEqual(resultat["statut"], "importe")
+        self.assertEqual(Rattachement.objects.filter(famille_id=resultat["famille_id"], categorie=1).count(), 0)
+        self.assertEqual(Rattachement.objects.filter(famille_id=resultat["famille_id"], categorie=2).count(), 1)
+
+    def test_scolarite_creee_si_ecole_connue(self):
+        Ecole.objects.create(nom="Ecole A27", ent_id="ENT-ECOLE-A27")
+        eleve_data = {
+            "id": "ENT-XE-A27", "type": "Student", "firstName": "XE", "lastName": "TESTA27", "parents": [],
+            "structures": [{"name": "Ecole A27", "uai": None, "id": "ENT-ECOLE-A27"}],
+        }
+
+        _importer_eleve_ent("ENT-XE-A27", eleve_data=eleve_data, parents_cache={})
+
+        eleve = Individu.objects.get(ent_id="ENT-XE-A27")
+        self.assertTrue(Scolarite.objects.filter(individu=eleve).exists())
+
+    def test_transaction_atomique_annule_tout_si_erreur(self):
+        """Si l'import échoue en cours de route, rien ne doit rester en base - pas d'élève
+        à moitié créé sans famille ni rattachement."""
+        eleve_data = {"id": "ENT-XE-A210", "type": "Student", "firstName": "XE", "lastName": "TESTA210", "parents": []}
+
+        with patch("fiche_famille.views.famille_ent.Rattachement.objects.create", side_effect=RuntimeError("boom")):
+            resultat = _importer_eleve_ent("ENT-XE-A210", eleve_data=eleve_data, parents_cache={})
+
+        self.assertEqual(resultat["statut"], "erreur")
+        self.assertFalse(
+            Individu.objects.filter(ent_id="ENT-XE-A210").exists(),
+            "L'élève ne doit pas rester en base si la transaction a échoué en cours de route.",
+        )
 
 
 class TestImporterParentContactSeulement(TestCase):
@@ -929,6 +1192,84 @@ class TestImporterFamilleEntEcoleNonReconnue(TestCase):
         ids = [r["id"] for r in resultats]
         self.assertIn("ENT-OK", ids)
         self.assertNotIn("ENT-KO", ids)
+
+
+class TestImporterEnMasseAffichageEtResume(TestCase):
+    """Cas de ImporterEnMasseEnt jamais testés : connexion impossible, panne, masquage à
+    l'affichage, élève déjà importé, aucune sélection, compteurs du résumé final, famille
+    séparée comptée double, log unique dans l'historique."""
+
+    def _get_contexte(self, eleves_bruts, headers_ret="ok", search_users_ret="defaut"):
+        vue = ImporterEnMasseEnt()
+        vue.request = RequestFactory().get("/")
+        vue.request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        headers_value = None if headers_ret is None else {"Authorization": "Bearer test"}
+        search_ret = eleves_bruts if search_users_ret == "defaut" else search_users_ret
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value=headers_value), \
+             patch("fiche_famille.views.famille_ent.search_users", return_value=search_ret):
+            return vue.get_context_data()
+
+    def test_connexion_impossible(self):
+        context = self._get_contexte([], headers_ret=None)
+        self.assertTrue(context["erreur_connexion"])
+
+    def test_panne_en_cours_dappel(self):
+        """search_users() renvoie None (panne pendant l'appel) - distinct d'une vraie
+        liste vide (l'ENT dit "aucun élève")."""
+        context = self._get_contexte([], search_users_ret=None)
+        self.assertTrue(context["erreur_connexion"])
+
+    def test_ecole_inconnue_masquee_a_laffichage(self):
+        eleve = {"id": "ENT-MASSEAFF-KO", "type": "Student", "firstName": "X", "lastName": "TEST",
+                 "structures": [{"name": "Ecole Jamais A33", "uai": None, "id": "ENT-ECOLE-A33"}]}
+        context = self._get_contexte([eleve])
+        self.assertEqual(context["nb_masques_ecole_inconnue"], 1)
+        self.assertEqual(context["eleves"], [])
+
+    def test_eleve_deja_importe_est_marque(self):
+        Ecole.objects.create(nom="Ecole A34", ent_id="ENT-ECOLE-A34")
+        Individu.objects.create(nom="TEST34", prenom="Deja", civilite=4, ent_id="ENT-MASSEAFF-DEJA")
+        eleve = {"id": "ENT-MASSEAFF-DEJA", "type": "Student", "firstName": "Deja", "lastName": "TEST34",
+                 "structures": [{"name": "Ecole A34", "uai": None, "id": "ENT-ECOLE-A34"}]}
+        context = self._get_contexte([eleve])
+        self.assertTrue(context["eleves"][0]["deja_importe"])
+
+    def test_aucun_eleve_selectionne(self):
+        request = RequestFactory().post("/", {})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        response = ImporterEnMasseEnt().post(request)
+        self.assertEqual(response.status_code, 302)
+
+    def test_resume_et_log_pour_famille_separee(self):
+        Ecole.objects.create(nom="Ecole A37", ent_id="ENT-ECOLE-A37")
+        eleve_separe = {
+            "id": "ENT-MASSE-SEP", "type": "Student", "firstName": "Sep", "lastName": "TEST37",
+            "structures": [{"name": "Ecole A37", "uai": None, "id": "ENT-ECOLE-A37"}],
+            "parents": [{"id": "ENT-P1-A37"}, {"id": "ENT-P2-A37"}],
+        }
+        par_id = {
+            "ENT-MASSE-SEP": eleve_separe,
+            "ENT-P1-A37": {"id": "ENT-P1-A37", "lastName": "P1", "firstName": "Papa", "address": "1 rue A", "zipCode": "45000"},
+            "ENT-P2-A37": {"id": "ENT-P2-A37", "lastName": "P2", "firstName": "Maman", "address": "2 rue B", "zipCode": "45100"},
+        }
+        request = RequestFactory().post("/", {"eleves_ent_id": ["ENT-MASSE-SEP"]})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_famille.views.famille_ent.get_user", side_effect=lambda ent_id: par_id.get(ent_id)), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            ImporterEnMasseEnt().post(request)
+
+        resume = request.session.get("ent_import_masse_resume")
+        self.assertEqual(resume["nb_eleves_importes"], 1)
+        self.assertEqual(resume["nb_nouvelles_familles"], 2, "une famille séparée doit compter comme 2 nouvelles familles")
+
+        logs = Historique.objects.filter(titre="Import en masse depuis l'ENT")
+        self.assertEqual(logs.count(), 1, "un seul log de lancement, pas une ligne par élève")
 
 
 class TestImporterEnMasseRevalideEcoleAuClic(TestCase):

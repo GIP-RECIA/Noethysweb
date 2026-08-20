@@ -598,6 +598,59 @@ class TestCorroborationLiaisonIndividuelle(TestCase):
         self.assertEqual(Historique.objects.filter(individu_id=self.enfant.pk).count(), 0)
 
 
+class TestCorroborationSymetrieEtAccents(TestCase):
+    """Deux cas du moteur de corroboration (LierCompteEnt._rechercher) jamais testés
+    directement : la symétrie (chercher depuis un parent regarde ses enfants côté ENT,
+    pas ses "parents" qui n'existent pas pour un adulte), et l'insensibilité aux accents/
+    casse dans la comparaison des noms de famille."""
+
+    def setUp(self):
+        self.vue = LierCompteEnt()
+
+    def _rechercher(self, reponse_ent, individu, famille):
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=reponse_ent):
+            resultats, erreur = self.vue._rechercher(individu.nom, individu.prenom, famille.pk, individu.pk)
+        self.assertIsNone(erreur)
+        return resultats
+
+    def test_symetrie_recherche_depuis_un_parent_regarde_ses_enfants(self):
+        famille = Famille.objects.create(nom="FAMSYM")
+        enfant = Individu.objects.create(nom="FAMSYM", prenom="Enfant", civilite=4)
+        parent = Individu.objects.create(nom="FAMSYM", prenom="Parent", civilite=1)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+        resultat_relative = {
+            "id": "ENT-PARENT-SYM", "type": "Relative", "firstName": "Parent", "lastName": "FAMSYM",
+            "children": [{"firstName": "Enfant", "lastName": "FAMSYM", "id": "ENT-ENFANT-SYM"}],
+        }
+        resultats = self._rechercher([resultat_relative], individu=parent, famille=famille)
+
+        self.assertEqual(resultats[0]["membres_label"], "Enfants")
+        membre = resultats[0]["membres_enrichis"][0]
+        self.assertEqual(membre["individu_correspondant"], enfant)
+        self.assertTrue(resultats[0]["nom_corrobore"])
+
+    def test_comparaison_noms_insensible_aux_accents_et_a_la_casse(self):
+        famille = Famille.objects.create(nom="FAMACCENT")
+        enfant = Individu.objects.create(nom="GAUTHIER", prenom="Chloé", civilite=4)
+        parent = Individu.objects.create(nom="GAUTHIER", prenom="François", civilite=1)
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+
+        resultat = _resultat_eleve("ENT-ACCENT", "GAUTHIER", "Chloe", parents=[
+            {"firstName": "FRANCOIS", "lastName": "gauthier", "id": "ENT-PARENT-ACCENT"},
+        ])
+        resultats = self._rechercher([resultat], individu=enfant, famille=famille)
+
+        membre = resultats[0]["membres_enrichis"][0]
+        self.assertEqual(
+            membre["individu_correspondant"], parent,
+            "La comparaison des noms devrait être insensible aux accents et à la casse.",
+        )
+
+
 class TestReattributionAssurance(TestCase):
     """Le bouton "Réattribuer à une autre famille" pour une assurance - même outil que pour
     les prestations, mais pour une donnée qui n'a aucun lien à une prestation précise (une
