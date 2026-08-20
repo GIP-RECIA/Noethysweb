@@ -292,16 +292,29 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                 if parent_data:
                     parents_data.append((parent_info["id"], parent_data))
 
-            parents_existants = []
+            # Individus ENT déjà connus dans Noethys (n'importe quelle catégorie - même un
+            # simple Contact, ex: un grand-parent) : ne jamais en recréer un doublon plus bas.
+            individus_existants = {}
             for ent_id_parent, parent_data in parents_data:
                 parent = Individu.objects.filter(ent_id=ent_id_parent).first()
                 if parent:
-                    parents_existants.append(parent)
+                    individus_existants[ent_id_parent] = parent
 
-            if parents_existants:
+            # Parmi eux, seuls ceux réellement Représentants (catégorie 1) quelque part
+            # permettent de rattacher l'enfant à une famille déjà existante - un individu qui
+            # n'est que Contact ailleurs (ex: un grand-parent) n'a pas de famille "à lui" en
+            # tant que responsable, le rattachement serait arbitraire.
+            parents_representants = [
+                p for p in individus_existants.values() if Rattachement.objects.filter(individu=p, categorie=1).exists()
+            ]
+            noms_contacts_reutilises = [
+                f"{p.prenom} {p.nom}" for p in individus_existants.values() if p not in parents_representants
+            ]
+
+            if parents_representants:
                 # Au moins un parent existe déjà — ajouter l'enfant à ses familles
                 familles_ajoutees = set()
-                for parent in parents_existants:
+                for parent in parents_representants:
                     for ratt in Rattachement.objects.filter(individu=parent, categorie=1):
                         if ratt.famille_id not in familles_ajoutees:
                             Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
@@ -309,6 +322,40 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                             familles_ajoutees.add(ratt.famille_id)
                 famille_id = list(familles_ajoutees)[0]
                 return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} ajouté(e) à une famille existante.", "famille_id": famille_id, "type": "famille_existante"}
+
+            def _note_contacts_reutilises():
+                if not noms_contacts_reutilises:
+                    return ""
+                noms = ", ".join(noms_contacts_reutilises)
+                if len(noms_contacts_reutilises) == 1:
+                    return f" Note : {noms} était déjà connu(e) dans Noethys (Contact d'une autre famille) et a été rattaché(e) comme représentant(e) de cette nouvelle famille."
+                return f" Note : {noms} étaient déjà connus dans Noethys (Contact d'une autre famille) et ont été rattachés comme représentants de cette nouvelle famille."
+
+            def _get_ou_creer_parent(ent_id_parent, parent_data):
+                """Réutilise la fiche existante (trouvée par ent_id) plutôt que d'en créer une
+                deuxième - sinon un individu déjà connu (même simple Contact ailleurs) se
+                retrouverait dupliqué, avec 2 fiches portant le même ent_id."""
+                parent = individus_existants.get(ent_id_parent)
+                if parent:
+                    return parent
+                parent = Individu(
+                    nom=parent_data.get("lastName", ""),
+                    prenom=parent_data.get("firstName", ""),
+                    civilite=_convertir_civilite(parent_data.get("title")),
+                    civilite_a_verifier=True,
+                    date_naiss=_parse_date(parent_data.get("birthDate")),
+                    mail=parent_data.get("email") or None,
+                    tel_domicile=parent_data.get("phone") or None,
+                    tel_mobile=parent_data.get("mobile") or None,
+                    rue_resid=parent_data.get("address") or None,
+                    cp_resid=parent_data.get("zipCode") or None,
+                    ville_resid=parent_data.get("city") or None,
+                    ent_id=ent_id_parent,
+                    ent_lie_par=lie_par,
+                    ent_lie_le=lie_le,
+                )
+                parent.save()
+                return parent
 
             # Détecter si les parents ont des adresses différentes
             separes = (
@@ -325,27 +372,11 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                     famille.save()
                     if premiere_famille_id is None:
                         premiere_famille_id = famille.pk
-                    parent = Individu(
-                        nom=parent_data.get("lastName", ""),
-                        prenom=parent_data.get("firstName", ""),
-                        civilite=_convertir_civilite(parent_data.get("title")),
-                        civilite_a_verifier=True,
-                        date_naiss=_parse_date(parent_data.get("birthDate")),
-                        mail=parent_data.get("email") or None,
-                        tel_domicile=parent_data.get("phone") or None,
-                        tel_mobile=parent_data.get("mobile") or None,
-                        rue_resid=parent_data.get("address") or None,
-                        cp_resid=parent_data.get("zipCode") or None,
-                        ville_resid=parent_data.get("city") or None,
-                        ent_id=ent_id_parent,
-                        ent_lie_par=lie_par,
-                        ent_lie_le=lie_le,
-                    )
-                    parent.save()
+                    parent = _get_ou_creer_parent(ent_id_parent, parent_data)
                     Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
                     Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
                     famille.Maj_infos()
-                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e), 2 familles séparées créées.", "famille_id": premiere_famille_id, "type": "nouvelle_famille_separee"}
+                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e), 2 familles séparées créées.{_note_contacts_reutilises()}", "famille_id": premiere_famille_id, "type": "nouvelle_famille_separee"}
 
             else:
                 # Famille unique
@@ -353,26 +384,10 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                 famille.save()
                 Rattachement.objects.create(individu=eleve, famille=famille, categorie=2, titulaire=False)
                 for ent_id_parent, parent_data in parents_data:
-                    parent = Individu(
-                        nom=parent_data.get("lastName", ""),
-                        prenom=parent_data.get("firstName", ""),
-                        civilite=_convertir_civilite(parent_data.get("title")),
-                        civilite_a_verifier=True,
-                        date_naiss=_parse_date(parent_data.get("birthDate")),
-                        mail=parent_data.get("email") or None,
-                        tel_domicile=parent_data.get("phone") or None,
-                        tel_mobile=parent_data.get("mobile") or None,
-                        rue_resid=parent_data.get("address") or None,
-                        cp_resid=parent_data.get("zipCode") or None,
-                        ville_resid=parent_data.get("city") or None,
-                        ent_id=ent_id_parent,
-                        ent_lie_par=lie_par,
-                        ent_lie_le=lie_le,
-                    )
-                    parent.save()
+                    parent = _get_ou_creer_parent(ent_id_parent, parent_data)
                     Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
                 famille.Maj_infos()
-                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e).", "famille_id": famille.pk, "type": "nouvelle_famille"}
+                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e).{_note_contacts_reutilises()}", "famille_id": famille.pk, "type": "nouvelle_famille"}
     except Exception as e:
         return {"statut": "erreur", "message": str(e), "famille_id": None, "type": None}
 
@@ -551,21 +566,25 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             else:
                 enfant["adresses_differentes"] = False
 
-            # Vérifier si les parents existent déjà dans Noethysweb
+            # Vérifier si les parents existent déjà dans Noethysweb - uniquement ceux qui sont
+            # réellement Représentants (catégorie 1) quelque part : un individu qui n'existe
+            # que comme Contact (ex: un grand-parent) n'a pas de famille "à lui" en tant que
+            # responsable, ce message afficherait sinon "sera ajouté à la famille ." (vide) -
+            # même règle que dans _importer_eleve_ent, qui décide réellement où l'enfant ira.
             enfant["parents_existants"] = False
             enfant["parents_existants_msg"] = None
             if not enfant["deja_importe"]:
-                parents_en_base = []
+                parents_representants_en_base = []
                 for parent in enfant.get("parents", []):
                     if parent.get("id"):
                         p = Individu.objects.filter(ent_id=parent["id"]).first()
-                        if p:
-                            parents_en_base.append(p)
-                if parents_en_base:
+                        if p and Rattachement.objects.filter(individu=p, categorie=1).exists():
+                            parents_representants_en_base.append(p)
+                if parents_representants_en_base:
                     enfant["parents_existants"] = True
-                    noms = " et ".join([f"{p.prenom} {p.nom}" for p in parents_en_base])
+                    noms = " et ".join([f"{p.prenom} {p.nom}" for p in parents_representants_en_base])
                     familles_parents = Rattachement.objects.filter(
-                        individu__in=parents_en_base, categorie=1
+                        individu__in=parents_representants_en_base, categorie=1
                     ).select_related("famille").values_list("famille__nom", flat=True).distinct()
                     noms_familles = ", ".join(familles_parents)
                     if len(familles_parents) > 1:

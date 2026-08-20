@@ -676,6 +676,145 @@ class TestImporterEleveEnt(TestCase):
         self.assertIsNone(eleve.ent_lie_le)
 
 
+class TestImporterParentContactSeulement(TestCase):
+    """Un parent déclaré par l'ENT peut déjà être connu dans Noethys uniquement comme
+    Contact d'une autre famille (ex: un grand-parent qui aide à élever un autre petit-
+    enfant), sans jamais être Représentant nulle part. Avant : le code supposait "déjà
+    connu = représentant quelque part" et plantait (list index out of range) - ou, avec un
+    fix naïf qui l'ignorerait simplement, créerait un DOUBLON (2 fiches, même ent_id) dans
+    la branche "nouvelle famille"."""
+
+    @staticmethod
+    def _eleve_data(ent_id, parents):
+        return {"id": ent_id, "type": "Student", "firstName": "XE", "lastName": "TESTCONTACT", "birthDate": "2015-06-01", "parents": parents}
+
+    def _preparer_xgmp_contact(self, ent_id="ENT-XGMP"):
+        famille_a = Famille.objects.create(nom="FAMILLE A")
+        xgmp = Individu.objects.create(nom="XGMP", prenom="Mamie", civilite=3, ent_id=ent_id)
+        Rattachement.objects.create(individu=xgmp, famille=famille_a, categorie=3, titulaire=False)
+        return famille_a, xgmp
+
+    def test_ne_plante_pas(self):
+        self._preparer_xgmp_contact()
+        parents_cache = {
+            "ENT-XP": {"id": "ENT-XP", "lastName": "XP", "firstName": "Papa"},
+            "ENT-XGMP": {"id": "ENT-XGMP", "lastName": "XGMP", "firstName": "Mamie"},
+        }
+        eleve_data = self._eleve_data("ENT-XE3", parents=[{"id": "ENT-XP"}, {"id": "ENT-XGMP"}])
+
+        resultat = _importer_eleve_ent("ENT-XE3", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["statut"], "importe")
+
+    def test_ne_duplique_pas_la_fiche_du_contact(self):
+        self._preparer_xgmp_contact()
+        parents_cache = {
+            "ENT-XP": {"id": "ENT-XP", "lastName": "XP", "firstName": "Papa"},
+            "ENT-XGMP": {"id": "ENT-XGMP", "lastName": "XGMP", "firstName": "Mamie"},
+        }
+        eleve_data = self._eleve_data("ENT-XE3B", parents=[{"id": "ENT-XP"}, {"id": "ENT-XGMP"}])
+
+        _importer_eleve_ent("ENT-XE3B", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(
+            Individu.objects.filter(ent_id="ENT-XGMP").count(), 1,
+            "Le contact réutilisé ne doit jamais être dupliqué (2 fiches avec le même ent_id).",
+        )
+
+    def test_devient_representant_de_la_nouvelle_famille_sans_perdre_son_role_de_contact(self):
+        famille_a, xgmp = self._preparer_xgmp_contact("ENT-XGMP2")
+        parents_cache = {
+            "ENT-XP2": {"id": "ENT-XP2", "lastName": "XP", "firstName": "Papa"},
+            "ENT-XGMP2": {"id": "ENT-XGMP2", "lastName": "XGMP", "firstName": "Mamie"},
+        }
+        eleve_data = self._eleve_data("ENT-XE3C", parents=[{"id": "ENT-XP2"}, {"id": "ENT-XGMP2"}])
+
+        resultat = _importer_eleve_ent("ENT-XE3C", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertTrue(
+            Rattachement.objects.filter(individu=xgmp, famille=famille_a, categorie=3).exists(),
+            "XGMP doit rester Contact de la famille A - son rôle là-bas ne doit pas changer.",
+        )
+        self.assertTrue(
+            Rattachement.objects.filter(individu=xgmp, famille_id=resultat["famille_id"], categorie=1, titulaire=True).exists(),
+            "XGMP doit devenir Représentante de la nouvelle famille de l'enfant importé.",
+        )
+
+    def test_message_mentionne_le_contact_reutilise(self):
+        self._preparer_xgmp_contact("ENT-XGMP3")
+        parents_cache = {
+            "ENT-XP3": {"id": "ENT-XP3", "lastName": "XP", "firstName": "Papa"},
+            "ENT-XGMP3": {"id": "ENT-XGMP3", "lastName": "XGMP", "firstName": "Mamie"},
+        }
+        eleve_data = self._eleve_data("ENT-XE3D", parents=[{"id": "ENT-XP3"}, {"id": "ENT-XGMP3"}])
+
+        resultat = _importer_eleve_ent("ENT-XE3D", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertIn("Mamie XGMP", resultat["message"])
+        self.assertIn("Contact d'une autre famille", resultat["message"])
+
+    def test_non_regression_parent_deja_representant_rattache_famille_existante(self):
+        """Le cas normal (parent déjà Représentant ailleurs) doit continuer à rattacher
+        l'enfant à la famille existante, pas en créer une nouvelle - pas touché par le fix."""
+        famille = Famille.objects.create(nom="FAMILLE EXISTANTE")
+        xp = Individu.objects.create(nom="XP", prenom="Papa", civilite=1, ent_id="ENT-XP4")
+        Rattachement.objects.create(individu=xp, famille=famille, categorie=1, titulaire=True)
+
+        eleve_data = self._eleve_data("ENT-XE3E", parents=[{"id": "ENT-XP4"}])
+        resultat = _importer_eleve_ent("ENT-XE3E", eleve_data=eleve_data, parents_cache={"ENT-XP4": {"id": "ENT-XP4", "lastName": "XP", "firstName": "Papa"}})
+
+        self.assertEqual(resultat["statut"], "importe")
+        self.assertEqual(resultat["type"], "famille_existante")
+        self.assertEqual(resultat["famille_id"], famille.pk)
+
+
+class TestAffichageParentContactSeulement(TestCase):
+    """Le message d'aperçu de l'écran d'import (_effectuer_recherche) ne doit jamais dire
+    "sera ajouté à la famille ." (nom vide) quand le seul parent déjà connu n'est que
+    Contact ailleurs - même règle que TestImporterParentContactSeulement, côté affichage."""
+
+    def _lancer_recherche(self, eleve_ent, parents_par_id):
+        briefs = [{"id": eleve_ent["id"], "type": "Student"}]
+        par_id = {eleve_ent["id"]: eleve_ent, **parents_par_id}
+
+        request = RequestFactory().post("/", {"action": "rechercher", "first_name": "Test", "last_name": "Test"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_famille.views.famille_ent.search_by_name", return_value=briefs), \
+             patch("fiche_famille.views.famille_ent.get_user", side_effect=lambda ent_id: par_id.get(ent_id)), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            ImporterFamilleEnt()._effectuer_recherche(request, "Test", "Test")
+
+        return request.session.get("ent_resultats")
+
+    def test_pas_de_message_casse_si_seul_parent_connu_est_contact(self):
+        famille_a = Famille.objects.create(nom="FAMILLE A")
+        xgmp = Individu.objects.create(nom="XGMP", prenom="Mamie", civilite=3, ent_id="ENT-XGMP5")
+        Rattachement.objects.create(individu=xgmp, famille=famille_a, categorie=3, titulaire=False)
+
+        eleve_ent = {"id": "ENT-XE5", "type": "Student", "firstName": "XE", "lastName": "TEST5", "parents": [{"id": "ENT-XGMP5"}]}
+        resultats = self._lancer_recherche(eleve_ent, {"ENT-XGMP5": {"id": "ENT-XGMP5", "type": "Relative", "lastName": "XGMP", "firstName": "Mamie"}})
+
+        self.assertFalse(resultats[0]["parents_existants"])
+        self.assertIsNone(resultats[0]["parents_existants_msg"])
+
+    def test_message_normal_si_parent_est_representant(self):
+        """Non-régression : le message normal doit toujours s'afficher quand le parent
+        déjà connu est bien Représentant quelque part."""
+        famille = Famille.objects.create(nom="FAMILLE EXISTANTE")
+        xp = Individu.objects.create(nom="XP", prenom="Papa", civilite=1, ent_id="ENT-XP5")
+        Rattachement.objects.create(individu=xp, famille=famille, categorie=1, titulaire=True)
+
+        eleve_ent = {"id": "ENT-XE6", "type": "Student", "firstName": "XE", "lastName": "TEST6", "parents": [{"id": "ENT-XP5"}]}
+        resultats = self._lancer_recherche(eleve_ent, {"ENT-XP5": {"id": "ENT-XP5", "type": "Relative", "lastName": "XP", "firstName": "Papa"}})
+
+        self.assertTrue(resultats[0]["parents_existants"])
+        self.assertIn("FAMILLE EXISTANTE", resultats[0]["parents_existants_msg"])
+        self.assertNotIn("famille .", resultats[0]["parents_existants_msg"])
+
+
 class TestImporterFamilleEntEcoleNonReconnue(TestCase):
     """Tests de l'écran 'Importer une famille depuis l'ENT' (recherche unitaire) - règle du
     masquage des écoles non reconnues. Décision d'équipe (CR du 17/07) :
