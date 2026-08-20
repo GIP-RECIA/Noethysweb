@@ -1,3 +1,4 @@
+import logging
 import unicodedata
 from datetime import date
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +20,8 @@ from core.models import (
 from core.utils import utils_historique
 from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers
 from django.shortcuts import get_object_or_404
+
+logger = logging.getLogger(__name__)
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
 
@@ -388,8 +391,12 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                     Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
                 famille.Maj_infos()
                 return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} importé(e).{_note_contacts_reutilises()}", "famille_id": famille.pk, "type": "nouvelle_famille"}
-    except Exception as e:
-        return {"statut": "erreur", "message": str(e), "famille_id": None, "type": None}
+    except Exception:
+        # Le détail technique (message + trace complète) part dans les logs serveur, pas à
+        # l'écran - un message brut ("list index out of range"...) n'apprend rien à l'agent
+        # et masque un vrai bug derrière ce qui ressemble à une erreur ENT ordinaire.
+        logger.exception("Erreur lors de l'import de l'élève ENT %s", eleve_ent_id)
+        return {"statut": "erreur", "message": "Erreur technique lors de l'import - contactez le support si le problème persiste.", "famille_id": None, "type": None}
 
 
 class ImporterFamilleEnt(CustomView, TemplateView):

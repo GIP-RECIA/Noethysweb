@@ -676,6 +676,32 @@ class TestImporterEleveEnt(TestCase):
         self.assertIsNone(eleve.ent_lie_le)
 
 
+class TestImporterEleveEntErreurTechnique(TestCase):
+    """Le except attrape-tout de _importer_eleve_ent ne doit jamais montrer le texte brut
+    d'une exception Python à l'agent (ex: "list index out of range", vu avec le bug du
+    parent Contact avant son fix) - message générique à l'écran, détail complet dans les
+    logs serveur pour pouvoir enquêter."""
+
+    @staticmethod
+    def _eleve_data(ent_id):
+        return {"id": ent_id, "type": "Student", "firstName": "Crash", "lastName": "TEST", "birthDate": "2015-06-01", "parents": []}
+
+    def test_message_generique_pas_de_texte_technique_brut(self):
+        with patch("core.models.Individu.save", side_effect=RuntimeError("boom technique interne")):
+            resultat = _importer_eleve_ent("ENT-CRASH1", eleve_data=self._eleve_data("ENT-CRASH1"))
+
+        self.assertEqual(resultat["statut"], "erreur")
+        self.assertNotIn("boom technique interne", resultat["message"])
+        self.assertIn("contactez le support", resultat["message"])
+
+    def test_exception_est_loguee_pour_enqueter(self):
+        with patch("core.models.Individu.save", side_effect=RuntimeError("boom technique interne")):
+            with self.assertLogs("fiche_famille.views.famille_ent", level="ERROR") as cm:
+                _importer_eleve_ent("ENT-CRASH2", eleve_data=self._eleve_data("ENT-CRASH2"))
+
+        self.assertTrue(any("boom technique interne" in msg for msg in cm.output))
+
+
 class TestImporterParentContactSeulement(TestCase):
     """Un parent déclaré par l'ENT peut déjà être connu dans Noethys uniquement comme
     Contact d'une autre famille (ex: un grand-parent qui aide à élever un autre petit-
