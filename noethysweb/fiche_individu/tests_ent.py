@@ -11,15 +11,18 @@ Aucun appel réseau réel : search_by_name / get_headers sont mockés.
 
 import uuid
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
+import requests
+from django.core.cache import cache
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 from django.utils import timezone
 
-from core.models import Activite, Assurance, Assureur, CategorieTarif, Classe, Ecole, Famille, Groupe, Historique, Individu, Inscription, Rattachement, Scolarite, Structure, Utilisateur
-from fiche_individu.views.individu_ent import LierCompteEnt
+from core.models import Activite, Assurance, Assureur, CategorieTarif, Classe, Ecole, Famille, Groupe, Historique, Individu, Inscription, Organisateur, Rattachement, Scolarite, Structure, Utilisateur
+from core.utils.utils_ent import get_user_ou_introuvable
+from fiche_individu.views.individu_ent import LierCompteEnt, SynchroniserIndividu
 from fiche_individu.views.individu_assurances import ReattribuerAssurance
 from fiche_individu.views.individu_inscriptions import Ajouter, ReattribuerInscription
 
@@ -909,3 +912,104 @@ class TestControleInscriptionCroiseeFamilles(TestCase):
             self._verifier(enfant, famille_b, date(2026, 9, 15), activite=activite_multi),
             "inscriptions_multiples=True doit toujours autoriser, même entre 2 familles.",
         )
+
+
+class TestGetUserOuIntrouvable(TestCase):
+    """Vérifie directement au niveau HTTP (pas juste via un mock de haut niveau) que
+    get_user_ou_introuvable distingue bien une vraie panne d'une confirmation ENT (404)
+    que la personne n'existe plus - c'est le cœur du fix : avant, les deux cas étaient
+    confondus (None dans les deux cas), ce qui faisait dire à tort "vérifiez la connexion"
+    à un agent qui synchronise un élève ayant simplement quitté l'établissement."""
+
+    def setUp(self):
+        cache.delete("organisateur")
+        Organisateur.objects.filter(pk=1).delete()
+        Organisateur.objects.create(pk=1, ent_url="https://ent-test.example.com")
+
+    @staticmethod
+    def _reponse(status_code, corps=None):
+        resp = Mock()
+        resp.status_code = status_code
+        if status_code >= 400:
+            resp.raise_for_status.side_effect = requests.HTTPError(response=resp)
+        else:
+            resp.raise_for_status.return_value = None
+        resp.json.return_value = corps or {}
+        return resp
+
+    def test_404_confirme_est_signale_comme_introuvable(self):
+        with patch("core.utils.utils_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("core.utils.utils_ent.requests.get", return_value=self._reponse(404)):
+            data, introuvable = get_user_ou_introuvable("ENT-PARTI")
+
+        self.assertIsNone(data)
+        self.assertTrue(introuvable)
+
+    def test_vraie_panne_nest_pas_signalee_comme_introuvable(self):
+        with patch("core.utils.utils_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("core.utils.utils_ent.requests.get", side_effect=requests.ConnectionError("panne réseau")):
+            data, introuvable = get_user_ou_introuvable("ENT-X")
+
+        self.assertIsNone(data)
+        self.assertFalse(introuvable)
+
+    def test_succes_normal_fonctionne_toujours(self):
+        with patch("core.utils.utils_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("core.utils.utils_ent.requests.get", return_value=self._reponse(200, {"id": "ENT-X", "firstName": "Test"})):
+            data, introuvable = get_user_ou_introuvable("ENT-X")
+
+        self.assertEqual(data, {"id": "ENT-X", "firstName": "Test"})
+        self.assertFalse(introuvable)
+
+
+class TestSynchroniserIndividuIntrouvable(TestCase):
+    """Cas ajoutés sur SynchroniserIndividu : message distinct quand la personne n'existe
+    plus dans l'ENT, plutôt que le message générique "vérifiez la connexion"."""
+
+    def setUp(self):
+        self.famille = Famille.objects.create(nom="SYNCINTROUV")
+        self.individu = Individu.objects.create(nom="SYNCINTROUV", prenom="Enfant", civilite=4, ent_id="ENT-SYNC-DISPARU")
+        Rattachement.objects.create(individu=self.individu, famille=self.famille, categorie=2, titulaire=False)
+
+    def _vue(self, request):
+        vue = SynchroniserIndividu()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.individu.pk}
+        vue.request = request
+        return vue
+
+    def test_affichage_message_distinct_si_personne_introuvable(self):
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=(None, True)):
+            context = self._vue(request).get_context_data()
+
+        self.assertIn("n'existe plus dans l'ENT", context["erreur"])
+        self.assertNotIn("Vérifiez la connexion", context["erreur"])
+
+    def test_affichage_message_panne_reste_generique(self):
+        """Non-régression : une vraie panne garde le message existant."""
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=(None, False)):
+            context = self._vue(request).get_context_data()
+
+        self.assertIn("Vérifiez la connexion", context["erreur"])
+
+    def test_post_refuse_avec_message_distinct_si_personne_introuvable(self):
+        request = RequestFactory().post("/", {"champs": ["nom"]})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=(None, True)):
+            self._vue(request).post(request, idfamille=self.famille.pk, idindividu=self.individu.pk)
+
+        self.individu.refresh_from_db()
+        self.assertEqual(self.individu.nom, "SYNCINTROUV", "Rien ne devrait être modifié si la personne est introuvable côté ENT.")

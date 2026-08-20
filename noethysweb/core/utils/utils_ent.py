@@ -70,7 +70,14 @@ def _get_base_url():
     return organisateur.ent_url.rstrip("/")
 
 
-def _api_get(url, params=None, retry=True):
+class IntrouvableEnt(Exception):
+    """Levée par _api_get (seulement si lever_si_introuvable=True) quand l'ENT confirme,
+    après une éventuelle relance pour token expiré, que la ressource demandée n'existe pas
+    (404) - à distinguer d'une vraie panne réseau, qui renvoie toujours None."""
+    pass
+
+
+def _api_get(url, params=None, retry=True, lever_si_introuvable=False):
     """Appel GET avec retry automatique si le token est expiré."""
     headers = get_headers()
     if not headers:
@@ -81,9 +88,13 @@ def _api_get(url, params=None, retry=True):
             # Token peut-être expiré — on le vide et on réessaie une fois
             cache.delete(TOKEN_CACHE_KEY)
             logger.warning("ENT : token expiré, retry...")
-            return _api_get(url, params=params, retry=False)
+            return _api_get(url, params=params, retry=False, lever_si_introuvable=lever_si_introuvable)
+        if r.status_code == 404 and lever_si_introuvable:
+            raise IntrouvableEnt(url)
         r.raise_for_status()
         return r.json()
+    except IntrouvableEnt:
+        raise
     except Exception as e:
         logger.error("ENT : échec GET %s : %s", url, e)
         return None
@@ -158,6 +169,25 @@ def get_user(ent_id):
         return None
 
     return _api_get(f"{base_url}/directory/user/{ent_id}")
+
+
+def get_user_ou_introuvable(ent_id):
+    """
+    Comme get_user, mais distingue une vraie panne d'une confirmation de l'ENT que ce
+    compte n'existe plus (élève parti, compte supprimé) - get_user seul renvoie None dans
+    les deux cas, ce qui fait dire à tort "vérifiez la connexion" à un agent qui synchronise
+    une personne qui a simplement quitté l'établissement. Réservée aux écrans de
+    synchronisation, où cette distinction change concrètement le message affiché - ne
+    remplace pas get_user() pour ses autres usages (import, corroboration...).
+    Retourne (data, introuvable) - un seul des deux est "utile" à la fois.
+    """
+    base_url = _get_base_url()
+    if not base_url:
+        return None, False
+    try:
+        return _api_get(f"{base_url}/directory/user/{ent_id}", lever_si_introuvable=True), False
+    except IntrouvableEnt:
+        return None, True
 
 
 def get_school(school_id):

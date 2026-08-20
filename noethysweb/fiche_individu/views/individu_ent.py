@@ -11,7 +11,7 @@ from django.utils import timezone
 from core.models import Individu, Scolarite, Rattachement
 from core.views.base import CustomView
 from core.utils import utils_historique
-from core.utils.utils_ent import get_user, get_headers, search_by_name
+from core.utils.utils_ent import get_user, get_user_ou_introuvable, get_headers, search_by_name
 from fiche_individu.views.individu import Onglet
 
 
@@ -141,7 +141,10 @@ class SynchroniserIndividu(Onglet, TemplateView):
             context['erreur'] = "Cet individu n'a pas été importé depuis l'ENT."
             return context
 
-        data_ent = get_user(individu.ent_id)
+        data_ent, introuvable = get_user_ou_introuvable(individu.ent_id)
+        if introuvable:
+            context['erreur'] = "Cette personne n'existe plus dans l'ENT (compte supprimé, ou élève parti de l'établissement). Vous pouvez délier ce compte ENT depuis le Résumé si besoin."
+            return context
         if not data_ent:
             context['erreur'] = "Impossible de récupérer les données depuis l'ENT. Vérifiez la connexion."
             return context
@@ -155,7 +158,10 @@ class SynchroniserIndividu(Onglet, TemplateView):
         idindividu = self.kwargs['idindividu']
         individu = Individu.objects.get(pk=idindividu)
 
-        data_ent = get_user(individu.ent_id)
+        data_ent, introuvable = get_user_ou_introuvable(individu.ent_id)
+        if introuvable:
+            messages.error(request, "Cette personne n'existe plus dans l'ENT (compte supprimé, ou élève parti de l'établissement).")
+            return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
         if not data_ent:
             messages.error(request, "Impossible de récupérer les données ENT.")
             return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
