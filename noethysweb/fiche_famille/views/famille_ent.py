@@ -64,8 +64,11 @@ def _civilite_enfant_defaut():
 
 def _adresses_differentes(parent1_data, parent2_data):
     def normaliser(data):
-        rue = (data.get("address") or "").strip().lower()
-        cp = (data.get("zipCode") or "").strip().lower()
+        # _normaliser_texte (accents/casse) : même traitement que pour les noms et les
+        # écoles ailleurs dans ce fichier - une rue identique écrite avec/sans accent ne
+        # doit pas faire croire à deux adresses différentes.
+        rue = _normaliser_texte(data.get("address") or "")
+        cp = _normaliser_texte(data.get("zipCode") or "")
         return f"{rue}|{cp}"
     adr1 = normaliser(parent1_data)
     adr2 = normaliser(parent2_data)

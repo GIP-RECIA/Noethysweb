@@ -26,7 +26,7 @@ from core.models import (
     QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
     TypeCotisation, UniteCotisation, Utilisateur,
 )
-from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _importer_eleve_ent
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _importer_eleve_ent
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -839,6 +839,37 @@ class TestImporterFamilleEntFicheExistanteNonLiee(TestCase):
         resultats = self._lancer_recherche(self._eleve("ENT-NOUVEAU4", "Julie", "ROBERT"))
 
         self.assertIsNone(resultats[0]["fiche_existante_msg"])
+
+
+class TestAdressesDifferentesNormalisation(TestCase):
+    """_adresses_differentes (détection de parents séparés à l'import) ne doit pas
+    confondre une même adresse écrite différemment (accent, casse) avec une vraie
+    adresse différente - mesuré sur les 696 élèves d'une recette ENT réelle : 0 faux
+    positif actuellement, mais la comparaison ne normalisait pas du tout, contrairement
+    aux noms et aux écoles ailleurs dans ce fichier. Précaution avant que ça n'arrive
+    sur une vraie collectivité aux adresses accentuées."""
+
+    def test_meme_adresse_avec_accent_different_nest_pas_differente(self):
+        self.assertFalse(_adresses_differentes(
+            {"address": "12 rue des Écoles", "zipCode": "45000"},
+            {"address": "12 rue des Ecoles", "zipCode": "45000"},
+        ))
+
+    def test_meme_adresse_casse_differente_nest_pas_differente(self):
+        self.assertFalse(_adresses_differentes(
+            {"address": "12 RUE DES ECOLES", "zipCode": "45000"},
+            {"address": "12 rue des ecoles", "zipCode": "45000"},
+        ))
+
+    def test_adresses_vraiment_differentes_restent_differentes(self):
+        self.assertTrue(_adresses_differentes(
+            {"address": "12 rue des Écoles", "zipCode": "45000"},
+            {"address": "9 avenue du Parc", "zipCode": "45100"},
+        ))
+
+    def test_les_deux_adresses_vides_nest_pas_differente(self):
+        """Non-régression : comportement déjà existant, ne doit pas changer."""
+        self.assertFalse(_adresses_differentes({"address": "", "zipCode": ""}, {"address": "", "zipCode": ""}))
 
 
 class TestReattributionPrestation(TestCase):
