@@ -126,6 +126,17 @@
                             </div>
                         {% endif %}
 
+                        {% if eleve.fiche_existante_msg %}
+                            <div class="alert alert-warning mt-2">
+                                <i class="fa fa-exclamation-triangle"></i> {{ eleve.fiche_existante_msg }}
+                                {% if eleve.fiche_existante_famille_id %}
+                                    <a href="{% url 'famille_resume' idfamille=eleve.fiche_existante_famille_id %}" class="btn btn-sm btn-warning ml-2" target="_blank">
+                                        <i class="fa fa-eye"></i> Voir cette fiche
+                                    </a>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+
                         {% if eleve.deja_importe %}
                             <div class="alert alert-info">
                                 <i class="fa fa-info-circle"></i> Cet élève a déjà été importé.

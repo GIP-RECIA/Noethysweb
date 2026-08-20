@@ -149,6 +149,26 @@ def _trouver_ecole(ecole_nom, uai, ent_id=None):
     return ecole
 
 
+def _chercher_enfant_existant_non_lie(nom, prenom):
+    """
+    Cherche, par nom (insensible casse/accents), un enfant déjà présent dans Noethys mais
+    jamais lié à l'ENT (ent_id vide) - contrairement à la vérification "déjà importé" de
+    l'écran d'import, qui ne cherche que par ent_id et ne voit donc jamais une fiche saisie
+    à la main avant l'arrivée de l'ENT. Sans cet appel, importer un tel enfant crée un
+    doublon silencieux (2 fiches pour la même personne) au lieu de prévenir l'agent.
+    Renvoie (individu, famille) ou (None, None).
+    """
+    if not nom or not prenom:
+        return None, None
+    nom_normalise, prenom_normalise = _normaliser_texte(nom), _normaliser_texte(prenom)
+    candidats = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
+    for candidat in candidats:
+        if _normaliser_texte(candidat.nom) == nom_normalise and _normaliser_texte(candidat.prenom or "") == prenom_normalise:
+            ratt = Rattachement.objects.filter(individu=candidat, categorie=2).select_related("famille").first()
+            return candidat, (ratt.famille if ratt else None)
+    return None, None
+
+
 def _get_annee_scolaire_par_defaut():
     """
     Retourne (date_debut, date_fin) de l'année scolaire en cours (1er septembre -> 31 août),
@@ -496,6 +516,22 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             else:
                 enfant["deja_importe"] = False
                 enfant["famille_id"] = None
+
+            # Avertir si une fiche du même nom existe déjà dans Noethys SANS lien ENT (saisie
+            # à la main avant l'arrivée de l'ENT, ou jamais rapprochée) - la vérification
+            # "déjà importé" ci-dessus ne la voit pas, puisqu'elle ne cherche que par ent_id.
+            # Sans cet avertissement, importer créait un doublon silencieux.
+            enfant["fiche_existante_msg"] = None
+            enfant["fiche_existante_famille_id"] = None
+            if not enfant["deja_importe"]:
+                individu_non_lie, famille_non_liee = _chercher_enfant_existant_non_lie(enfant.get("lastName"), enfant.get("firstName"))
+                if individu_non_lie:
+                    enfant["fiche_existante_famille_id"] = famille_non_liee.pk if famille_non_liee else None
+                    enfant["fiche_existante_msg"] = (
+                        f"Attention : une fiche « {individu_non_lie.prenom} {individu_non_lie.nom} » existe déjà dans "
+                        f"Noethys{f' (famille {famille_non_liee.nom})' if famille_non_liee else ''}, sans lien ENT. "
+                        f"Vérifiez qu'il ne s'agit pas de la même personne avant d'importer, sinon vous créerez un doublon."
+                    )
 
             # Récupérer les détails des parents (déjà récupérés en parallèle à la phase 3)
             parents_details = []

@@ -766,6 +766,81 @@ class TestImporterFamilleEntEcoleNonReconnue(TestCase):
         self.assertNotIn("ENT-KO", ids)
 
 
+class TestImporterFamilleEntFicheExistanteNonLiee(TestCase):
+    """L'écran d'import unitaire ne détectait "déjà importé" que par ent_id - une fiche
+    saisie à la main avant l'arrivée de l'ENT (ou jamais rapprochée) était invisible pour
+    lui, et l'import créait un doublon silencieux. Un avertissement doit maintenant prévenir
+    l'agent avant l'import, sans bloquer (l'agent peut avoir raison - ce n'est peut-être pas
+    la même personne)."""
+
+    def _lancer_recherche(self, eleve_ent):
+        request = RequestFactory().post("/", {"action": "rechercher", "first_name": "Test", "last_name": "Test"})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+
+        with patch("fiche_famille.views.famille_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_famille.views.famille_ent.search_by_name", return_value=[{"id": eleve_ent["id"], "type": "Student"}]), \
+             patch("fiche_famille.views.famille_ent.get_user", return_value=eleve_ent), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            ImporterFamilleEnt()._effectuer_recherche(request, "Test", "Test")
+
+        return request.session.get("ent_resultats")
+
+    @staticmethod
+    def _eleve(ent_id, prenom, nom):
+        return {"id": ent_id, "type": "Student", "firstName": prenom, "lastName": nom, "parents": []}
+
+    def test_avertit_si_une_fiche_du_meme_nom_existe_sans_lien_ent(self):
+        famille = Famille.objects.create(nom="HOMONYME")
+        Individu.objects.create(nom="DUPONT", prenom="Alice", civilite=4)
+        Rattachement.objects.create(
+            individu=Individu.objects.get(nom="DUPONT", prenom="Alice"), famille=famille, categorie=2, titulaire=False,
+        )
+
+        resultats = self._lancer_recherche(self._eleve("ENT-NOUVEAU", "Alice", "DUPONT"))
+
+        self.assertIsNotNone(resultats[0]["fiche_existante_msg"], "Aucun avertissement alors qu'une fiche non liée du même nom existe.")
+        self.assertEqual(resultats[0]["fiche_existante_famille_id"], famille.pk)
+
+    def test_pas_davertissement_si_aucune_fiche_existante(self):
+        resultats = self._lancer_recherche(self._eleve("ENT-NOUVEAU2", "Bob", "MARTIN"))
+
+        self.assertIsNone(resultats[0]["fiche_existante_msg"])
+
+    def test_pas_davertissement_si_la_fiche_existante_est_deja_liee_a_lent(self):
+        """Ce cas est déjà couvert par le message "déjà importé" - pas la peine de doubler
+        l'avertissement."""
+        famille = Famille.objects.create(nom="DEJALIE")
+        individu = Individu.objects.create(nom="MARTIN", prenom="Chloe", civilite=4, ent_id="ENT-DEJA")
+        Rattachement.objects.create(individu=individu, famille=famille, categorie=2, titulaire=False)
+
+        resultats = self._lancer_recherche(self._eleve("ENT-DEJA", "Chloe", "MARTIN"))
+
+        self.assertTrue(resultats[0]["deja_importe"])
+        self.assertIsNone(resultats[0]["fiche_existante_msg"])
+
+    def test_comparaison_insensible_aux_accents_et_a_la_casse(self):
+        famille = Famille.objects.create(nom="ACCENTS")
+        individu = Individu.objects.create(nom="LEGRAND", prenom="Chloé", civilite=4)
+        Rattachement.objects.create(individu=individu, famille=famille, categorie=2, titulaire=False)
+
+        # Côté ENT, sans accent et en majuscules - même personne
+        resultats = self._lancer_recherche(self._eleve("ENT-NOUVEAU3", "CHLOE", "legrand"))
+
+        self.assertIsNotNone(resultats[0]["fiche_existante_msg"], "L'accent/la casse ne devrait pas empêcher la détection.")
+
+    def test_ne_declenche_pas_sur_un_parent_du_meme_nom(self):
+        """La recherche ne doit porter que sur les ENFANTS (categorie=2) - un parent
+        homonyme n'est pas le cas visé ici (et créerait de faux avertissements)."""
+        famille = Famille.objects.create(nom="PARENT")
+        individu = Individu.objects.create(nom="ROBERT", prenom="Julie", civilite=3)
+        Rattachement.objects.create(individu=individu, famille=famille, categorie=1, titulaire=True)
+
+        resultats = self._lancer_recherche(self._eleve("ENT-NOUVEAU4", "Julie", "ROBERT"))
+
+        self.assertIsNone(resultats[0]["fiche_existante_msg"])
+
+
 class TestReattributionPrestation(TestCase):
     """Le bouton "Réattribuer une prestation" (ReattribuerPrestation) sert à corriger
     manuellement une prestation restée ambiguë après une séparation de famille (enfant
