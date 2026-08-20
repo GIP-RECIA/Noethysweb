@@ -18,11 +18,13 @@ from django.core.cache import cache
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.messages import get_messages
 from django.utils import timezone
 
 from core.models import Activite, Assurance, Assureur, CategorieTarif, Classe, Ecole, Famille, Groupe, Historique, Individu, Inscription, Organisateur, Rattachement, Scolarite, Structure, Utilisateur
 from core.utils.utils_ent import get_user_ou_introuvable
-from fiche_individu.views.individu_ent import LierCompteEnt, SynchroniserIndividu
+from fiche_individu.views.individu_ent import LierCompteEnt, SynchroniserIndividu, Get_lignes_comparaison, Appliquer_sync_ecole_classe, Get_scolarite_actuelle
+from fiche_famille.views.famille_ent import _get_annee_scolaire_par_defaut
 from fiche_individu.views.individu_assurances import ReattribuerAssurance
 from fiche_individu.views.individu_inscriptions import Ajouter, ReattribuerInscription
 
@@ -1013,3 +1015,196 @@ class TestSynchroniserIndividuIntrouvable(TestCase):
 
         self.individu.refresh_from_db()
         self.assertEqual(self.individu.nom, "SYNCINTROUV", "Rien ne devrait être modifié si la personne est introuvable côté ENT.")
+
+
+class TestSynchroniserIndividuCasBase(TestCase):
+    """Cas de base de l'écran de synchro individuelle : pas de lien ENT, aucun champ
+    coché, valeur ENT vide écrite comme None plutôt que chaîne vide, comparaison qui ne
+    modifie jamais rien toute seule (GET)."""
+
+    def setUp(self):
+        self.famille = Famille.objects.create(nom="SYNCBASE")
+
+    def _vue(self, request, individu):
+        vue = SynchroniserIndividu()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": individu.pk}
+        vue.request = request
+        return vue
+
+    def test_individu_sans_ent_id(self):
+        individu = Individu.objects.create(nom="SANSENTID", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=individu, famille=self.famille, categorie=2, titulaire=False)
+
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        context = self._vue(request, individu).get_context_data()
+
+        self.assertEqual(context["erreur"], "Cet individu n'a pas été importé depuis l'ENT.")
+
+    def test_aucun_champ_coche_rien_nest_modifie(self):
+        individu = Individu.objects.create(nom="AUCUNCHAMP", prenom="Enfant", civilite=4, ent_id="ENT-AUCUNCHAMP")
+        Rattachement.objects.create(individu=individu, famille=self.famille, categorie=2, titulaire=False)
+
+        request = RequestFactory().post("/", {})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=({"lastName": "NOUVEAU"}, False)):
+            self._vue(request, individu).post(request, idfamille=self.famille.pk, idindividu=individu.pk)
+
+        individu.refresh_from_db()
+        self.assertEqual(individu.nom, "AUCUNCHAMP")
+        msgs = [str(m) for m in get_messages(request)]
+        self.assertTrue(any("Aucun champ sélectionné" in m for m in msgs))
+
+    def test_valeur_ent_vide_ecrit_none(self):
+        individu = Individu.objects.create(nom="VIDETEST", prenom="Enfant", civilite=4, ent_id="ENT-VIDETEST", mail="ancien@test.fr")
+        Rattachement.objects.create(individu=individu, famille=self.famille, categorie=2, titulaire=False)
+
+        request = RequestFactory().post("/", {"champs": ["mail"]})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=({"email": ""}, False)):
+            self._vue(request, individu).post(request, idfamille=self.famille.pk, idindividu=individu.pk)
+
+        individu.refresh_from_db()
+        self.assertIsNone(individu.mail)
+
+    def test_comparaison_detecte_les_ecarts_sans_rien_modifier(self):
+        individu = Individu.objects.create(nom="COMPAR", prenom="Enfant", civilite=4, ent_id="ENT-COMPAR", mail="ancien@test.fr")
+        Rattachement.objects.create(individu=individu, famille=self.famille, categorie=2, titulaire=False)
+
+        request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=({"lastName": "COMPAR", "email": "nouveau@test.fr"}, False)):
+            context = self._vue(request, individu).get_context_data()
+
+        ligne_mail = next(l for l in context["lignes"] if l["code"] == "mail")
+        self.assertTrue(ligne_mail["different"])
+        ligne_nom = next(l for l in context["lignes"] if l["code"] == "nom")
+        self.assertFalse(ligne_nom["different"])
+
+        individu.refresh_from_db()
+        self.assertEqual(individu.mail, "ancien@test.fr", "Le simple affichage (GET) ne doit jamais modifier la fiche.")
+
+
+class TestGetLignesComparaisonEcoleClasse(TestCase):
+    """La ligne École/Classe ne doit jamais être proposée pour un parent (piège : l'ENT
+    renvoie aussi un champ "structures" pour les parents - un rattachement administratif,
+    pas une vraie scolarité), et doit être marquée non synchronisable si l'école n'est pas
+    encore connue de Noethys."""
+
+    def test_parent_avec_structure_ne_propose_pas_ecole_classe(self):
+        individu = Individu.objects.create(nom="PARENTSTRUCT", prenom="Papa", civilite=1)
+        data_ent = {
+            "type": "Relative", "lastName": "PARENTSTRUCT", "firstName": "Papa",
+            "structures": [{"name": "École Test Piege", "uai": None, "id": "ENT-ECOLE-PIEGE"}],
+        }
+
+        lignes = Get_lignes_comparaison(individu, data_ent)
+
+        self.assertFalse(
+            any(l["code"] == "ecole_classe" for l in lignes),
+            "La ligne École/Classe ne doit jamais apparaître pour un parent.",
+        )
+
+    def test_eleve_ecole_non_reconnue_nest_pas_cochable(self):
+        individu = Individu.objects.create(nom="ELEVEECOLEKO", prenom="Enfant", civilite=4)
+        data_ent = {
+            "type": "Student", "lastName": "ELEVEECOLEKO", "firstName": "Enfant",
+            "structures": [{"name": "École Jamais Connue Synchro", "uai": None, "id": "ENT-ECOLE-JAMAIS"}],
+        }
+
+        lignes = Get_lignes_comparaison(individu, data_ent)
+
+        ligne = next(l for l in lignes if l["code"] == "ecole_classe")
+        self.assertTrue(ligne["ecole_non_reconnue"])
+
+    def test_eleve_ecole_reconnue_est_cochable(self):
+        Ecole.objects.create(nom="École Synchro Connue", ent_id="ENT-ECOLE-SYNCHRO-OK")
+        individu = Individu.objects.create(nom="ELEVEECOLEOK", prenom="Enfant", civilite=4)
+        data_ent = {
+            "type": "Student", "lastName": "ELEVEECOLEOK", "firstName": "Enfant",
+            "structures": [{"name": "École Synchro Connue", "uai": None, "id": "ENT-ECOLE-SYNCHRO-OK"}],
+        }
+
+        lignes = Get_lignes_comparaison(individu, data_ent)
+
+        ligne = next(l for l in lignes if l["code"] == "ecole_classe")
+        self.assertFalse(ligne["ecole_non_reconnue"])
+
+
+class TestAppliquerSyncEcoleClasse(TestCase):
+    """Appliquer_sync_ecole_classe : création de scolarité si absente, mise à jour si
+    déjà existante (pas de doublon), choix de la scolarité "actuelle", et dates par défaut
+    si l'ENT n'en fournit pas (observé systématiquement en pratique)."""
+
+    def test_cree_une_scolarite_si_absente(self):
+        ecole = Ecole.objects.create(nom="École C8", ent_id="ENT-ECOLE-C8")
+        individu = Individu.objects.create(nom="C8", prenom="Enfant", civilite=4)
+        data_ent = {"type": "Student", "structures": [{"name": "École C8", "uai": None, "id": "ENT-ECOLE-C8"}], "allClasses": [{"name": "CE1"}]}
+
+        resultat = Appliquer_sync_ecole_classe(individu, data_ent)
+
+        self.assertTrue(resultat)
+        scolarite = Scolarite.objects.get(individu=individu)
+        self.assertEqual(scolarite.ecole, ecole)
+        self.assertEqual(scolarite.classe.nom, "CE1")
+
+    def test_met_a_jour_la_scolarite_existante_plutot_que_den_creer_une(self):
+        ecole_avant = Ecole.objects.create(nom="École C9 Avant")
+        ecole_apres = Ecole.objects.create(nom="École C9 Apres", ent_id="ENT-ECOLE-C9")
+        individu = Individu.objects.create(nom="C9", prenom="Enfant", civilite=4)
+        scolarite = Scolarite.objects.create(individu=individu, ecole=ecole_avant, date_debut=date(2026, 9, 1), date_fin=date(2027, 8, 31))
+        data_ent = {"type": "Student", "structures": [{"name": "École C9 Apres", "uai": None, "id": "ENT-ECOLE-C9"}], "allClasses": [{"name": "CM2"}]}
+
+        Appliquer_sync_ecole_classe(individu, data_ent)
+
+        self.assertEqual(Scolarite.objects.filter(individu=individu).count(), 1, "Doit mettre à jour la ligne existante, pas en créer une deuxième.")
+        scolarite.refresh_from_db()
+        self.assertEqual(scolarite.ecole, ecole_apres)
+        self.assertEqual(scolarite.classe.nom, "CM2")
+
+    def test_scolarite_actuelle_est_celle_qui_couvre_aujourdhui(self):
+        ecole = Ecole.objects.create(nom="École C10")
+        individu = Individu.objects.create(nom="C10", prenom="Enfant", civilite=4)
+        Scolarite.objects.create(individu=individu, ecole=ecole, date_debut=date(2020, 9, 1), date_fin=date(2021, 8, 31))
+        actuelle = Scolarite.objects.create(individu=individu, ecole=ecole, date_debut=date(2025, 9, 1), date_fin=date(2099, 8, 31))
+
+        resultat = Get_scolarite_actuelle(individu)
+
+        self.assertEqual(resultat.pk, actuelle.pk)
+
+    def test_scolarite_actuelle_est_la_plus_recente_si_aucune_ne_couvre_aujourdhui(self):
+        ecole = Ecole.objects.create(nom="École C10b")
+        individu = Individu.objects.create(nom="C10b", prenom="Enfant", civilite=4)
+        Scolarite.objects.create(individu=individu, ecole=ecole, date_debut=date(2018, 9, 1), date_fin=date(2019, 8, 31))
+        plus_recente = Scolarite.objects.create(individu=individu, ecole=ecole, date_debut=date(2020, 9, 1), date_fin=date(2021, 8, 31))
+
+        resultat = Get_scolarite_actuelle(individu)
+
+        self.assertEqual(resultat.pk, plus_recente.pk)
+
+    def test_dates_par_defaut_si_absentes_cote_ent(self):
+        ecole = Ecole.objects.create(nom="École C12", ent_id="ENT-ECOLE-C12")
+        individu = Individu.objects.create(nom="C12", prenom="Enfant", civilite=4)
+        data_ent = {"type": "Student", "structures": [{"name": "École C12", "uai": None, "id": "ENT-ECOLE-C12"}], "allClasses": [{"name": "CP"}]}
+        # Pas de startDateClasses/endDateClasses fourni - cas observé systématiquement côté ENT
+
+        Appliquer_sync_ecole_classe(individu, data_ent)
+
+        annee_debut, annee_fin = _get_annee_scolaire_par_defaut()
+        classe = Scolarite.objects.get(individu=individu).classe
+        self.assertEqual(classe.date_debut, annee_debut)
+        self.assertEqual(classe.date_fin, annee_fin)

@@ -2141,3 +2141,43 @@ class TestListeSynchroIntrouvable(TestCase):
         individu.refresh_from_db()
         self.assertEqual(individu.mail, "nouveau@test.fr")
         self.assertTrue(any("synchronisé" in m for _, m in msgs))
+
+
+class TestListeSynchroAffichage(TestCase):
+    """Complète TestListeSynchroIntrouvable : cas d'affichage de base - connexion
+    totalement indisponible (liste vide plutôt que chaque individu marqué "introuvable"),
+    et seuls les individus liés à l'ENT apparaissent."""
+
+    def _get_context(self, headers_ret, side_effect=None):
+        vue = ListeSynchro()
+        vue.request = RequestFactory().get("/")
+        SessionMiddleware(lambda r: None).process_request(vue.request)
+        vue.request.session.save()
+        vue.request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        with patch("fiche_famille.views.famille_ent_synchro.get_headers", return_value=headers_ret), \
+             patch("fiche_famille.views.famille_ent_synchro.get_user_ou_introuvable", side_effect=side_effect or (lambda ent_id: (None, False))):
+            return vue.get_context_data()
+
+    def test_erreur_connexion_globale_vide_la_liste(self):
+        """Distinct du cas individuel "introuvable" (TestListeSynchroIntrouvable) : ici,
+        c'est la connexion elle-même qui est coupée avant même d'interroger qui que ce
+        soit - la liste ne doit montrer personne, pas chaque individu en échec."""
+        Individu.objects.create(nom="C14A", prenom="Enfant", civilite=4, ent_id="ENT-C14A")
+
+        context = self._get_context(headers_ret=None)
+
+        self.assertTrue(context["erreur_connexion"])
+        self.assertEqual(context["lignes"], [])
+
+    def test_seuls_les_individus_lies_apparaissent(self):
+        Individu.objects.create(nom="C14B", prenom="SansLien", civilite=4)
+        avec_lien = Individu.objects.create(nom="C14B", prenom="AvecLien", civilite=4, ent_id="ENT-C14B")
+
+        context = self._get_context(
+            headers_ret={"Authorization": "Bearer test"},
+            side_effect=lambda ent_id: ({"lastName": "C14B"}, False),
+        )
+
+        ids = [l["individu"].pk for l in context["lignes"]]
+        self.assertIn(avec_lien.pk, ids)
+        self.assertEqual(len(ids), 1, "Seul l'individu lié à l'ENT devrait apparaître.")
