@@ -28,7 +28,7 @@ from core.models import (
 )
 from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent, _trouver_ecole
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
-from fiche_famille.views.civilite_verification import ListeCivilitesAVerifier
+from fiche_famille.views.civilite_verification import CHOIX_ADULTE, CHOIX_ENFANT, ListeCivilitesAVerifier
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -1527,6 +1527,90 @@ class TestTrouverEcole(TestCase):
         self.assertIsNone(resultat)
 
 
+class TestCiviliteAImport(TestCase):
+    """Civilité au moment de l'import (_importer_eleve_ent) : valeur arbitraire pour un
+    élève (l'ENT ne fournit jamais cette info), conversion du titre ENT pour un parent, et
+    valeur par défaut si ce titre est absent ou inconnu - dans tous les cas marqué "à
+    vérifier", jamais présenté comme une donnée sûre."""
+
+    def test_eleve_importe_civilite_arbitraire_et_a_verifier(self):
+        eleve_data = {"id": "ENT-E1CIV", "type": "Student", "firstName": "XE", "lastName": "TESTE1", "parents": []}
+
+        _importer_eleve_ent("ENT-E1CIV", eleve_data=eleve_data)
+
+        eleve = Individu.objects.get(ent_id="ENT-E1CIV")
+        self.assertEqual(eleve.civilite, 4)  # valeur arbitraire (Garçon), jamais fournie par l'ENT
+        self.assertTrue(eleve.civilite_a_verifier)
+
+    def test_parent_importe_civilite_convertie_depuis_titre_ent(self):
+        parents_cache = {"ENT-E2CIV": {"id": "ENT-E2CIV", "lastName": "XM", "firstName": "Maman", "title": "Mme"}}
+        eleve_data = {"id": "ENT-E2CIVENFANT", "type": "Student", "firstName": "XE", "lastName": "TESTE2", "parents": [{"id": "ENT-E2CIV"}]}
+
+        _importer_eleve_ent("ENT-E2CIVENFANT", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        parent = Individu.objects.get(ent_id="ENT-E2CIV")
+        self.assertEqual(parent.civilite, 3)  # Madame, converti depuis "Mme"
+        self.assertTrue(parent.civilite_a_verifier)
+
+    def test_parent_sans_titre_ent_civilite_par_defaut_et_a_verifier(self):
+        parents_cache = {"ENT-E3CIV": {"id": "ENT-E3CIV", "lastName": "XP", "firstName": "Papa"}}  # pas de "title"
+        eleve_data = {"id": "ENT-E3CIVENFANT", "type": "Student", "firstName": "XE", "lastName": "TESTE3", "parents": [{"id": "ENT-E3CIV"}]}
+
+        _importer_eleve_ent("ENT-E3CIVENFANT", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        parent = Individu.objects.get(ent_id="ENT-E3CIV")
+        self.assertEqual(parent.civilite, 1)  # Monsieur par défaut
+        self.assertTrue(parent.civilite_a_verifier)
+
+
+class TestListeCivilitesAVerifierAffichage(TestCase):
+    """Regroupement par famille, choix proposés selon le rôle réel (enfant vs adulte), et
+    individus sans famille regroupés à part plutôt que de disparaître de la liste."""
+
+    def _context(self):
+        vue = ListeCivilitesAVerifier()
+        vue.request = RequestFactory().get("/")
+        vue.request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        return vue.get_context_data()
+
+    def test_regroupe_par_famille(self):
+        famille = Famille.objects.create(nom="CIVGROUP")
+        xp = Individu.objects.create(nom="X", prenom="P", civilite=1, civilite_a_verifier=True)
+        xe1 = Individu.objects.create(nom="X", prenom="E1", civilite=4, civilite_a_verifier=True)
+        Rattachement.objects.create(individu=xp, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=xe1, famille=famille, categorie=2, titulaire=False)
+
+        context = self._context()
+
+        groupe = next(g for g in context["groupes"] if g["famille"] and g["famille"].pk == famille.pk)
+        ids_dans_groupe = {l["individu"].pk for l in groupe["lignes"]}
+        self.assertEqual(ids_dans_groupe, {xp.pk, xe1.pk})
+
+    def test_choix_proposes_selon_le_role(self):
+        famille = Famille.objects.create(nom="CIVCHOIX")
+        xp = Individu.objects.create(nom="X", prenom="P", civilite=1, civilite_a_verifier=True)
+        xe1 = Individu.objects.create(nom="X", prenom="E1", civilite=4, civilite_a_verifier=True)
+        Rattachement.objects.create(individu=xp, famille=famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=xe1, famille=famille, categorie=2, titulaire=False)
+
+        context = self._context()
+        groupe = next(g for g in context["groupes"] if g["famille"] and g["famille"].pk == famille.pk)
+        lignes_par_individu = {l["individu"].pk: l for l in groupe["lignes"]}
+
+        self.assertEqual(lignes_par_individu[xe1.pk]["choix"], CHOIX_ENFANT)
+        self.assertEqual(lignes_par_individu[xp.pk]["choix"], CHOIX_ADULTE)
+
+    def test_individu_sans_famille_regroupe_a_part(self):
+        seul = Individu.objects.create(nom="SEUL", prenom="Sans", civilite=1, civilite_a_verifier=True)
+        # Aucun Rattachement créé pour cet individu
+
+        context = self._context()
+
+        groupe = next(g for g in context["groupes"] if g["famille"] is None)
+        ids = {l["individu"].pk for l in groupe["lignes"]}
+        self.assertIn(seul.pk, ids)
+
+
 class TestListeCivilitesAVerifierValidationServeur(TestCase):
     """La confirmation de civilité (ListeCivilitesAVerifier.post) doit revérifier côté
     serveur que la valeur reçue correspond bien au rôle réel de la personne (enfant vs
@@ -1589,6 +1673,23 @@ class TestListeCivilitesAVerifierValidationServeur(TestCase):
         msgs = self._confirmer({})
 
         self.assertTrue(any("Aucun individu sélectionné" in m for m in msgs))
+
+    def test_individu_coche_sans_civilite_choisie_est_ignore(self):
+        self._confirmer({"individus_confirmes": [str(self.xe1.pk)]})  # pas de civilite_<id>
+
+        self.xe1.refresh_from_db()
+        self.assertTrue(self.xe1.civilite_a_verifier, "Ne doit pas être confirmé sans valeur choisie.")
+
+    def test_individu_deja_confirme_entre_temps_est_filtre(self):
+        # Un autre agent a déjà traité cet individu entre l'affichage de l'écran et cette soumission
+        self.xe1.civilite_a_verifier = False
+        self.xe1.civilite = 5
+        self.xe1.save()
+
+        self._confirmer({"individus_confirmes": [str(self.xe1.pk)], f"civilite_{self.xe1.pk}": "4"})
+
+        self.xe1.refresh_from_db()
+        self.assertEqual(self.xe1.civilite, 5, "Ne doit pas être re-modifié - déjà confirmé entre-temps.")
 
 
 class TestReattributionPrestation(TestCase):
