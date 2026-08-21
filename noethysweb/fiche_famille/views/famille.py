@@ -21,6 +21,7 @@ from fiche_famille.utils.utils_famille import LISTE_ONGLETS
 from core.constants import TYPE_COMPTE_FAMILLE
 from cotisations.utils import utils_cotisations_manquantes
 from core.utils.utils_configuration_globale import Get_dict_parametres
+from core.utils.utils_ent import ent_est_actif
 
 
 def Definir_titulaire(request):
@@ -97,41 +98,46 @@ class Page(crud.Page):
     description_saisie = "Saisissez toutes les informations concernant la famille à saisir et cliquez sur le bouton Enregistrer."
     objet_singulier = "une famille"
     objet_pluriel = "des familles"
-    boutons_liste = [
-        {"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(url_ajouter), "icone": "fa fa-plus"},
-        {"label": "Depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_famille"), "icone": "fa fa-cloud-download"},
-        {"label": "Pré-liaison ENT", "classe": "btn btn-warning", "href": reverse_lazy("ent_preliaison"), "icone": "fa fa-link",
-         "onclick": (
-             "(function(el){"
-             "var original=el.innerHTML;"
-             "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
-             "window.addEventListener('pageshow', function(e){"
-             "if(e.persisted){el.innerHTML=original;}"
-             "});"
-             "})(this)"
-         )},
-        {"label": "Import en masse ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_masse"), "icone": "fa fa-cloud-download",
-         "onclick": (
-             "(function(el){"
-             "var original=el.innerHTML;"
-             "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
-             "window.addEventListener('pageshow', function(e){"
-             "if(e.persisted){el.innerHTML=original;}"
-             "});"
-             "})(this)"
-         )},
-        {"label": "Synchronisation ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_synchro_masse"), "icone": "fa fa-refresh",
-         "onclick": (
-             "(function(el){"
-             "var original=el.innerHTML;"
-             "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
-             "window.addEventListener('pageshow', function(e){"
-             "if(e.persisted){el.innerHTML=original;}"
-             "});"
-             "})(this)"
-         )},
-        {"label": "Civilités à vérifier", "classe": "btn btn-warning", "href": reverse_lazy("civilites_a_verifier"), "icone": "fa fa-question-circle"},
-    ]
+    @property
+    def boutons_liste(self):
+        boutons = [{"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(self.url_ajouter), "icone": "fa fa-plus"}]
+        if not ent_est_actif():
+            return boutons
+        boutons += [
+            {"label": "Depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_famille"), "icone": "fa fa-cloud-download"},
+            {"label": "Pré-liaison ENT", "classe": "btn btn-warning", "href": reverse_lazy("ent_preliaison"), "icone": "fa fa-link",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Import en masse ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_masse"), "icone": "fa fa-cloud-download",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Synchronisation ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_synchro_masse"), "icone": "fa fa-refresh",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Civilités à vérifier", "classe": "btn btn-warning", "href": reverse_lazy("civilites_a_verifier"), "icone": "fa fa-question-circle"},
+        ]
+        return boutons
 
 
 class Liste(Page, crud.Liste):

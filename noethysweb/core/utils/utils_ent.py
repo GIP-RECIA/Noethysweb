@@ -18,6 +18,14 @@ def _get_organisateur():
     return organisateur
 
 
+def ent_est_actif():
+    """Vrai si l'intégration ENT est activée dans Paramétrage - à revérifier au début de
+    chaque écran ENT, pas seulement en cachant ses boutons (une URL tapée à la main doit
+    être bloquée pareil)."""
+    organisateur = _get_organisateur()
+    return bool(organisateur and organisateur.ent_active)
+
+
 def get_token():
     """Récupère un token OAuth2 depuis l'ENT. Mis en cache 50 minutes (token valable 1h)."""
     token = cache.get(TOKEN_CACHE_KEY)

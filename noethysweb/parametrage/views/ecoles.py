@@ -11,7 +11,7 @@ from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
 from core.views.base import CustomView
 from core.models import Ecole
-from core.utils.utils_ent import get_headers, get_school
+from core.utils.utils_ent import get_headers, get_school, ent_est_actif
 from parametrage.forms.ecoles import Formulaire
 
 
@@ -25,10 +25,13 @@ class Page(crud.Page):
     description_saisie = "Saisissez toutes les informations concernant l'école à saisir et cliquez sur le bouton Enregistrer."
     objet_singulier = "une école"
     objet_pluriel = "des écoles"
-    boutons_liste = [
-        {"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(url_ajouter), "icone": "fa fa-plus"},
-        {"label": "Importer depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_importer_ecole"), "icone": "fa fa-cloud-download"},
-    ]
+
+    @property
+    def boutons_liste(self):
+        boutons = [{"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(self.url_ajouter), "icone": "fa fa-plus"}]
+        if ent_est_actif():
+            boutons.append({"label": "Importer depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_importer_ecole"), "icone": "fa fa-cloud-download"})
+        return boutons
 
 
 class Liste(Page, crud.Liste):
@@ -87,9 +90,16 @@ class ImporterEcoleEnt(CustomView, TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("ecoles_liste"))
         return self.render_to_response(self.get_context_data())
 
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("ecoles_liste"))
+
         action = request.POST.get("action", "rechercher")
         uai = request.POST.get("uai", "").strip()
 

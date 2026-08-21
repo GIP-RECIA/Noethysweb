@@ -11,7 +11,7 @@ from django.utils import timezone
 from core.models import Individu, Scolarite, Rattachement
 from core.views.base import CustomView
 from core.utils import utils_historique
-from core.utils.utils_ent import get_user, get_user_ou_introuvable, get_headers, search_by_name
+from core.utils.utils_ent import get_user, get_user_ou_introuvable, get_headers, search_by_name, ent_est_actif
 from fiche_individu.views.individu import Onglet
 
 
@@ -137,6 +137,10 @@ class SynchroniserIndividu(Onglet, TemplateView):
 
         individu = context['individu']
 
+        if not ent_est_actif():
+            context['erreur'] = "L'intégration ENT est désactivée."
+            return context
+
         if not individu.ent_id:
             context['erreur'] = "Cet individu n'a pas été importé depuis l'ENT."
             return context
@@ -157,6 +161,10 @@ class SynchroniserIndividu(Onglet, TemplateView):
         idfamille = self.kwargs['idfamille']
         idindividu = self.kwargs['idindividu']
         individu = Individu.objects.get(pk=idindividu)
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
 
         data_ent, introuvable = get_user_ou_introuvable(individu.ent_id)
         if introuvable:
@@ -428,6 +436,11 @@ class LierCompteEnt(Onglet, TemplateView):
     def get(self, request, *args, **kwargs):
         idfamille = self.kwargs['idfamille']
         idindividu = self.kwargs['idindividu']
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
         context = self.get_context_data()
         individu = context['individu']
 
@@ -443,6 +456,11 @@ class LierCompteEnt(Onglet, TemplateView):
     def post(self, request, *args, **kwargs):
         idfamille = self.kwargs['idfamille']
         idindividu = self.kwargs['idindividu']
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
         action = request.POST.get('action', 'rechercher')
 
         if action == 'rechercher':

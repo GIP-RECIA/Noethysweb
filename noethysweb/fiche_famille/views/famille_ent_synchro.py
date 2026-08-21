@@ -9,7 +9,7 @@ from django.urls import reverse
 
 from core.views.base import CustomView
 from core.models import Individu
-from core.utils.utils_ent import get_user_ou_introuvable, get_headers
+from core.utils.utils_ent import get_user_ou_introuvable, get_headers, ent_est_actif
 from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison, Appliquer_sync_ecole_classe
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
@@ -62,7 +62,17 @@ class ListeSynchro(CustomView, TemplateView):
         context['lignes'] = lignes
         return context
 
+    def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('famille_liste'))
+        return self.render_to_response(self.get_context_data())
+
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('famille_liste'))
+
         individus = list(Individu.objects.exclude(ent_id=None).exclude(ent_id=""))
 
         # Ne récupère les données ENT que pour les individus ayant au moins un champ coché

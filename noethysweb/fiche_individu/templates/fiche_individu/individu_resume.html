@@ -20,32 +20,34 @@
                     {% if individu.Get_adresse_complete %}<dt class="col-sm-4">Adresse</dt><dd class="col-sm-8">{{ individu.Get_adresse_complete }}</dd>{% endif %}
                     <dt class="col-sm-4">Date de création</dt><dd class="col-sm-8">{{ individu.date_creation|date:"j F Y" }}</dd>
                     <dt class="col-sm-4">ID Individu</dt><dd class="col-sm-8">{{ individu.pk }}</dd>
-                    {% if individu.ent_id %}
-                        <dt class="col-sm-4">ENT</dt>
-                        <dd class="col-sm-8">
-                            <a href="{% url 'individu_ent_synchro' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-info">
-                                <i class="fa fa-refresh"></i> Synchroniser avec l'ENT
-                            </a>
-                            <form method="post" action="{% url 'individu_ent_lier' idfamille=idfamille idindividu=idindividu %}" id="form_delier_ent" class="d-inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delier">
-                                <button type="button" class="btn btn-xs btn-outline-danger" onclick="confirmer_delier_ent()">
-                                    <i class="fa fa-unlink"></i> Délier ce compte ENT
-                                </button>
-                            </form>
-                            {% if individu.ent_lie_par %}
-                                <div class="text-muted small mt-1">
-                                    Compte lié par : {% if individu.ent_lie_par == "auto" %}import en masse (auto){% else %}{{ individu.ent_lie_par }}{% endif %}{% if individu.ent_lie_le %}, le {{ individu.ent_lie_le|date:"d/m/Y à H:i" }}{% endif %}
-                                </div>
-                            {% endif %}
-                        </dd>
-                    {% else %}
-                        <dt class="col-sm-4">ENT</dt>
-                        <dd class="col-sm-8">
-                            <a href="{% url 'individu_ent_lier' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-warning">
-                                <i class="fa fa-link"></i> Lier à un compte ENT
-                            </a>
-                        </dd>
+                    {% if organisateur.ent_active %}
+                        {% if individu.ent_id %}
+                            <dt class="col-sm-4">ENT</dt>
+                            <dd class="col-sm-8">
+                                <a href="{% url 'individu_ent_synchro' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-info">
+                                    <i class="fa fa-refresh"></i> Synchroniser avec l'ENT
+                                </a>
+                                <form method="post" action="{% url 'individu_ent_lier' idfamille=idfamille idindividu=idindividu %}" id="form_delier_ent" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delier">
+                                    <button type="button" class="btn btn-xs btn-outline-danger" onclick="confirmer_delier_ent()">
+                                        <i class="fa fa-unlink"></i> Délier ce compte ENT
+                                    </button>
+                                </form>
+                                {% if individu.ent_lie_par %}
+                                    <div class="text-muted small mt-1">
+                                        Compte lié par : {% if individu.ent_lie_par == "auto" %}import en masse (auto){% else %}{{ individu.ent_lie_par }}{% endif %}{% if individu.ent_lie_le %}, le {{ individu.ent_lie_le|date:"d/m/Y à H:i" }}{% endif %}
+                                    </div>
+                                {% endif %}
+                            </dd>
+                        {% else %}
+                            <dt class="col-sm-4">ENT</dt>
+                            <dd class="col-sm-8">
+                                <a href="{% url 'individu_ent_lier' idfamille=idfamille idindividu=idindividu %}" class="btn btn-xs btn-warning">
+                                    <i class="fa fa-link"></i> Lier à un compte ENT
+                                </a>
+                            </dd>
+                        {% endif %}
                     {% endif %}
                     {% if individu.deces %}
                         <dt class="col-sm-4">Décès</dt><dd class="col-sm-8 text-bold text-red">{% if individu.annee_deces %}Individu décédé en {{ individu.annee_deces }}{% else %}Individu décédé{% endif %}</dd>

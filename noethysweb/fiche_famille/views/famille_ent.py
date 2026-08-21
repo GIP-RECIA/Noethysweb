@@ -19,7 +19,7 @@ from core.models import (
     Ecole, Classe, Scolarite,
 )
 from core.utils import utils_historique
-from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers
+from core.utils.utils_ent import search_by_name, search_users, get_user, get_headers, ent_est_actif
 from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
@@ -423,6 +423,10 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
+
         # Lire les résultats depuis la session puis les effacer
         resultats = request.session.pop("ent_resultats", None)
         last_name = request.session.pop("ent_last_name", "")
@@ -439,6 +443,10 @@ class ImporterFamilleEnt(CustomView, TemplateView):
         ))
 
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
+
         action = request.POST.get("action", "rechercher")
 
         if action == "rechercher":
@@ -940,9 +948,16 @@ class PreLiaisonEnt(CustomView, TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
         return self.render_to_response(self.get_context_data())
 
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
+
         action = request.POST.get("action", "confirmer")
 
         if action == "rechercher":
@@ -1103,11 +1118,19 @@ class ImporterEnMasseEnt(CustomView, TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
+
         context = self.get_context_data()
         context["resume"] = request.session.pop("ent_import_masse_resume", None)
         return self.render_to_response(context)
 
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return HttpResponseRedirect(reverse("famille_liste"))
+
         ids_selectionnes = request.POST.getlist("eleves_ent_id")
         if not ids_selectionnes:
             messages.error(request, "Aucun élève sélectionné.")

@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from core.views.base import CustomView
 from core.models import Individu, Rattachement
+from core.utils.utils_ent import ent_est_actif
 
 CHOIX_ENFANT = [(4, "Garçon"), (5, "Fille")]
 CHOIX_ADULTE = [(1, "Monsieur"), (2, "Mademoiselle"), (3, "Madame")]
@@ -48,9 +49,16 @@ class ListeCivilitesAVerifier(CustomView, TemplateView):
         return context
 
     def get(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse("famille_liste"))
         return self.render_to_response(self.get_context_data())
 
     def post(self, request, *args, **kwargs):
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse("famille_liste"))
+
         ids_confirmes = request.POST.getlist("individus_confirmes")
         nb_confirmes = 0
 
