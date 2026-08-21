@@ -26,7 +26,7 @@ from core.models import (
     QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
     TypeCotisation, UniteCotisation, Utilisateur,
 )
-from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent, _trouver_ecole
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
@@ -1470,6 +1470,60 @@ class TestGetOuCreerClasseNormalisation(TestCase):
 
         self.assertNotEqual(resultat.nom, "CE2 A")
         self.assertEqual(Classe.objects.filter(ecole=ecole).count(), 2)
+
+
+class TestTrouverEcole(TestCase):
+    """_trouver_ecole n'avait jamais de test direct - seulement exercée indirectement à
+    travers les écrans qui l'appellent (import, synchro, corroboration). Priorité de
+    reconnaissance : identifiant ENT, puis UAI, puis nom (insensible accents/casse) -
+    jamais de création automatique, et complète l'ent_id manquant au passage."""
+
+    def test_trouve_par_identifiant_ent_en_priorite(self):
+        ecole_par_id = Ecole.objects.create(nom="École D2", ent_id="ENT-D2-A", uai="UAI-AUTRE")
+
+        resultat = _trouver_ecole("École D2", "UAI-AUTRE", "ENT-D2-A")
+
+        self.assertEqual(resultat.pk, ecole_par_id.pk)
+
+    def test_trouve_par_uai_si_pas_de_correspondance_par_id(self):
+        ecole = Ecole.objects.create(nom="École D2B", uai="UAI-D2-C")
+
+        resultat = _trouver_ecole("Nom Different Cote Ent", "UAI-D2-C", "ENT-INCONNU")
+
+        self.assertEqual(resultat.pk, ecole.pk)
+
+    def test_trouve_par_nom_si_pas_didentifiant_ni_uai_correspondant(self):
+        ecole = Ecole.objects.create(nom="École D2 Par Nom")
+
+        resultat = _trouver_ecole("École D2 Par Nom", None, None)
+
+        self.assertEqual(resultat.pk, ecole.pk)
+
+    def test_recherche_par_nom_insensible_accents_et_casse(self):
+        ecole = Ecole.objects.create(nom="École Élémentaire")
+
+        resultat = _trouver_ecole("ecole elementaire", None, None)
+
+        self.assertEqual(resultat.pk, ecole.pk)
+
+    def test_ecole_trouvee_par_nom_se_fait_completer_lent_id(self):
+        ecole = Ecole.objects.create(nom="École D2 Sans EntId")
+
+        _trouver_ecole("École D2 Sans EntId", None, "ENT-D2-NOUVEAU")
+
+        ecole.refresh_from_db()
+        self.assertEqual(ecole.ent_id, "ENT-D2-NOUVEAU")
+
+    def test_ecole_inconnue_ne_cree_rien(self):
+        resultat = _trouver_ecole("École Totalement Inconnue D2", "UAI-INCONNU", "ENT-INCONNU")
+
+        self.assertIsNone(resultat)
+        self.assertFalse(Ecole.objects.filter(nom="École Totalement Inconnue D2").exists())
+
+    def test_pas_de_nom_renvoie_rien(self):
+        resultat = _trouver_ecole(None, "UAI-X", "ENT-X")
+
+        self.assertIsNone(resultat)
 
 
 class TestReattributionPrestation(TestCase):

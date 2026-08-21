@@ -1208,3 +1208,14 @@ class TestAppliquerSyncEcoleClasse(TestCase):
         classe = Scolarite.objects.get(individu=individu).classe
         self.assertEqual(classe.date_debut, annee_debut)
         self.assertEqual(classe.date_fin, annee_fin)
+
+    def test_ne_cree_rien_si_ecole_inconnue(self):
+        """D3.6 : contrairement au cas où l'école est connue, aucune scolarité ne doit
+        être créée ni modifiée si l'école ENT n'est pas encore reconnue de Noethys."""
+        individu = Individu.objects.create(nom="D36", prenom="Enfant", civilite=4)
+        data_ent = {"type": "Student", "structures": [{"name": "École Jamais Connue D36", "uai": None, "id": "ENT-ECOLE-D36"}], "allClasses": [{"name": "CE1"}]}
+
+        resultat = Appliquer_sync_ecole_classe(individu, data_ent)
+
+        self.assertFalse(resultat)
+        self.assertFalse(Scolarite.objects.filter(individu=individu).exists())

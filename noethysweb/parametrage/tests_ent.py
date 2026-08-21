@@ -34,6 +34,26 @@ def _appeler(data):
     return response
 
 
+class TestImporterEcoleEntCasBase(TestCase):
+    """Cas de base de l'écran : UAI vide, connexion impossible, UAI introuvable."""
+
+    def test_uai_vide(self):
+        with patch("parametrage.views.ecoles.get_headers", return_value={"Authorization": "Bearer test"}):
+            response = _appeler({"action": "rechercher", "uai": ""})
+        self.assertIn(b"Veuillez saisir un code UAI", response.content)
+
+    def test_connexion_impossible(self):
+        with patch("parametrage.views.ecoles.get_headers", return_value=None):
+            response = _appeler({"action": "rechercher", "uai": "UAI999"})
+        self.assertIn(b"Impossible de se connecter", response.content)
+
+    def test_uai_introuvable(self):
+        with patch("parametrage.views.ecoles.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("parametrage.views.ecoles.get_school", return_value=None):
+            response = _appeler({"action": "rechercher", "uai": "UAI000"})
+        self.assertIn("Aucun établissement trouvé".encode(), response.content)
+
+
 class TestImporterEcoleEntReconnaissanceParNom(TestCase):
     """Le fix du jour : l'écran doit retrouver une école déjà saisie à la main (sans UAI ni
     ent_id), pas seulement par ent_id/UAI - sinon une collectivité qui avait déjà ses
