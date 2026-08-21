@@ -93,13 +93,12 @@ class ImporterEcoleEnt(CustomView, TemplateView):
         action = request.POST.get("action", "rechercher")
         uai = request.POST.get("uai", "").strip()
 
+        # Import ici pour éviter un import circulaire au chargement du module
+        from fiche_famille.views.famille_ent import _trouver_ecole
+
         if action == "rechercher":
             if not uai:
                 return self.render_to_response(self.get_context_data(erreur="Veuillez saisir un code UAI."))
-
-            # Prévient l'agent si cette école est déjà importée, sans bloquer la recherche - il
-            # peut quand même continuer pour actualiser ses informations si besoin.
-            ecole_existante = Ecole.objects.filter(uai__iexact=uai).first()
 
             if get_headers() is None:
                 return self.render_to_response(self.get_context_data(
@@ -114,6 +113,14 @@ class ImporterEcoleEnt(CustomView, TemplateView):
                     erreur=f"Aucun établissement trouvé pour le code UAI « {uai} ».",
                     aucun_resultat=True,
                 ))
+
+            # Prévient l'agent si cette école est déjà importée, sans bloquer la recherche - il
+            # peut quand même continuer pour actualiser ses informations si besoin. Calculé
+            # seulement maintenant (une fois la réponse ENT connue) pour pouvoir reconnaître
+            # aussi une école déjà saisie à la main sous ce nom, sans UAI renseigné - même
+            # fonction que partout ailleurs (_trouver_ecole), pas une logique à part qui
+            # ratait ce cas (id/UAI seulement, jamais le nom).
+            ecole_existante = _trouver_ecole(data.get("name"), data.get("UAI"), data.get("id"))
 
             # La clé "s.address" (avec un point) n'est pas lisible dans le template avec la
             # notation habituelle - on la recopie ici sous un nom simple.
@@ -132,9 +139,9 @@ class ImporterEcoleEnt(CustomView, TemplateView):
             messages.error(request, "Impossible de récupérer les informations de cette école, veuillez réessayer.")
             return HttpResponseRedirect(reverse("ent_importer_ecole"))
 
-        ecole = Ecole.objects.filter(ent_id=ent_id).first()
-        if not ecole and data.get("UAI"):
-            ecole = Ecole.objects.filter(uai=data.get("UAI")).first()
+        # Même fonction que la recherche ci-dessus (et que le reste du projet) - reconnaît
+        # aussi une école déjà saisie à la main sous ce nom, sans UAI ni ent_id.
+        ecole = _trouver_ecole(data.get("name"), data.get("UAI"), ent_id)
         if not ecole:
             ecole = Ecole()
 
