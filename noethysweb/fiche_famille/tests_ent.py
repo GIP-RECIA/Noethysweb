@@ -26,7 +26,7 @@ from core.models import (
     QuestionnaireReponse, Rattachement, Scolarite, Sondage, SondageRepondant, Structure,
     TypeCotisation, UniteCotisation, Utilisateur,
 )
-from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent, _trouver_ecole
+from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _chercher_enfant_existant_non_lie, _get_ou_creer_classe, _importer_eleve_ent, _trouver_ecole
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
 from fiche_famille.views.civilite_verification import CHOIX_ADULTE, CHOIX_ENFANT, ListeCivilitesAVerifier
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
@@ -1525,6 +1525,39 @@ class TestTrouverEcole(TestCase):
         resultat = _trouver_ecole(None, "UAI-X", "ENT-X")
 
         self.assertIsNone(resultat)
+
+
+class TestEntIdChaineVideTraiteeCommeNonLie(TestCase):
+    """Un individu jamais lié à l'ENT a normalement ent_id=None, mais le code ne doit pas
+    supposer que c'est la seule valeur possible pour "non lié" - une chaîne vide doit être
+    traitée pareil, par cohérence avec l'écran de synchronisation qui s'en protège déjà."""
+
+    def test_chercher_enfant_existant_non_lie_trouve_aussi_un_ent_id_chaine_vide(self):
+        famille = Famille.objects.create(nom="ENTIDVIDE")
+        enfant = Individu.objects.create(nom="ENTIDVIDE", prenom="Enfant", civilite=4, ent_id="")
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        candidat, famille_trouvee = _chercher_enfant_existant_non_lie("ENTIDVIDE", "Enfant")
+
+        self.assertEqual(candidat, enfant)
+        self.assertEqual(famille_trouvee, famille)
+
+    def test_preliaison_trouve_aussi_un_enfant_avec_ent_id_chaine_vide(self):
+        famille = Famille.objects.create(nom="PRELVIDE")
+        enfant = Individu.objects.create(nom="PRELVIDE", prenom="Lucas", civilite=4, ent_id="")
+        Rattachement.objects.create(individu=enfant, famille=famille, categorie=2, titulaire=False)
+
+        with patch("fiche_individu.views.individu_ent.get_headers", return_value={"Authorization": "Bearer test"}), \
+             patch("fiche_individu.views.individu_ent.search_by_name", return_value=[]), \
+             patch("fiche_famille.views.famille_ent.ThreadPoolExecutor", _SerialExecutor):
+            groupes, non_resolus = PreLiaisonEnt()._rechercher_toutes_correspondances()
+
+        personnes = [p for g in non_resolus if g["famille_id"] == famille.pk for p in g["personnes"]]
+        self.assertTrue(
+            personnes,
+            "L'enfant avec ent_id=\"\" n'a pas été pris en compte par la pré-liaison "
+            "(il aurait dû apparaître en \"à vérifier\", faute de résultat côté ENT).",
+        )
 
 
 class TestCiviliteAImport(TestCase):
