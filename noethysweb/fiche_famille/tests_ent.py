@@ -13,11 +13,26 @@ verraient pas les données de la transaction de test).
 
 import uuid
 from datetime import date, datetime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
+
+# Tous les écrans ENT vérifient maintenant que l'intégration est activée - simule un ENT
+# actif par défaut pour tout ce module (chaque test qui vise spécifiquement le cas
+# "ENT désactivé" écrase ce patch localement). Un seul point de patch (la fonction interne
+# de core.utils.utils_ent), quel que soit le module qui a importé ent_est_actif.
+_patch_ent_actif = patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=True))
+
+
+def setUpModule():
+    _patch_ent_actif.start()
+
+
+def tearDownModule():
+    _patch_ent_actif.stop()
 
 from core.models import (
     Activite, Assurance, Assureur, CategorieTarif, Classe, ContactUrgence, Cotisation, Deduction,
@@ -30,6 +45,7 @@ from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEn
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
 from fiche_famille.views.civilite_verification import CHOIX_ADULTE, CHOIX_ENFANT, ListeCivilitesAVerifier
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
+from fiche_famille.views.famille import Page as FamillePage
 
 
 def _fusionner(famille_cible, famille_source, data=None):
@@ -2434,3 +2450,87 @@ class TestListeSynchroAffichage(TestCase):
         ids = [l["individu"].pk for l in context["lignes"]]
         self.assertIn(avec_lien.pk, ids)
         self.assertEqual(len(ids), 1, "Seul l'individu lié à l'ENT devrait apparaître.")
+
+
+def _requete_get():
+    request = RequestFactory().get("/")
+    SessionMiddleware(lambda r: None).process_request(request)
+    request.session.save()
+    MessageMiddleware(lambda r: None).process_request(request)
+    request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+    return request
+
+
+def _requete_post(data=None):
+    request = RequestFactory().post("/", data or {})
+    SessionMiddleware(lambda r: None).process_request(request)
+    request.session.save()
+    MessageMiddleware(lambda r: None).process_request(request)
+    request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+    return request
+
+
+class TestEcransEntBloquesSiEntDesactive(TestCase):
+    """Les écrans ENT (import, pré-liaison, synchro en masse, civilités à vérifier) doivent
+    rester inaccessibles même par une URL tapée à la main quand l'ENT est désactivé dans
+    Paramétrage - un bouton caché à l'écran ne suffit pas à protéger l'accès."""
+
+    def test_boutons_liste_familles_ne_montre_que_ajouter_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            labels = [b["label"] for b in FamillePage().boutons_liste]
+        self.assertEqual(labels, ["Ajouter"])
+
+    def test_boutons_liste_familles_montre_tout_si_ent_actif(self):
+        labels = [b["label"] for b in FamillePage().boutons_liste]
+        self.assertIn("Depuis l'ENT", labels)
+        self.assertIn("Civilités à vérifier", labels)
+
+    def test_importer_famille_ent_get_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ImporterFamilleEnt().get(_requete_get())
+        self.assertEqual(response.status_code, 302)
+
+    def test_importer_famille_ent_post_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ImporterFamilleEnt().post(_requete_post())
+        self.assertEqual(response.status_code, 302)
+
+    def test_preliaison_get_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = PreLiaisonEnt().get(_requete_get())
+        self.assertEqual(response.status_code, 302)
+
+    def test_preliaison_post_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = PreLiaisonEnt().post(_requete_post())
+        self.assertEqual(response.status_code, 302)
+
+    def test_import_masse_get_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ImporterEnMasseEnt().get(_requete_get())
+        self.assertEqual(response.status_code, 302)
+
+    def test_import_masse_post_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ImporterEnMasseEnt().post(_requete_post())
+        self.assertEqual(response.status_code, 302)
+
+    def test_civilites_a_verifier_get_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ListeCivilitesAVerifier().get(_requete_get())
+        self.assertEqual(response.status_code, 302)
+
+    def test_civilites_a_verifier_post_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ListeCivilitesAVerifier().post(_requete_post())
+        self.assertEqual(response.status_code, 302)
+
+    def test_synchro_masse_get_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ListeSynchro().get(_requete_get())
+        self.assertEqual(response.status_code, 302)
+
+    def test_synchro_masse_post_bloque_si_ent_inactif(self):
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = ListeSynchro().post(_requete_post())
+        self.assertEqual(response.status_code, 302)

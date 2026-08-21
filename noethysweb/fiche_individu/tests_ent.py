@@ -11,6 +11,7 @@ Aucun appel réseau réel : search_by_name / get_headers sont mockés.
 
 import uuid
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import patch, Mock
 
 import requests
@@ -18,6 +19,20 @@ from django.core.cache import cache
 from django.test import TestCase, RequestFactory
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
+
+# Tous les écrans ENT vérifient maintenant que l'intégration est activée - simule un ENT
+# actif par défaut pour tout ce module (chaque test qui vise spécifiquement le cas
+# "ENT désactivé" écrase ce patch localement). Un seul point de patch (la fonction interne
+# de core.utils.utils_ent), quel que soit le module qui a importé ent_est_actif.
+_patch_ent_actif = patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=True))
+
+
+def setUpModule():
+    _patch_ent_actif.start()
+
+
+def tearDownModule():
+    _patch_ent_actif.stop()
 from django.contrib.messages import get_messages
 from django.utils import timezone
 
@@ -924,9 +939,13 @@ class TestGetUserOuIntrouvable(TestCase):
     à un agent qui synchronise un élève ayant simplement quitté l'établissement."""
 
     def setUp(self):
+        # Ce test vérifie au niveau HTTP réel, avec un vrai Organisateur en base - le patch
+        # global du module (ENT actif simulé) doit s'effacer pour laisser passer celui-ci.
+        _patch_ent_actif.stop()
+        self.addCleanup(_patch_ent_actif.start)
         cache.delete("organisateur")
         Organisateur.objects.filter(pk=1).delete()
-        Organisateur.objects.create(pk=1, ent_url="https://ent-test.example.com")
+        Organisateur.objects.create(pk=1, ent_url="https://ent-test.example.com", ent_active=True)
 
     @staticmethod
     def _reponse(status_code, corps=None):
@@ -1219,3 +1238,61 @@ class TestAppliquerSyncEcoleClasse(TestCase):
 
         self.assertFalse(resultat)
         self.assertFalse(Scolarite.objects.filter(individu=individu).exists())
+
+
+class TestEcransEntIndividuelsBloquesSiEntDesactive(TestCase):
+    """La synchro individuelle et l'outil de liaison/déliaison doivent rester inaccessibles
+    même par une URL tapée à la main quand l'ENT est désactivé dans Paramétrage."""
+
+    def setUp(self):
+        self.famille = Famille.objects.create(nom="ENTINACTIF")
+        self.individu = Individu.objects.create(nom="ENTINACTIF", prenom="Enfant", civilite=4, ent_id="ENT-INACTIF")
+        Rattachement.objects.create(individu=self.individu, famille=self.famille, categorie=2, titulaire=False)
+
+    def _requete(self, methode="get", data=None):
+        request = getattr(RequestFactory(), methode)("/", data or {})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        return request
+
+    def test_synchroniser_individu_get_signale_ent_inactif(self):
+        vue = SynchroniserIndividu()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.individu.pk}
+        vue.request = self._requete()
+
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            context = vue.get_context_data()
+
+        self.assertEqual(context["erreur"], "L'intégration ENT est désactivée.")
+
+    def test_synchroniser_individu_post_bloque_si_ent_inactif(self):
+        vue = SynchroniserIndividu()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.individu.pk}
+        request = self._requete("post")
+
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = vue.post(request, idfamille=self.famille.pk, idindividu=self.individu.pk)
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_lier_compte_ent_get_bloque_si_ent_inactif(self):
+        vue = LierCompteEnt()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.individu.pk}
+        request = self._requete()
+
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = vue.get(request)
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_lier_compte_ent_post_bloque_si_ent_inactif(self):
+        vue = LierCompteEnt()
+        vue.kwargs = {"idfamille": self.famille.pk, "idindividu": self.individu.pk}
+        request = self._requete("post")
+
+        with patch("core.utils.utils_ent._get_organisateur", return_value=SimpleNamespace(ent_active=False)):
+            response = vue.post(request)
+
+        self.assertEqual(response.status_code, 302)
