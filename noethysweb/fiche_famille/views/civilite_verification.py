@@ -54,13 +54,30 @@ class ListeCivilitesAVerifier(CustomView, TemplateView):
         ids_confirmes = request.POST.getlist("individus_confirmes")
         nb_confirmes = 0
 
+        # Rejoue le même calcul que get_context_data pour savoir qui est un enfant - jamais
+        # confiance dans ce que l'écran a affiché : sans ça, une requête modifiée à la main
+        # (ou un futur bug côté template) pourrait attribuer une civilité d'adulte à un
+        # enfant, et recréer exactement le problème que cet écran sert à corriger.
+        ids_enfants = set(
+            Rattachement.objects.filter(individu_id__in=ids_confirmes, categorie=2).values_list("individu_id", flat=True)
+        )
+
         for individu_id in ids_confirmes:
-            civilite = request.POST.get(f"civilite_{individu_id}")
-            if not civilite:
+            civilite_brute = request.POST.get(f"civilite_{individu_id}")
+            if not civilite_brute:
                 continue
+            try:
+                civilite = int(civilite_brute)
+            except ValueError:
+                continue
+
+            choix_valides = CHOIX_ENFANT if int(individu_id) in ids_enfants else CHOIX_ADULTE
+            if civilite not in dict(choix_valides):
+                continue
+
             individu = Individu.objects.filter(pk=individu_id, civilite_a_verifier=True).first()
             if individu:
-                individu.civilite = int(civilite)
+                individu.civilite = civilite
                 individu.civilite_a_verifier = False
                 individu.save()
                 nb_confirmes += 1

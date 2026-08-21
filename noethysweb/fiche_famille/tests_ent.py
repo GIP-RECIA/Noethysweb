@@ -28,6 +28,7 @@ from core.models import (
 )
 from fiche_famille.views.famille_ent import FusionnerFamilles, ImporterEnMasseEnt, ImporterFamilleEnt, PreLiaisonEnt, SeparerFamille, _adresses_differentes, _get_ou_creer_classe, _importer_eleve_ent, _trouver_ecole
 from fiche_famille.views.famille_ent_synchro import ListeSynchro
+from fiche_famille.views.civilite_verification import ListeCivilitesAVerifier
 from fiche_famille.views.famille_prestations import ReattribuerPrestation
 
 
@@ -1524,6 +1525,70 @@ class TestTrouverEcole(TestCase):
         resultat = _trouver_ecole(None, "UAI-X", "ENT-X")
 
         self.assertIsNone(resultat)
+
+
+class TestListeCivilitesAVerifierValidationServeur(TestCase):
+    """La confirmation de civilité (ListeCivilitesAVerifier.post) doit revérifier côté
+    serveur que la valeur reçue correspond bien au rôle réel de la personne (enfant vs
+    adulte) - sinon une requête modifiée pourrait recréer le problème d'origine (un enfant
+    marqué "Monsieur" par erreur), à l'endroit même censé le corriger."""
+
+    def setUp(self):
+        self.famille = Famille.objects.create(nom="CIVILITE")
+        self.xp = Individu.objects.create(nom="X", prenom="P", civilite=1, civilite_a_verifier=True)
+        self.xe1 = Individu.objects.create(nom="X", prenom="E1", civilite=4, civilite_a_verifier=True)  # fille, valeur par défaut "Garçon"
+        Rattachement.objects.create(individu=self.xp, famille=self.famille, categorie=1, titulaire=True)
+        Rattachement.objects.create(individu=self.xe1, famille=self.famille, categorie=2, titulaire=False)
+
+    def _confirmer(self, data):
+        request = RequestFactory().post("/", data)
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+        ListeCivilitesAVerifier().post(request)
+        from django.contrib.messages import get_messages
+        return [str(m) for m in get_messages(request)]
+
+    def test_confirme_normalement_une_civilite_valide_pour_un_enfant(self):
+        self._confirmer({"individus_confirmes": [str(self.xe1.pk)], f"civilite_{self.xe1.pk}": "5"})
+
+        self.xe1.refresh_from_db()
+        self.assertEqual(self.xe1.civilite, 5)
+        self.assertFalse(self.xe1.civilite_a_verifier)
+
+    def test_confirme_normalement_une_civilite_valide_pour_un_adulte(self):
+        self._confirmer({"individus_confirmes": [str(self.xp.pk)], f"civilite_{self.xp.pk}": "3"})
+
+        self.xp.refresh_from_db()
+        self.assertEqual(self.xp.civilite, 3)
+
+    def test_rejette_une_civilite_adulte_pour_un_enfant(self):
+        """XE1 est un enfant - même si la requête tente de lui donner "Monsieur" (1, une
+        civilité d'adulte), ça doit être refusé."""
+        self._confirmer({"individus_confirmes": [str(self.xe1.pk)], f"civilite_{self.xe1.pk}": "1"})
+
+        self.xe1.refresh_from_db()
+        self.assertEqual(self.xe1.civilite, 4, "La civilité ne doit pas avoir changé.")
+        self.assertTrue(self.xe1.civilite_a_verifier, "Doit rester à vérifier, pas être confirmée avec une valeur invalide.")
+
+    def test_rejette_une_civilite_enfant_pour_un_adulte(self):
+        self._confirmer({"individus_confirmes": [str(self.xp.pk)], f"civilite_{self.xp.pk}": "4"})
+
+        self.xp.refresh_from_db()
+        self.assertEqual(self.xp.civilite, 1)
+        self.assertTrue(self.xp.civilite_a_verifier)
+
+    def test_rejette_une_valeur_non_numerique(self):
+        self._confirmer({"individus_confirmes": [str(self.xe1.pk)], f"civilite_{self.xe1.pk}": "abc"})
+
+        self.xe1.refresh_from_db()
+        self.assertTrue(self.xe1.civilite_a_verifier)
+
+    def test_aucun_individu_coche(self):
+        msgs = self._confirmer({})
+
+        self.assertTrue(any("Aucun individu sélectionné" in m for m in msgs))
 
 
 class TestReattributionPrestation(TestCase):
