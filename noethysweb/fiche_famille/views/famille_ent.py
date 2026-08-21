@@ -7,6 +7,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from urllib.parse import urlencode
 
@@ -167,7 +168,7 @@ def _chercher_enfant_existant_non_lie(nom, prenom):
     if not nom or not prenom:
         return None, None
     nom_normalise, prenom_normalise = _normaliser_texte(nom), _normaliser_texte(prenom)
-    candidats = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
+    candidats = Individu.objects.filter(Q(ent_id__isnull=True) | Q(ent_id=""), rattachement__categorie=2).distinct()
     for candidat in candidats:
         if _normaliser_texte(candidat.nom) == nom_normalise and _normaliser_texte(candidat.prenom or "") == prenom_normalise:
             ratt = Rattachement.objects.filter(individu=candidat, categorie=2).select_related("famille").first()
@@ -687,7 +688,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
 
         groupes_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "lignes":[...], "cles":{...}}}
         non_resolus_par_famille = {}  # {famille_id: {"famille_id":..., "famille_nom":..., "personnes":[{...}]}}
-        enfants = Individu.objects.filter(ent_id__isnull=True, rattachement__categorie=2).distinct()
+        enfants = Individu.objects.filter(Q(ent_id__isnull=True) | Q(ent_id=""), rattachement__categorie=2).distinct()
 
         def _ajouter_non_resolu(famille_pk, famille_nom, nom, individu_id, raison, role="Enfant"):
             """Signale une personne (enfant ou parent) que la recherche n'a pas su traiter."""
