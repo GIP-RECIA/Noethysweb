@@ -206,6 +206,216 @@ class LierCompteEnt(Onglet, TemplateView):
     menu_code = "individus_toc"
     template_name = "fiche_individu/individu_ent_lier.html"
 
+    def _enrichir_membres_famille(self, resultat, membres_famille):
+        """Compare les parents/enfants ENT du candidat aux individus déjà connus dans cette
+        même famille sur Noethys - pour rassurer l'agent que c'est bien la bonne famille, et
+        lui permettre de les lier en même temps. Selon le profil trouvé : pour un élève on
+        regarde ses parents, pour un parent on regarde ses enfants (un adulte n'a jamais de
+        "parents" côté ENT - sans cette symétrie, chercher un parent directement n'aurait
+        aucune corroboration possible). Renseigne resultat['membres_label']/['membres_enrichis']
+        et renvoie la liste des membres enrichis."""
+        from fiche_famille.views.famille_ent import _normaliser_texte
+
+        if Est_profil_eleve(resultat):
+            membres_ent = resultat.get('parents', [])
+            resultat['membres_label'] = "Parents"
+        else:
+            membres_ent = resultat.get('children', [])
+            resultat['membres_label'] = "Enfants"
+
+        membres_enrichis = []
+        for membre_ent in membres_ent:
+            match = None
+            for ratt in membres_famille:
+                if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(membre_ent.get('lastName') or '')
+                        and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(membre_ent.get('firstName') or '')):
+                    match = ratt.individu
+                    break
+            # Important : on compare à l'id précis de CE candidat, pas juste "a-t-il un
+            # ent_id" - sinon un individu déjà lié à un tout autre compte ENT (erreur
+            # passée) afficherait à tort "déjà lié" comme si tout était en ordre.
+            deja_lie = bool(match and match.ent_id == membre_ent.get('id'))
+            lie_a_autre_compte = bool(match and match.ent_id and match.ent_id != membre_ent.get('id'))
+
+            # Le compte ENT candidat de ce membre est-il déjà utilisé par un AUTRE
+            # individu Noethys ? Dans ce cas il ne doit jamais être proposé : la
+            # confirmation échouerait de toute façon (et probablement une fiche en
+            # double existe quelque part).
+            membre_id = membre_ent.get('id')
+            detenteur = None
+            if membre_id:
+                qs_detenteur = Individu.objects.filter(ent_id=membre_id)
+                if match:
+                    qs_detenteur = qs_detenteur.exclude(pk=match.pk)
+                detenteur = qs_detenteur.first()
+            compte_deja_pris = detenteur is not None
+
+            membres_enrichis.append({
+                "ent": membre_ent,
+                "individu_correspondant": match,
+                "deja_lie": deja_lie,
+                "lie_a_autre_compte": lie_a_autre_compte,
+                "compte_deja_pris": compte_deja_pris,
+                "compte_pris_par": detenteur,
+                # Champ canonique "peut être coché pour liaison" - seule source de
+                # vérité, utilisée par le template ET par la pré-liaison ET les tests.
+                "proposable": bool(match and not deja_lie and not lie_a_autre_compte and not compte_deja_pris),
+            })
+        resultat['membres_enrichis'] = membres_enrichis
+        return membres_enrichis
+
+    def _verifier_compte_deja_utilise(self, resultat, idindividu_exclu):
+        """Le compte ENT du candidat principal lui-même est-il déjà utilisé par un autre
+        individu Noethys (autre que la personne qu'on cherche à lier) ? Si oui, cette carte ne
+        doit pas proposer de liaison du tout."""
+        candidat_id = resultat.get('id')
+        if candidat_id:
+            resultat['compte_deja_utilise_par'] = Individu.objects.filter(ent_id=candidat_id).exclude(pk=idindividu_exclu).first()
+        else:
+            resultat['compte_deja_utilise_par'] = None
+
+    def _verifier_date_coherente(self, resultat, date_naiss_noethys):
+        """Deuxième preuve indépendante du nom : la date de naissance ENT de ce candidat
+        correspond-elle à celle déjà connue dans Noethys pour la personne recherchée ? Renvoie
+        la date ENT parsée (utile pour les messages) et renseigne resultat['date_coherente']
+        (None si une des deux dates manque - rien à comparer, on ne pénalise pas une info
+        absente)."""
+        from fiche_famille.views.famille_ent import _parse_date
+
+        date_ent = _parse_date(resultat.get("birthDate"))
+        if date_naiss_noethys and date_ent:
+            resultat['date_coherente'] = (date_ent == date_naiss_noethys)
+        else:
+            resultat['date_coherente'] = None
+        return date_ent
+
+    def _verifier_ecole_coherente(self, resultat, idindividu_exclu):
+        """Troisième preuve indépendante : l'école/classe de ce candidat correspond-elle à la
+        scolarité déjà connue dans Noethys pour la personne recherchée ? Uniquement pour un
+        élève (un parent n'a pas de scolarité). Contrairement à la date, l'école et la classe
+        changent chaque année - une "contradiction" peut juste signifier que la Scolarité
+        Noethys n'a pas été mise à jour, pas que c'est la mauvaise personne. Ce signal peut donc
+        AIDER à corroborer, mais n'a jamais de pouvoir de veto (contrairement à date_coherente
+        qui peut faire échouer une corroboration par le nom)."""
+        from fiche_famille.views.famille_ent import _normaliser_texte, _normaliser_enfant, _trouver_ecole
+
+        resultat['ecole_coherente'] = None
+        resultat['ecole_nom_ent'] = None
+        resultat['classe_nom_ent'] = None
+        if not Est_profil_eleve(resultat):
+            return
+
+        # Copie : _normaliser_enfant ne doit pas polluer resultat de champs internes non
+        # voulus - seuls ecole_nom_ent/classe_nom_ent (ci-dessous) sont exposés, pour que
+        # le template puisse afficher ce qui a été comparé (comme pour la date).
+        data_ent_norm = _normaliser_enfant(dict(resultat))
+        resultat['ecole_nom_ent'] = data_ent_norm.get("ecole_nom")
+        resultat['classe_nom_ent'] = data_ent_norm.get("classe_nom")
+        ecole_ent = _trouver_ecole(
+            data_ent_norm.get("ecole_nom"), data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"),
+        )
+        scolarite_noethys = Get_scolarite_actuelle(idindividu_exclu)
+        if ecole_ent and scolarite_noethys and scolarite_noethys.ecole:
+            classe_ent = _normaliser_texte(data_ent_norm.get("classe_nom") or "")
+            classe_noethys = _normaliser_texte(scolarite_noethys.classe.nom) if scolarite_noethys.classe else ""
+            if ecole_ent != scolarite_noethys.ecole:
+                resultat['ecole_coherente'] = False
+            elif classe_ent and classe_noethys:
+                resultat['ecole_coherente'] = (classe_ent == classe_noethys)
+            # Sinon (classe absente d'un côté) : école seule concorde, mais pas assez
+            # précis à lui seul pour trancher - reste None (ni aide ni gêne).
+
+    def _decider_corroboration(self, resultat, membres_enrichis, date_ent, date_naiss_noethys):
+        """Combine les 3 preuves indépendantes (nom, date, école/classe) en une décision, et
+        construit le message d'avertissement affiché à l'agent quand la preuve n'est pas la
+        plus solide possible (jamais un motif de refus - toujours une invitation à vérifier)."""
+        # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
+        # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
+        # pas comme une vraie preuve (son propre lien est déjà suspect) - même chose pour
+        # un membre dont le compte candidat est déjà pris par un autre individu (fiche en
+        # double probable, la correspondance est ambiguë).
+        nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] and not m['compte_deja_pris'] for m in membres_enrichis)
+        membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+        membres_comptes_pris = [m for m in membres_enrichis if m['individu_correspondant'] and m['compte_deja_pris']]
+        # Exposé sur le résultat pour que la pré-liaison puisse distinguer "vraiment aucun
+        # nom ne correspond" de "un nom correspond mais la date le contredit".
+        resultat['nom_corrobore'] = nom_corrobore
+
+        # Décision combinée : le nom, la date et l'école/classe sont des preuves
+        # indépendantes. La date seule suffit si le nom échoue (utile quand le nom pose un
+        # problème qu'on ne peut pas corriger - nom de naissance/usage, faute de frappe).
+        # L'école/classe seule suffit aussi (même logique, ex: homonyme dans une autre
+        # école). Mais seule la date a un pouvoir de veto : si le nom corrobore ET que la
+        # date le contredit clairement, on ne fait plus confiance à ce nom (risque
+        # d'homonyme, même parent-là) - l'école/classe, elle, ne peut jamais faire échouer
+        # une corroboration par ailleurs (elle change chaque année, une Scolarité Noethys
+        # pas à jour ne prouve rien contre la personne).
+        if nom_corrobore and resultat['date_coherente'] is False:
+            vraie_corroboration = False
+        elif nom_corrobore:
+            vraie_corroboration = True
+        elif resultat['date_coherente']:
+            vraie_corroboration = True
+        else:
+            vraie_corroboration = bool(resultat['ecole_coherente'])
+
+        resultat['aucune_corroboration'] = not vraie_corroboration
+
+        # Cas limite : une SEULE preuve indépendante suffit (date, ou à défaut école+classe)
+        # mais AUCUN nom ne corrobore (famille Noethys vide, ou aucun parent retrouvé).
+        # Techniquement une corroboration valable, mais la preuve la plus faible qu'on
+        # accepte, et à l'écran rien ne la rend visible (les parents affichés sont tous en
+        # jaune). On lie donc, mais jamais en silence : avertissement sur l'écran
+        # individuel, et exclusion des propositions automatiques de la pré-liaison (voir
+        # _rechercher_toutes_correspondances).
+        resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore and resultat['date_coherente'])
+        resultat['corrobore_par_ecole_seule'] = bool(
+            vraie_corroboration and not nom_corrobore and not resultat['date_coherente'] and resultat['ecole_coherente']
+        )
+
+        # Avertissement doux, non bloquant : le nom (et/ou la date) suffisent déjà à
+        # accepter la liaison, mais l'école/classe indiquée par l'ENT ne correspond pas à
+        # la Scolarité déjà enregistrée dans Noethys - jamais un motif de refus, juste une
+        # invitation à vérifier (scolarité probablement pas mise à jour côté Noethys).
+        resultat['ecole_incoherente_info'] = bool(vraie_corroboration and resultat['ecole_coherente'] is False)
+
+        if resultat['corrobore_par_date_seule']:
+            resultat['message_avertissement'] = (
+                f"Aucun parent/enfant ne correspond à un membre de cette famille sur "
+                f"Noethys : le seul point commun est la date de naissance "
+                f"({date_ent.strftime('%d/%m/%Y')})."
+            )
+        elif resultat['corrobore_par_ecole_seule']:
+            resultat['message_avertissement'] = (
+                "Aucun parent/enfant ne correspond à un membre de cette famille sur "
+                "Noethys : le seul point commun est l'école et la classe."
+            )
+        elif nom_corrobore and resultat['date_coherente'] is False:
+            resultat['message_avertissement'] = (
+                f"Un nom de parent correspond, mais la date de naissance de cette personne "
+                f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "
+                f"connue dans Noethys ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
+                f"homonyme. Vérifiez avant de continuer."
+            )
+        elif not vraie_corroboration and membres_lies_ailleurs:
+            noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
+            resultat['message_avertissement'] = (
+                f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
+                f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
+                f"fiche avant de continuer."
+            )
+        elif not vraie_corroboration and membres_comptes_pris:
+            noms = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_comptes_pris)
+            resultat['message_avertissement'] = (
+                f"Le compte ENT du seul membre retrouvé ({noms}) est déjà utilisé par un "
+                f"autre individu dans Noethys - vérifiez s'il s'agit d'une fiche en double "
+                f"avant de continuer."
+            )
+        elif not vraie_corroboration:
+            resultat['message_avertissement'] = (
+                "Aucun parent/enfant ne correspond à un membre de cette famille sur Noethys."
+            )
+
     def _rechercher(self, nom, prenom, idfamille, idindividu_exclu):
         """ Retourne (resultats, erreur) - un seul des deux est renseigné. """
         if not nom or not prenom:
@@ -221,211 +431,25 @@ class LierCompteEnt(Onglet, TemplateView):
         if not resultats:
             return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
 
-        # Import ici pour éviter un import circulaire au chargement du module
-        from fiche_famille.views.famille_ent import _normaliser_texte, _parse_date, _normaliser_enfant, _trouver_ecole
-
         # Date de naissance déjà connue dans Noethys pour la personne recherchée - sert de
-        # deuxième preuve indépendante du nom (voir plus bas), utile quand le nom d'un parent
-        # pose problème (nom de naissance/usage, faute de frappe) alors que la date, elle, ne
-        # varie jamais selon qui la saisit.
+        # deuxième preuve indépendante du nom (voir _verifier_date_coherente), utile quand le
+        # nom d'un parent pose problème (nom de naissance/usage, faute de frappe) alors que la
+        # date, elle, ne varie jamais selon qui la saisit.
         date_naiss_noethys = Individu.objects.filter(pk=idindividu_exclu).values_list("date_naiss", flat=True).first()
 
-        # Pour chaque résultat, regarde si les membres de sa famille (donnés par l'ENT)
-        # correspondent à des individus déjà présents dans cette même famille sur Noethys - pour
-        # rassurer l'agent que c'est bien la bonne famille, et lui permettre de les lier en même
-        # temps. Selon le profil trouvé : pour un élève on regarde ses parents, pour un parent on
-        # regarde ses enfants (un adulte n'a jamais de "parents" côté ENT - sans cette symétrie,
-        # chercher un parent directement n'aurait aucune corroboration possible).
-        #
         # On regarde TOUTES les familles de la personne recherchée, pas seulement idfamille : un
         # enfant de famille séparée est rattaché à 2 familles (une par parent) - se limiter à
         # idfamille raterait la corroboration par le parent de l'AUTRE famille.
         familles_ids = Rattachement.objects.filter(individu_id=idindividu_exclu).values_list("famille_id", flat=True)
         membres_famille = list(Rattachement.objects.filter(famille_id__in=familles_ids).exclude(individu_id=idindividu_exclu).select_related('individu'))
+
         for resultat in resultats:
-            if Est_profil_eleve(resultat):
-                membres_ent = resultat.get('parents', [])
-                resultat['membres_label'] = "Parents"
-            else:
-                membres_ent = resultat.get('children', [])
-                resultat['membres_label'] = "Enfants"
-            membres_enrichis = []
-            for membre_ent in membres_ent:
-                match = None
-                for ratt in membres_famille:
-                    if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(membre_ent.get('lastName') or '')
-                            and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(membre_ent.get('firstName') or '')):
-                        match = ratt.individu
-                        break
-                # Important : on compare à l'id précis de CE candidat, pas juste "a-t-il un
-                # ent_id" - sinon un individu déjà lié à un tout autre compte ENT (erreur
-                # passée) afficherait à tort "déjà lié" comme si tout était en ordre.
-                deja_lie = bool(match and match.ent_id == membre_ent.get('id'))
-                lie_a_autre_compte = bool(match and match.ent_id and match.ent_id != membre_ent.get('id'))
+            membres_enrichis = self._enrichir_membres_famille(resultat, membres_famille)
+            self._verifier_compte_deja_utilise(resultat, idindividu_exclu)
+            date_ent = self._verifier_date_coherente(resultat, date_naiss_noethys)
+            self._verifier_ecole_coherente(resultat, idindividu_exclu)
+            self._decider_corroboration(resultat, membres_enrichis, date_ent, date_naiss_noethys)
 
-                # Le compte ENT candidat de ce membre est-il déjà utilisé par un AUTRE
-                # individu Noethys ? Dans ce cas il ne doit jamais être proposé : la
-                # confirmation échouerait de toute façon (et probablement une fiche en
-                # double existe quelque part).
-                membre_id = membre_ent.get('id')
-                detenteur = None
-                if membre_id:
-                    qs_detenteur = Individu.objects.filter(ent_id=membre_id)
-                    if match:
-                        qs_detenteur = qs_detenteur.exclude(pk=match.pk)
-                    detenteur = qs_detenteur.first()
-                compte_deja_pris = detenteur is not None
-
-                membres_enrichis.append({
-                    "ent": membre_ent,
-                    "individu_correspondant": match,
-                    "deja_lie": deja_lie,
-                    "lie_a_autre_compte": lie_a_autre_compte,
-                    "compte_deja_pris": compte_deja_pris,
-                    "compte_pris_par": detenteur,
-                    # Champ canonique "peut être coché pour liaison" - seule source de
-                    # vérité, utilisée par le template ET par la pré-liaison ET les tests.
-                    "proposable": bool(match and not deja_lie and not lie_a_autre_compte and not compte_deja_pris),
-                })
-            resultat['membres_enrichis'] = membres_enrichis
-
-            # Le compte ENT du candidat principal lui-même est-il déjà utilisé par un autre
-            # individu Noethys (autre que la personne qu'on cherche à lier) ? Si oui, cette
-            # carte ne doit pas proposer de liaison du tout.
-            candidat_id = resultat.get('id')
-            if candidat_id:
-                resultat['compte_deja_utilise_par'] = Individu.objects.filter(ent_id=candidat_id).exclude(pk=idindividu_exclu).first()
-            else:
-                resultat['compte_deja_utilise_par'] = None
-
-            # Deuxième preuve indépendante du nom : la date de naissance ENT de ce candidat
-            # correspond-elle à celle déjà connue dans Noethys pour la personne recherchée ?
-            # None si une des deux dates manque (rien à comparer, on ne pénalise pas une info
-            # absente).
-            date_ent = _parse_date(resultat.get("birthDate"))
-            if date_naiss_noethys and date_ent:
-                resultat['date_coherente'] = (date_ent == date_naiss_noethys)
-            else:
-                resultat['date_coherente'] = None
-
-            # Troisième preuve indépendante : l'école/classe de ce candidat correspond-elle à
-            # la scolarité déjà connue dans Noethys pour la personne recherchée ? Uniquement
-            # pour un élève (un parent n'a pas de scolarité). Contrairement à la date, l'école
-            # et la classe changent chaque année - une "contradiction" peut juste signifier que
-            # la Scolarité Noethys n'a pas été mise à jour, pas que c'est la mauvaise personne.
-            # Ce signal peut donc AIDER à corroborer, mais n'a jamais de pouvoir de veto (voir
-            # plus bas, contrairement à date_coherente qui peut faire échouer une corroboration
-            # par le nom).
-            resultat['ecole_coherente'] = None
-            resultat['ecole_nom_ent'] = None
-            resultat['classe_nom_ent'] = None
-            if Est_profil_eleve(resultat):
-                # Copie : _normaliser_enfant ne doit pas polluer resultat de champs internes non
-                # voulus - seuls ecole_nom_ent/classe_nom_ent (ci-dessous) sont exposés, pour que
-                # le template puisse afficher ce qui a été comparé (comme pour la date).
-                data_ent_norm = _normaliser_enfant(dict(resultat))
-                resultat['ecole_nom_ent'] = data_ent_norm.get("ecole_nom")
-                resultat['classe_nom_ent'] = data_ent_norm.get("classe_nom")
-                ecole_ent = _trouver_ecole(
-                    data_ent_norm.get("ecole_nom"), data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"),
-                )
-                scolarite_noethys = Get_scolarite_actuelle(idindividu_exclu)
-                if ecole_ent and scolarite_noethys and scolarite_noethys.ecole:
-                    classe_ent = _normaliser_texte(data_ent_norm.get("classe_nom") or "")
-                    classe_noethys = _normaliser_texte(scolarite_noethys.classe.nom) if scolarite_noethys.classe else ""
-                    if ecole_ent != scolarite_noethys.ecole:
-                        resultat['ecole_coherente'] = False
-                    elif classe_ent and classe_noethys:
-                        resultat['ecole_coherente'] = (classe_ent == classe_noethys)
-                    # Sinon (classe absente d'un côté) : école seule concorde, mais pas assez
-                    # précis à lui seul pour trancher - reste None (ni aide ni gêne).
-
-            # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
-            # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
-            # pas comme une vraie preuve (son propre lien est déjà suspect) - même chose pour
-            # un membre dont le compte candidat est déjà pris par un autre individu (fiche en
-            # double probable, la correspondance est ambiguë).
-            nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] and not m['compte_deja_pris'] for m in membres_enrichis)
-            membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
-            membres_comptes_pris = [m for m in membres_enrichis if m['individu_correspondant'] and m['compte_deja_pris']]
-            # Exposé sur le résultat pour que la pré-liaison puisse distinguer "vraiment aucun
-            # nom ne correspond" de "un nom correspond mais la date le contredit".
-            resultat['nom_corrobore'] = nom_corrobore
-
-            # Décision combinée : le nom, la date et l'école/classe sont des preuves
-            # indépendantes. La date seule suffit si le nom échoue (utile quand le nom pose un
-            # problème qu'on ne peut pas corriger - nom de naissance/usage, faute de frappe).
-            # L'école/classe seule suffit aussi (même logique, ex: homonyme dans une autre
-            # école). Mais seule la date a un pouvoir de veto : si le nom corrobore ET que la
-            # date le contredit clairement, on ne fait plus confiance à ce nom (risque
-            # d'homonyme, même parent-là) - l'école/classe, elle, ne peut jamais faire échouer
-            # une corroboration par ailleurs (elle change chaque année, une Scolarité Noethys
-            # pas à jour ne prouve rien contre la personne).
-            if nom_corrobore and resultat['date_coherente'] is False:
-                vraie_corroboration = False
-            elif nom_corrobore:
-                vraie_corroboration = True
-            elif resultat['date_coherente']:
-                vraie_corroboration = True
-            else:
-                vraie_corroboration = bool(resultat['ecole_coherente'])
-
-            resultat['aucune_corroboration'] = not vraie_corroboration
-
-            # Cas limite : une SEULE preuve indépendante suffit (date, ou à défaut école+classe)
-            # mais AUCUN nom ne corrobore (famille Noethys vide, ou aucun parent retrouvé).
-            # Techniquement une corroboration valable, mais la preuve la plus faible qu'on
-            # accepte, et à l'écran rien ne la rend visible (les parents affichés sont tous en
-            # jaune). On lie donc, mais jamais en silence : avertissement sur l'écran
-            # individuel, et exclusion des propositions automatiques de la pré-liaison (voir
-            # _rechercher_toutes_correspondances).
-            resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore and resultat['date_coherente'])
-            resultat['corrobore_par_ecole_seule'] = bool(
-                vraie_corroboration and not nom_corrobore and not resultat['date_coherente'] and resultat['ecole_coherente']
-            )
-
-            # Avertissement doux, non bloquant : le nom (et/ou la date) suffisent déjà à
-            # accepter la liaison, mais l'école/classe indiquée par l'ENT ne correspond pas à
-            # la Scolarité déjà enregistrée dans Noethys - jamais un motif de refus, juste une
-            # invitation à vérifier (scolarité probablement pas mise à jour côté Noethys).
-            resultat['ecole_incoherente_info'] = bool(vraie_corroboration and resultat['ecole_coherente'] is False)
-
-            if resultat['corrobore_par_date_seule']:
-                resultat['message_avertissement'] = (
-                    f"Aucun parent/enfant ne correspond à un membre de cette famille sur "
-                    f"Noethys : le seul point commun est la date de naissance "
-                    f"({date_ent.strftime('%d/%m/%Y')})."
-                )
-            elif resultat['corrobore_par_ecole_seule']:
-                resultat['message_avertissement'] = (
-                    "Aucun parent/enfant ne correspond à un membre de cette famille sur "
-                    "Noethys : le seul point commun est l'école et la classe."
-                )
-            elif nom_corrobore and resultat['date_coherente'] is False:
-                resultat['message_avertissement'] = (
-                    f"Un nom de parent correspond, mais la date de naissance de cette personne "
-                    f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "
-                    f"connue dans Noethys ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
-                    f"homonyme. Vérifiez avant de continuer."
-                )
-            elif not vraie_corroboration and membres_lies_ailleurs:
-                noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
-                resultat['message_avertissement'] = (
-                    f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
-                    f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
-                    f"fiche avant de continuer."
-                )
-            elif not vraie_corroboration and membres_comptes_pris:
-                noms = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_comptes_pris)
-                resultat['message_avertissement'] = (
-                    f"Le compte ENT du seul membre retrouvé ({noms}) est déjà utilisé par un "
-                    f"autre individu dans Noethys - vérifiez s'il s'agit d'une fiche en double "
-                    f"avant de continuer."
-                )
-            elif not vraie_corroboration:
-                resultat['message_avertissement'] = (
-                    "Aucun parent/enfant ne correspond à un membre de cette famille sur Noethys."
-                )
         return resultats, None
 
     def get_context_data(self, **kwargs):
