@@ -46,7 +46,7 @@
         <form method="post" id="form_import_masse" class="form_spinner">
             {% csrf_token %}
             <div class="d-flex align-items-center mb-3">
-                <button type="submit" class="btn btn-success mr-3 btn_spinner">
+                <button type="submit" class="btn btn-success mr-3 btn_spinner" id="btn_import_masse" disabled>
                     <i class="fa fa-download"></i> Importer les élèves sélectionnés
                 </button>
                 <label class="mb-0">
@@ -106,6 +106,16 @@
                 document.querySelectorAll('.case_eleve').forEach(function(cb) {
                     cb.checked = checked;
                 });
+                Maj_bouton_import_masse();
+            });
+
+            function Maj_bouton_import_masse() {
+                var au_moins_une_case_cochee = document.querySelector('.case_eleve:checked') !== null;
+                document.getElementById('btn_import_masse').disabled = !au_moins_une_case_cochee;
+            }
+
+            document.querySelectorAll('.case_eleve').forEach(function(cb) {
+                cb.addEventListener('change', Maj_bouton_import_masse);
             });
         </script>
     {% elif not erreur_connexion %}
