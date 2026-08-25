@@ -273,29 +273,6 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
 
     try:
         with transaction.atomic():
-            eleve = Individu(
-                nom=eleve_data.get("lastName", ""),
-                prenom=eleve_data.get("firstName", ""),
-                civilite=_civilite_enfant_defaut(),
-                civilite_a_verifier=True,
-                date_naiss=_parse_date(eleve_data.get("birthDate")),
-                mail=eleve_data.get("email") or None,
-                tel_domicile=eleve_data.get("phone") or None,
-                tel_mobile=eleve_data.get("mobile") or None,
-                rue_resid=eleve_data.get("address") or None,
-                cp_resid=eleve_data.get("zipCode") or None,
-                ville_resid=eleve_data.get("city") or None,
-                ent_id=eleve_ent_id,
-                ent_lie_par=lie_par,
-                ent_lie_le=lie_le,
-            )
-            eleve.save()
-
-            # Enregistre la scolarité (école/classe) de l'élève, indépendamment de la
-            # situation familiale déterminée plus bas.
-            eleve_data = _normaliser_enfant(eleve_data)
-            _creer_scolarite(eleve, eleve_data)
-
             parents_data = []
             for parent_info in eleve_data.get("parents", []):
                 parent_data = Get_parent_data(parent_info["id"])
@@ -310,6 +287,33 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                 if parent:
                     individus_existants[ent_id_parent] = parent
 
+            # Un parent peut ne pas (encore/plus) avoir d'ent_id - délié, ou jamais rapproché -
+            # mais correspondre quand même par son nom à un représentant déjà connu, À
+            # CONDITION que le nom de l'ÉLÈVE corrobore aussi dans cette même famille (deux
+            # signaux indépendants, jamais un seul, avant de réutiliser silencieusement une
+            # fiche - même principe que le moteur de corroboration). Sans ça, délier un parent
+            # (au lieu de l'enfant) puis réimporter créait le même doublon silencieux.
+            individu_eleve_par_nom, famille_eleve_par_nom = _chercher_enfant_existant_non_lie(
+                eleve_data.get("lastName", ""), eleve_data.get("firstName", "")
+            )
+            if individu_eleve_par_nom and famille_eleve_par_nom:
+                representants_famille = Rattachement.objects.filter(famille=famille_eleve_par_nom, categorie=1).select_related("individu")
+                for ent_id_parent, parent_data in parents_data:
+                    if ent_id_parent in individus_existants:
+                        continue
+                    for ratt in representants_famille:
+                        representant = ratt.individu
+                        if (_normaliser_texte(representant.nom) == _normaliser_texte(parent_data.get("lastName", ""))
+                                and _normaliser_texte(representant.prenom or "") == _normaliser_texte(parent_data.get("firstName", ""))):
+                            # Retrouvé par nom seulement (pas encore d'ent_id) - on le lie
+                            # maintenant, sinon il resterait délié malgré cet import réussi.
+                            representant.ent_id = ent_id_parent
+                            representant.ent_lie_par = lie_par
+                            representant.ent_lie_le = lie_le
+                            representant.save()
+                            individus_existants[ent_id_parent] = representant
+                            break
+
             # Parmi eux, seuls ceux réellement Représentants (catégorie 1) quelque part
             # permettent de rattacher l'enfant à une famille déjà existante - un individu qui
             # n'est que Contact ailleurs (ex: un grand-parent) n'a pas de famille "à lui" en
@@ -321,17 +325,77 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                 f"{p.prenom} {p.nom}" for p in individus_existants.values() if p not in parents_representants
             ]
 
+            # Si un parent est déjà reconnu, on sait dans quelle(s) famille(s) l'élève va
+            # atterrir - avant de créer sa fiche, on vérifie si une fiche à son nom existe déjà,
+            # non liée, dans une de ces familles précises (ex : élève délié puis réimporté, ou
+            # fiche saisie à la main avant que son parent soit rapproché de l'ENT). Sans ça, on
+            # créait un doublon silencieux au lieu de réutiliser la fiche existante.
+            eleve_existant_reutilisable = None
             if parents_representants:
-                # Au moins un parent existe déjà — ajouter l'enfant à ses familles
+                nom_norm = _normaliser_texte(eleve_data.get("lastName", ""))
+                prenom_norm = _normaliser_texte(eleve_data.get("firstName", ""))
+                familles_cibles_ids = {
+                    ratt.famille_id for parent in parents_representants
+                    for ratt in Rattachement.objects.filter(individu=parent, categorie=1)
+                }
+                candidats = Individu.objects.filter(
+                    Q(ent_id__isnull=True) | Q(ent_id=""),
+                    rattachement__categorie=2, rattachement__famille_id__in=familles_cibles_ids,
+                ).distinct()
+                for candidat in candidats:
+                    if _normaliser_texte(candidat.nom) == nom_norm and _normaliser_texte(candidat.prenom or "") == prenom_norm:
+                        eleve_existant_reutilisable = candidat
+                        break
+
+            if eleve_existant_reutilisable:
+                eleve = eleve_existant_reutilisable
+                eleve.ent_id = eleve_ent_id
+                eleve.ent_lie_par = lie_par
+                eleve.ent_lie_le = lie_le
+                eleve.save()
+            else:
+                eleve = Individu(
+                    nom=eleve_data.get("lastName", ""),
+                    prenom=eleve_data.get("firstName", ""),
+                    civilite=_civilite_enfant_defaut(),
+                    civilite_a_verifier=True,
+                    date_naiss=_parse_date(eleve_data.get("birthDate")),
+                    mail=eleve_data.get("email") or None,
+                    tel_domicile=eleve_data.get("phone") or None,
+                    tel_mobile=eleve_data.get("mobile") or None,
+                    rue_resid=eleve_data.get("address") or None,
+                    cp_resid=eleve_data.get("zipCode") or None,
+                    ville_resid=eleve_data.get("city") or None,
+                    ent_id=eleve_ent_id,
+                    ent_lie_par=lie_par,
+                    ent_lie_le=lie_le,
+                )
+                eleve.save()
+
+            # Enregistre la scolarité (école/classe) de l'élève, indépendamment de la
+            # situation familiale déterminée plus bas. Pour une fiche réutilisée, on met à jour
+            # sa scolarité existante plutôt que d'en créer une deuxième.
+            eleve_data = _normaliser_enfant(eleve_data)
+            if eleve_existant_reutilisable:
+                from fiche_individu.views.individu_ent import Appliquer_sync_ecole_classe
+                Appliquer_sync_ecole_classe(eleve, eleve_data)
+            else:
+                _creer_scolarite(eleve, eleve_data)
+
+            if parents_representants:
+                # Au moins un parent existe déjà — ajouter l'enfant à ses familles (sans
+                # dupliquer le rattachement si la fiche réutilisée y était déjà).
                 familles_ajoutees = set()
                 for parent in parents_representants:
                     for ratt in Rattachement.objects.filter(individu=parent, categorie=1):
                         if ratt.famille_id not in familles_ajoutees:
-                            Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
+                            if not Rattachement.objects.filter(individu=eleve, famille=ratt.famille).exists():
+                                Rattachement.objects.create(individu=eleve, famille=ratt.famille, categorie=2, titulaire=False)
                             ratt.famille.Maj_infos()
                             familles_ajoutees.add(ratt.famille_id)
                 famille_id = list(familles_ajoutees)[0]
-                return {"statut": "importe", "message": f"{eleve.prenom} {eleve.nom} ajouté(e) à une famille existante.", "famille_id": famille_id, "type": "famille_existante"}
+                message = f"{eleve.prenom} {eleve.nom} rattaché(e) à sa fiche existante." if eleve_existant_reutilisable else f"{eleve.prenom} {eleve.nom} ajouté(e) à une famille existante."
+                return {"statut": "importe", "message": message, "famille_id": famille_id, "type": "famille_existante"}
 
             def _note_contacts_reutilises():
                 if not noms_contacts_reutilises:
