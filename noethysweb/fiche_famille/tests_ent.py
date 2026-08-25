@@ -983,6 +983,94 @@ class TestConstitutionFamilleImport(TestCase):
         )
 
 
+class TestImporterEleveReutiliseFicheExistanteNonLiee(TestCase):
+    """Cas trouvé en testant manuellement (délier un enfant puis le réimporter) : quand le
+    parent est déjà reconnu, _importer_eleve_ent doit réutiliser une fiche enfant du même nom
+    déjà présente, non liée, dans la même famille - pas en créer une deuxième."""
+
+    def test_reutilise_la_fiche_existante_dans_la_famille_du_parent_deja_connu(self):
+        famille = Famille.objects.create(nom="ALLENTEST")
+        parent = Individu.objects.create(nom="ALLENTEST", prenom="Maria", civilite=3, ent_id="ENT-MARIA-REUSE")
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        enfant_existant = Individu.objects.create(nom="ALLENTEST", prenom="Isabelle", civilite=5)
+        Rattachement.objects.create(individu=enfant_existant, famille=famille, categorie=2, titulaire=False)
+
+        parents_cache = {"ENT-MARIA-REUSE": {"id": "ENT-MARIA-REUSE", "lastName": "ALLENTEST", "firstName": "Maria"}}
+        eleve_data = {"id": "ENT-ISABELLE-REUSE", "type": "Student", "firstName": "Isabelle", "lastName": "ALLENTEST", "parents": [{"id": "ENT-MARIA-REUSE"}]}
+
+        resultat = _importer_eleve_ent("ENT-ISABELLE-REUSE", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["statut"], "importe")
+        self.assertEqual(
+            Individu.objects.filter(nom="ALLENTEST", prenom="Isabelle").count(), 1,
+            "Ne doit pas créer une deuxième fiche pour la même Isabelle ALLENTEST.",
+        )
+        enfant_existant.refresh_from_db()
+        self.assertEqual(enfant_existant.ent_id, "ENT-ISABELLE-REUSE", "La fiche existante doit recevoir l'ent_id, pas une nouvelle fiche.")
+        self.assertEqual(Rattachement.objects.filter(individu=enfant_existant, famille=famille).count(), 1, "Pas de rattachement en double.")
+
+    def test_ne_reutilise_pas_un_homonyme_dune_autre_famille(self):
+        """Non-régression : un enfant du même nom mais dans une famille SANS rapport avec le
+        parent reconnu ne doit jamais être réutilisé - une nouvelle fiche doit être créée."""
+        autre_famille = Famille.objects.create(nom="SANSRAPPORT")
+        homonyme = Individu.objects.create(nom="HOMONYMETEST", prenom="Lucas", civilite=4)
+        Rattachement.objects.create(individu=homonyme, famille=autre_famille, categorie=2, titulaire=False)
+
+        famille_cible = Famille.objects.create(nom="PARENTCONNU")
+        parent = Individu.objects.create(nom="PARENTCONNU", prenom="Papa", civilite=1, ent_id="ENT-PAPA-HOMONYME")
+        Rattachement.objects.create(individu=parent, famille=famille_cible, categorie=1, titulaire=True)
+
+        parents_cache = {"ENT-PAPA-HOMONYME": {"id": "ENT-PAPA-HOMONYME", "lastName": "PARENTCONNU", "firstName": "Papa"}}
+        eleve_data = {"id": "ENT-LUCAS-HOMONYME", "type": "Student", "firstName": "Lucas", "lastName": "HOMONYMETEST", "parents": [{"id": "ENT-PAPA-HOMONYME"}]}
+
+        _importer_eleve_ent("ENT-LUCAS-HOMONYME", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        homonyme.refresh_from_db()
+        self.assertIsNone(homonyme.ent_id, "L'homonyme d'une autre famille ne doit jamais être touché.")
+        nouvel_eleve = Individu.objects.get(ent_id="ENT-LUCAS-HOMONYME")
+        self.assertNotEqual(nouvel_eleve.pk, homonyme.pk, "Une nouvelle fiche doit être créée, pas réutiliser l'homonyme sans rapport.")
+
+    def test_reutilise_le_parent_et_lenfant_retrouves_par_nom_sans_ent_id(self):
+        """Même bug côté parent : un parent jamais lié (ou délié) doit être retrouvé et relié
+        par son nom - à condition que le nom de l'ENFANT corrobore aussi dans cette même
+        famille (deux signaux indépendants, jamais un seul, avant de réutiliser en silence)."""
+        famille = Famille.objects.create(nom="SOPHIETEST")
+        parent = Individu.objects.create(nom="SOPHIETEST", prenom="Sophie", civilite=3)  # jamais lié
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        enfant_existant = Individu.objects.create(nom="SOPHIETEST", prenom="Enfant", civilite=4)
+        Rattachement.objects.create(individu=enfant_existant, famille=famille, categorie=2, titulaire=False)
+
+        parents_cache = {"ENT-SOPHIE-REUSE": {"id": "ENT-SOPHIE-REUSE", "lastName": "SOPHIETEST", "firstName": "Sophie"}}
+        eleve_data = {"id": "ENT-ENFANT-SOPHIE-REUSE", "type": "Student", "firstName": "Enfant", "lastName": "SOPHIETEST", "parents": [{"id": "ENT-SOPHIE-REUSE"}]}
+
+        resultat = _importer_eleve_ent("ENT-ENFANT-SOPHIE-REUSE", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        self.assertEqual(resultat["statut"], "importe")
+        self.assertEqual(Individu.objects.filter(nom="SOPHIETEST", prenom="Sophie").count(), 1, "Le parent ne doit pas être dupliqué.")
+        self.assertEqual(Individu.objects.filter(nom="SOPHIETEST", prenom="Enfant").count(), 1, "L'enfant ne doit pas être dupliqué.")
+        parent.refresh_from_db()
+        enfant_existant.refresh_from_db()
+        self.assertEqual(parent.ent_id, "ENT-SOPHIE-REUSE", "Le parent retrouvé par nom doit recevoir son ent_id.")
+        self.assertEqual(enfant_existant.ent_id, "ENT-ENFANT-SOPHIE-REUSE")
+
+    def test_ne_relie_pas_un_parent_homonyme_sans_corroboration_par_lenfant(self):
+        """Non-régression : un représentant du même nom mais dans une famille où AUCUN enfant
+        ne correspond ne doit jamais être relié - un seul signal (le nom du parent) ne suffit
+        jamais, exactement comme pour le moteur de corroboration."""
+        famille = Famille.objects.create(nom="HOMONYMEPARENT")
+        parent_homonyme = Individu.objects.create(nom="HOMONYMEPARENT", prenom="Julie", civilite=3)
+        Rattachement.objects.create(individu=parent_homonyme, famille=famille, categorie=1, titulaire=True)
+        # Aucun enfant du même nom que celui importé dans cette famille
+
+        parents_cache = {"ENT-JULIE-HOMONYME": {"id": "ENT-JULIE-HOMONYME", "lastName": "HOMONYMEPARENT", "firstName": "Julie"}}
+        eleve_data = {"id": "ENT-NOUVEAU-HOMONYME", "type": "Student", "firstName": "Nouveau", "lastName": "SANSRAPPORTPARENT", "parents": [{"id": "ENT-JULIE-HOMONYME"}]}
+
+        _importer_eleve_ent("ENT-NOUVEAU-HOMONYME", eleve_data=eleve_data, parents_cache=parents_cache)
+
+        parent_homonyme.refresh_from_db()
+        self.assertIsNone(parent_homonyme.ent_id, "Le parent homonyme ne doit pas être relié sans corroboration par l'enfant.")
+
+
 class TestImporterParentContactSeulement(TestCase):
     """Un parent déclaré par l'ENT peut déjà être connu dans Noethys uniquement comme
     Contact d'une autre famille (ex: un grand-parent qui aide à élever un autre petit-
