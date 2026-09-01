@@ -129,23 +129,6 @@ def search_users(profile=None, structure_id=None):
     return _api_get(f"{base_url}/directory/user/admin/list", params=params)
 
 
-def search_students_by_name(last_name, first_name, structure_id=None):
-    """
-    Recherche des élèves par prénom ET nom (obligatoires tous les deux).
-    L'API exige les deux ensemble — un seul retourne 404.
-    """
-    base_url = _get_base_url()
-    if not base_url:
-        return []
-
-    params = {"firstName": first_name, "lastName": last_name}
-    if structure_id:
-        params["structureId"] = structure_id
-
-    result = _api_get(f"{base_url}/directory/user/admin/list", params=params)
-    return result if result is not None else []
-
-
 def search_by_name(last_name, first_name):
     """
     Recherche par prénom ET nom, tous profils confondus (Student ET Relative).
