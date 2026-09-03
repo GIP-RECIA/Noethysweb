@@ -6,11 +6,10 @@
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.db.models import Q
-from core.models import ModeleEmail, Mail, Destinataire, Famille, DocumentJoint, SignatureEmail, Individu, DocumentJoint
+from core.models import ModeleEmail, Mail, Destinataire, Famille, DocumentJoint, SignatureEmail, Individu
 from outils.utils import utils_email
 from outils.forms.editeur_emails_express import Formulaire
-from django.shortcuts import render
-import json, re
+import json
 from email.utils import parseaddr
 
 
