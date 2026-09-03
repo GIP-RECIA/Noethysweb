@@ -22,16 +22,48 @@ class View(CustomView, TemplateView):
         context = super(View, self).get_context_data(**kwargs)
         context['page_titre'] = _("Documents")
 
-        # Pièces à fournir
-        context['pieces_fournir'] = utils_pieces_manquantes.Get_pieces_manquantes(famille=self.request.user.famille, exclure_individus=self.request.user.famille.individus_masques.all())
+        familles = self.get_famille_object()
+        context["familles"] = familles
 
-        # Importation des documents à télécharger
+        # Documents génériques (indépendants de la famille)
         liste_documents = []
         for document in PortailDocument.objects.all().order_by("titre"):
-            liste_documents.append({"titre": document.titre, "texte": document.texte, "fichier": document.document, "couleur_fond": document.couleur_fond, "extension": document.Get_extension()})
-        for unite_consentement in utils_approbations.Get_approbations_requises(famille=self.request.user.famille, avec_consentements_existants=False).get("consentements", []):
-            if unite_consentement.document.name:
-                liste_documents.append({"titre": unite_consentement.type_consentement.nom, "texte": "Version du %s" % utils_dates.ConvertDateToFR(unite_consentement.date_debut), "fichier": unite_consentement.document, "couleur_fond": "primary", "extension": unite_consentement.Get_extension()})
-        context['liste_documents'] = liste_documents
+            if document.document.name:
+                liste_documents.append({
+                    "titre": document.titre,
+                    "texte": document.texte,
+                    "fichier": document.document,
+                    "couleur_fond": document.couleur_fond,
+                    "extension": document.Get_extension(),
+            })
+        context["liste_documents"] = liste_documents
 
+        donnees_par_famille = []
+        for famille in familles:
+            data = {"famille": famille}
+
+            # Pièces à fournir
+            data["pieces_fournir"] = utils_pieces_manquantes.Get_pieces_manquantes(
+                famille=famille,
+                exclure_individus=famille.individus_masques.all(),
+            )
+
+            # Consentements (documents liés à la famille)
+            data["consentements"] = []
+            for unite_consentement in utils_approbations.Get_approbations_requises(
+                famille=famille,
+                avec_consentements_existants=False,
+            ).get("consentements", []):
+                if unite_consentement.document.name:
+                    data["consentements"].append({
+                        "titre": unite_consentement.type_consentement.nom,
+                        "texte": "Version du %s" % utils_dates.ConvertDateToFR(unite_consentement.date_debut),
+                        "fichier": unite_consentement.document,
+                        "couleur_fond": "primary",
+                        "extension": unite_consentement.Get_extension(),
+                    })
+
+            donnees_par_famille.append(data)
+
+        context["donnees_par_famille"] = donnees_par_famille
         return context

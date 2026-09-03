@@ -48,7 +48,7 @@ class Ajouter(Page, crud.Ajouter):
         return "Famille=%s, Individu=%s" % (instance.famille, instance.individu)
 
     def form_valid(self, form):
-        famille = self.request.user.famille
+        famille = self.get_famille()
 
         # Sauvegarde de l'individu à créer
         self.object = form.save()

@@ -12,8 +12,21 @@ from django.core.cache import cache
 from django.shortcuts import redirect
 from portail.views.menu import GetMenuPrincipal
 from noethysweb.version import GetVersion
-from core.models import Organisateur, Parametre
+from core.models import Organisateur, Parametre, PortailParametre, Rattachement
 from core.utils import utils_parametres, utils_portail, utils_historique
+from core.constants import TYPE_COMPTE_FAMILLE
+
+
+
+def get_familles_from_request(request):
+    """Retourne toutes les familles de l'utilisateur (compte famille ou individu multi-famille)."""
+    user = request.user
+    if hasattr(user, "famille") and user.famille:
+        return [user.famille]
+    if hasattr(user, "individu") and user.individu:
+        rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
+        return [r.famille for r in rattachements if r.famille]
+    return []
 
 
 class CustomView(LoginRequiredMixin, UserPassesTestMixin):
@@ -23,6 +36,25 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin):
     # Connexion obligatoire
     login_url = 'portail_connexion'
     redirect_field_name = 'portail_accueil'
+
+    def get_famille_object(self):
+        """Retourne la liste des familles rattachées à l'utilisateur."""
+        user = self.request.user
+        if hasattr(user, "famille") and user.famille:
+            return [user.famille]
+        if hasattr(user, "individu") and user.individu:
+            rattachements = Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1)
+            familles, seen_ids = [], set()
+            for r in rattachements:
+                if r.famille and r.famille_id not in seen_ids:
+                    familles.append(r.famille)
+                    seen_ids.add(r.famille_id)
+            return familles
+        return []
+
+    def get_famille(self):
+        familles = self.get_famille_object()
+        return familles[0] if familles else None
 
     def dispatch(self, request, *args, **kwargs):
         """ Vérifie que l'utilisateur est connecté """
@@ -39,8 +71,16 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin):
         #     if not self.request.user.has_perm("core.%s" % menu_code):
         #         return False
 
-        # Vérifie que l'user est de type "utilisateur"
-        if self.request.user.categorie != "famille":
+        # Vérifie que l'user est de type "famille" ou "individu" selon le type de compte configuré
+        type_compte = self.request.session.get("type_compte")
+        if not type_compte:
+            parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
+            type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+        # Vérifie que la catégorie est valide
+        if self.request.user.categorie not in ["famille", "individu"]:
+            return False
+        # Vérifie que la catégorie correspond au type de compte configuré
+        if self.request.user.categorie != type_compte:
             return False
         return True
 
