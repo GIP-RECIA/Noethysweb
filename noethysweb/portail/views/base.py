@@ -72,8 +72,10 @@ class CustomView(LoginRequiredMixin, UserPassesTestMixin):
         #         return False
 
         # Vérifie que l'user est de type "famille" ou "individu" selon le type de compte configuré
-        parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
-        type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+        type_compte = self.request.session.get("type_compte")
+        if not type_compte:
+            parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
+            type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
         # Vérifie que la catégorie est valide
         if self.request.user.categorie not in ["famille", "individu"]:
             return False
