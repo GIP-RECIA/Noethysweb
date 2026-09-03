@@ -40,9 +40,11 @@ def secure_ajax(function):
 def secure_ajax_portail(function):
     """ A associer aux requêtes AJAX """
     def _function(request, *args, **kwargs):
-        parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
-        type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
-        
+        type_compte = request.session.get("type_compte")
+        if not type_compte:
+            parametre_type_compte = PortailParametre.objects.filter(code="type_compte").first()
+            type_compte = parametre_type_compte.valeur if parametre_type_compte else TYPE_COMPTE_FAMILLE
+
         # Vérifie que c'est une requête AJAX
         if not request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest':
             return HttpResponseBadRequest()
