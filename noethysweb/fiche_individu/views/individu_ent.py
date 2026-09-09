@@ -8,7 +8,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.db import transaction
 from django.utils import timezone
-from core.models import Individu, Scolarite, Rattachement
+from core.models import Individu, Scolarite, Rattachement, Famille
 from core.views.base import CustomView
 from core.utils import utils_historique
 from core.utils.utils_ent import get_user, get_user_ou_introuvable, get_headers, search_by_name, ent_est_actif
@@ -24,6 +24,19 @@ CHAMPS_SYNC = [
     {"code": "cp_resid",   "label": "Code postal",      "ent_key": "zipCode"},
     {"code": "ville_resid","label": "Ville",            "ent_key": "city"},
 ]
+
+
+def Maj_familles_representant(individu):
+    """
+    Recalcule le nom/l'adresse/le mail favori... des familles où cet individu est représentant
+    (Rattachement categorie=1). Famille.nom et les autres champs dupliqués ne sont jamais
+    recalculés automatiquement (aucun signal Django dessus, voir Famille.Maj_infos) - sans cet
+    appel après une synchronisation ENT qui change le nom/l'adresse d'un titulaire, la fiche
+    individu affiche la nouvelle valeur mais la fiche famille garde l'ancienne indéfiniment.
+    """
+    familles_ids = Rattachement.objects.filter(individu=individu, categorie=1).values_list("famille_id", flat=True).distinct()
+    for famille in Famille.objects.filter(pk__in=familles_ids):
+        famille.Maj_infos()
 
 
 def Get_scolarite_actuelle(individu):
@@ -189,6 +202,7 @@ class SynchroniserIndividu(Onglet, TemplateView):
 
         if nb_modifs:
             individu.save()
+            Maj_familles_representant(individu)
             messages.success(request, f"{nb_modifs} champ(s) synchronisé(s) depuis l'ENT.")
         else:
             messages.info(request, "Aucun champ sélectionné.")

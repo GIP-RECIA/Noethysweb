@@ -10,7 +10,7 @@ from django.urls import reverse
 from core.views.base import CustomView
 from core.models import Individu
 from core.utils.utils_ent import get_user_ou_introuvable, get_headers, ent_est_actif
-from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison, Appliquer_sync_ecole_classe
+from fiche_individu.views.individu_ent import CHAMPS_SYNC, Get_lignes_comparaison, Appliquer_sync_ecole_classe, Maj_familles_representant
 
 MAX_WORKERS = 5  # limite le nombre d'appels simultanés vers l'ENT
 
@@ -108,6 +108,7 @@ class ListeSynchro(CustomView, TemplateView):
 
             if modifie:
                 individu.save()
+                Maj_familles_representant(individu)
                 nb_individus_maj += 1
 
         if nb_champs_maj:

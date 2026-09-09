@@ -2499,6 +2499,22 @@ class TestListeSynchroIntrouvable(TestCase):
         self.assertEqual(individu.mail, "nouveau@test.fr")
         self.assertTrue(any("synchronisé" in m for _, m in msgs))
 
+    def test_synchroniser_le_nom_dun_titulaire_recalcule_le_nom_de_famille(self):
+        """Même piège qu'en synchro individuelle (TestSynchroniserIndividuCasBase) : Famille.nom
+        n'est jamais recalculé automatiquement, la synchro en masse doit rappeler Maj_infos()
+        elle-même après avoir changé le nom d'un titulaire."""
+        famille = Famille.objects.create(nom="AVANTSYNCMASSE")
+        parent = Individu.objects.create(nom="AVANTSYNCMASSE", prenom="Papa", civilite=1, ent_id="ENT-TITULAIRE-SYNC-MASSE")
+        Rattachement.objects.create(individu=parent, famille=famille, categorie=1, titulaire=True)
+        famille.Maj_infos()
+        self.assertIn("AVANTSYNCMASSE", famille.nom)
+
+        self._post({parent: ["nom"]}, side_effect=lambda ent_id: ({"lastName": "APRESSYNCMASSE"}, False))
+
+        famille.refresh_from_db()
+        self.assertIn("APRESSYNCMASSE", famille.nom)
+        self.assertNotIn("AVANTSYNCMASSE", famille.nom)
+
 
 class TestListeSynchroAffichage(TestCase):
     """Complète TestListeSynchroIntrouvable : cas d'affichage de base - connexion

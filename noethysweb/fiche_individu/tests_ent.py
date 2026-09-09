@@ -1117,6 +1117,28 @@ class TestSynchroniserIndividuCasBase(TestCase):
         individu.refresh_from_db()
         self.assertEqual(individu.mail, "ancien@test.fr", "Le simple affichage (GET) ne doit jamais modifier la fiche.")
 
+    def test_synchroniser_le_nom_dun_titulaire_recalcule_le_nom_de_famille(self):
+        """Famille.nom n'est jamais recalculé automatiquement (pas de signal Django) - une
+        synchro qui change le nom d'un titulaire doit donc rappeler Maj_infos() elle-même,
+        sinon la fiche famille garde l'ancien nom indéfiniment."""
+        parent = Individu.objects.create(nom="AVANTSYNC", prenom="Papa", civilite=1, ent_id="ENT-TITULAIRE-SYNC")
+        Rattachement.objects.create(individu=parent, famille=self.famille, categorie=1, titulaire=True)
+        self.famille.Maj_infos()
+        self.assertIn("AVANTSYNC", self.famille.nom)
+
+        request = RequestFactory().post("/", {"champs": ["nom"]})
+        SessionMiddleware(lambda r: None).process_request(request)
+        request.session.save()
+        MessageMiddleware(lambda r: None).process_request(request)
+        request.user = Utilisateur.objects.create_user(username=f"agent_test_{uuid.uuid4().hex[:12]}")
+
+        with patch("fiche_individu.views.individu_ent.get_user_ou_introuvable", return_value=({"lastName": "APRESSYNC"}, False)):
+            self._vue(request, parent).post(request, idfamille=self.famille.pk, idindividu=parent.pk)
+
+        self.famille.refresh_from_db()
+        self.assertIn("APRESSYNC", self.famille.nom)
+        self.assertNotIn("AVANTSYNC", self.famille.nom)
+
 
 class TestGetLignesComparaisonEcoleClasse(TestCase):
     """La ligne École/Classe ne doit jamais être proposée pour un parent (piège : l'ENT
