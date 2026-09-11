@@ -56,7 +56,7 @@
     {% if resultats is not None %}
         {% if nb_masques_ecole_inconnue %}
             <div class="alert alert-secondary mt-3">
-                <i class="fa fa-info-circle"></i> {{ nb_masques_ecole_inconnue }} résultat{{ nb_masques_ecole_inconnue|pluralize }} masqué{{ nb_masques_ecole_inconnue|pluralize }} : école{{ nb_masques_ecole_inconnue|pluralize }} pas encore importée{{ nb_masques_ecole_inconnue|pluralize }} dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).
+                <i class="fa fa-info-circle"></i> {{ nb_masques_ecole_inconnue }} résultat{{ nb_masques_ecole_inconnue|pluralize }} masqué{{ nb_masques_ecole_inconnue|pluralize }} : école{{ nb_masques_ecole_inconnue|pluralize }} pas encore importée{{ nb_masques_ecole_inconnue|pluralize }} (Paramétrage > Écoles > Importer depuis l'ENT).
             </div>
         {% endif %}
         {% if resultats %}

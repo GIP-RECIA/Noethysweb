@@ -402,8 +402,8 @@ def _importer_eleve_ent(eleve_ent_id, eleve_data=None, parents_cache=None, lie_p
                     return ""
                 noms = ", ".join(noms_contacts_reutilises)
                 if len(noms_contacts_reutilises) == 1:
-                    return f" Note : {noms} était déjà connu(e) dans Noethys (Contact d'une autre famille) et a été rattaché(e) comme représentant(e) de cette nouvelle famille."
-                return f" Note : {noms} étaient déjà connus dans Noethys (Contact d'une autre famille) et ont été rattachés comme représentants de cette nouvelle famille."
+                    return f" Note : {noms} était déjà connu(e) (Contact d'une autre famille) et a été rattaché(e) comme représentant(e) de cette nouvelle famille."
+                return f" Note : {noms} étaient déjà connus (Contact d'une autre famille) et ont été rattachés comme représentants de cette nouvelle famille."
 
             def _get_ou_creer_parent(ent_id_parent, parent_data):
                 """Réutilise la fiche existante (trouvée par ent_id) plutôt que d'en créer une
@@ -632,8 +632,8 @@ class ImporterFamilleEnt(CustomView, TemplateView):
                 if individu_non_lie:
                     enfant["fiche_existante_famille_id"] = famille_non_liee.pk if famille_non_liee else None
                     enfant["fiche_existante_msg"] = (
-                        f"Attention : une fiche « {individu_non_lie.prenom} {individu_non_lie.nom} » existe déjà dans "
-                        f"Noethys{f' (famille {famille_non_liee.nom})' if famille_non_liee else ''}, sans lien ENT. "
+                        f"Attention : une fiche « {individu_non_lie.prenom} {individu_non_lie.nom} » existe déjà"
+                        f"{f' (famille {famille_non_liee.nom})' if famille_non_liee else ''}, sans lien ENT. "
                         f"Vérifiez qu'il ne s'agit pas de la même personne avant d'importer, sinon vous créerez un doublon."
                     )
 
@@ -689,7 +689,7 @@ class ImporterFamilleEnt(CustomView, TemplateView):
             if nb_masques_ecole_inconnue:
                 request.session["ent_erreur"] = (
                     f"{nb_masques_ecole_inconnue} résultat(s) masqué(s) : "
-                    f"école(s) pas encore importée(s) dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT)."
+                    f"école(s) pas encore importée(s) (Paramétrage > Écoles > Importer depuis l'ENT)."
                 )
             else:
                 request.session["ent_erreur"] = f"Aucune famille trouvée pour « {first_name} {last_name} » dans l'ENT."
@@ -710,7 +710,7 @@ class ImporterFamilleEnt(CustomView, TemplateView):
 
         eleve_data = _normaliser_enfant(eleve_data)
         if eleve_data.get("ecole_nom") and not _trouver_ecole(eleve_data.get("ecole_nom"), eleve_data.get("ecole_uai"), eleve_data.get("ecole_ent_id")):
-            messages.error(request, f"Impossible d'importer : l'école « {eleve_data['ecole_nom']} » n'est pas encore importée dans Noethys (Paramétrage > Écoles > Importer depuis l'ENT).")
+            messages.error(request, f"Impossible d'importer : l'école « {eleve_data['ecole_nom']} » n'est pas encore importée (Paramétrage > Écoles > Importer depuis l'ENT).")
             return HttpResponseRedirect(reverse_lazy("ent_import_famille"))
 
         resultat = _importer_eleve_ent(eleve_ent_id, eleve_data=eleve_data, lie_par=request.user.username)
@@ -814,7 +814,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 if contradiction_date and contradiction_date.get("message_avertissement"):
                     _ajouter_enfant_non_resolu(famille, enfant, contradiction_date["message_avertissement"])
                 else:
-                    _ajouter_enfant_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond dans Noethys")
+                    _ajouter_enfant_non_resolu(famille, enfant, "Trouvé dans l'ENT, mais aucun parent ne correspond")
                 continue
             if len(candidats_corrobores) > 1:
                 _ajouter_enfant_non_resolu(famille, enfant, "Plusieurs correspondances possibles dans l'ENT (ambigu)")
@@ -827,7 +827,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # dès maintenant, avec une raison claire (fiche en double probable).
             detenteur = resultat.get("compte_deja_utilise_par")
             if detenteur:
-                _ajouter_enfant_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} (Noethys) - vérifiez s'il s'agit d'une fiche en double")
+                _ajouter_enfant_non_resolu(famille, enfant, f"Le compte ENT correspondant est déjà utilisé par {detenteur} - vérifiez s'il s'agit d'une fiche en double")
                 continue
 
             # Corroboré par la seule date de naissance (ou à défaut la seule école/classe), sans
@@ -836,10 +836,10 @@ class PreLiaisonEnt(CustomView, TemplateView):
             # avec avertissement), mais pas pour une proposition automatique cochée d'avance au
             # milieu de centaines d'autres.
             if resultat.get("corrobore_par_date_seule"):
-                _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par la date de naissance, aucun parent ne correspond dans Noethys - à confirmer à la main")
+                _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par la date de naissance, aucun parent ne correspond - à confirmer à la main")
                 continue
             if resultat.get("corrobore_par_ecole_seule"):
-                _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par l'école et la classe, aucun parent ne correspond dans Noethys - à confirmer à la main")
+                _ajouter_enfant_non_resolu(famille, enfant, "Corroboré uniquement par l'école et la classe, aucun parent ne correspond - à confirmer à la main")
                 continue
 
             parents_enrichis = resultat.get("membres_enrichis", [])
@@ -938,11 +938,11 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 if ent_ids_departages.get(ent_id) == individu_pk:
                     continue  # départagée en sa faveur : reste dans les propositions automatiques
                 if ligne["role"] == "Parent":
-                    raison = "Ce parent correspond au même compte ENT qu'une autre fiche Noethys - probable fiche en double, à fusionner ou corriger"
+                    raison = "Ce parent correspond au même compte ENT qu'une autre fiche - probable fiche en double, à fusionner ou corriger"
                 elif ent_id in ent_ids_departages:
-                    raison = "Correspond au même compte ENT qu'une autre famille Noethys - départagé en faveur de l'autre famille par la date de naissance ou l'école/classe"
+                    raison = "Correspond au même compte ENT qu'une autre famille - départagé en faveur de l'autre famille par la date de naissance ou l'école/classe"
                 else:
-                    raison = "Correspond au même compte ENT qu'une autre famille Noethys (collision)"
+                    raison = "Correspond au même compte ENT qu'une autre famille (collision)"
                 _ajouter_non_resolu(
                     famille_pk, groupe["famille_nom"],
                     ligne["nom_individu"], int(individu_pk),
@@ -998,7 +998,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
         context = super().get_context_data(**kwargs)
         context["page_titre"] = "Pré-liaison avant import en masse"
         context["box_titre"] = "Correspondances trouvées"
-        context["box_introduction"] = "Lancez la recherche des membres de famille déjà présents dans Noethys qui correspondent à une famille connue par l'ENT, avant de lancer l'import en masse."
+        context["box_introduction"] = "Lancez la recherche des membres de famille déjà présents qui correspondent à une famille connue par l'ENT, avant de lancer l'import en masse."
         context["erreur_connexion"] = False
         context["recherche_lancee"] = self.SESSION_KEY in self.request.session
         session_data = self.request.session.get(self.SESSION_KEY)
@@ -1078,7 +1078,7 @@ class PreLiaisonEnt(CustomView, TemplateView):
                 continue
             individu = Individu.objects.filter(pk=individu_pk).first()
             if not individu:
-                echecs.append((nom, "cette fiche n'existe plus dans Noethys"))
+                echecs.append((nom, "cette fiche n'existe plus"))
                 continue
             if individu.ent_id:
                 echecs.append((nom, "déjà lié à un compte ENT entre-temps"))

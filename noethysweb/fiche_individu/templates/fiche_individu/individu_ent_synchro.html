@@ -21,11 +21,11 @@
             <div class="mb-3">
                 <span class="mr-4">
                     <span style="display:inline-block; width:14px; height:14px; background-color:#fff9c4; border:1px solid #e0c200; vertical-align:middle;"></span>
-                    <span class="ml-1">Champ différent entre Noethysweb et l'ENT</span>
+                    <span class="ml-1">Champ différent de l'ENT</span>
                 </span>
                 <span>
                     <span style="display:inline-block; width:14px; height:14px; background-color:#f8d7da; border:1px solid #dc3545; vertical-align:middle;"></span>
-                    <span class="ml-1">École non reconnue dans Noethys - non synchronisable pour l'instant</span>
+                    <span class="ml-1">École non reconnue - non synchronisable pour l'instant</span>
                 </span>
             </div>
 
@@ -38,7 +38,7 @@
                                 <input type="checkbox" id="select_all" title="Tout sélectionner">
                             </th>
                             <th>Champ</th>
-                            <th>Noethysweb</th>
+                            <th>Valeur actuelle</th>
                             <th>ENT</th>
                         </tr>
                     </thead>
@@ -59,10 +59,10 @@
                                     {% if ligne.ecole_non_reconnue %}
                                         <i class="fa fa-times-circle text-danger ml-1" title="École non reconnue"></i>
                                         <div class="text-danger small mt-1">
-                                            Cette école n'est pas dans votre liste d'écoles Noethys - importez-la d'abord (Paramétrage > Écoles) pour pouvoir synchroniser cette information.
+                                            Cette école n'est pas dans votre liste d'écoles - importez-la d'abord (Paramétrage > Écoles) pour pouvoir synchroniser cette information.
                                         </div>
                                     {% elif ligne.different %}
-                                        <i class="fa fa-exclamation-circle text-warning ml-1" title="Différent de Noethysweb"></i>
+                                        <i class="fa fa-exclamation-circle text-warning ml-1" title="Valeur différente"></i>
                                     {% else %}
                                         <i class="fa fa-check text-green ml-1" title="Identique"></i>
                                     {% endif %}

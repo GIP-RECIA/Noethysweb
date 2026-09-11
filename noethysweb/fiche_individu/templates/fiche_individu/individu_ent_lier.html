@@ -12,7 +12,7 @@
         <p class="text-muted">
             <i class="fa fa-info-circle"></i>
             Cet individu n'est pas encore lié à un compte ENT. La recherche ci-dessous a été
-            lancée automatiquement avec son prénom et son nom déjà enregistrés dans Noethysweb.
+            lancée automatiquement avec son prénom et son nom déjà enregistrés.
             Vous pouvez les modifier et relancer la recherche si nécessaire (accent, orthographe
             différente dans l'ENT...).
         </p>
@@ -70,8 +70,8 @@
                                 <td>
                                     {{ personne.ecole_nom_ent }}{% if personne.classe_nom_ent %} - {{ personne.classe_nom_ent }}{% endif %}
                                     {% if personne.ecole_incoherente_info %}
-                                        <span class="badge badge-warning ml-1" title="La scolarité enregistrée dans Noethys ne correspond pas - probablement pas encore mise à jour, ce n'est pas bloquant">
-                                            <i class="fa fa-info-circle"></i> ne correspond pas à Noethys
+                                        <span class="badge badge-warning ml-1" title="La scolarité enregistrée ne correspond pas - probablement pas encore mise à jour, ce n'est pas bloquant">
+                                            <i class="fa fa-info-circle"></i> ne correspond pas à la fiche
                                         </span>
                                     {% endif %}
                                 </td>
@@ -86,18 +86,18 @@
                                     <li>
                                         {{ parent.ent.firstName }} {{ parent.ent.lastName }} (ENT)
                                         {% if parent.echec %}
-                                            <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} (Noethys) - vérifiez sa fiche</span>
+                                            <span class="badge badge-danger">Échec : le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.echec }} - vérifiez sa fiche</span>
                                         {% elif parent.compte_deja_pris %}
-                                            <span class="badge badge-danger">Le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.compte_pris_par }} (Noethys) - vérifiez s'il s'agit d'une fiche en double</span>
+                                            <span class="badge badge-danger">Le compte ENT de {{ parent.ent.firstName }} {{ parent.ent.lastName }} est déjà utilisé par {{ parent.compte_pris_par }} - vérifiez s'il s'agit d'une fiche en double</span>
                                         {% elif parent.lie_a_autre_compte %}
-                                            <span class="badge badge-danger">{{ parent.individu_correspondant }} (Noethys) est déjà lié(e) à un autre compte ENT - vérifiez sa fiche</span>
+                                            <span class="badge badge-danger">{{ parent.individu_correspondant }} est déjà lié(e) à un autre compte ENT - vérifiez sa fiche</span>
                                         {% elif parent.deja_lie %}
-                                            <span class="badge badge-secondary">Déjà lié à {{ parent.individu_correspondant }} (Noethys)</span>
+                                            <span class="badge badge-secondary">Déjà lié à {{ parent.individu_correspondant }}</span>
                                         {% elif parent.individu_correspondant %}
                                             {# "cochez ci-dessous" seulement si la carte propose vraiment la liaison - si le compte du candidat principal est déjà pris, la zone de liaison est remplacée par une alerte, il n'y a plus de case #}
-                                            <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }} (Noethys){% if not personne.compte_deja_utilise_par %} - cochez ci-dessous pour la lier{% endif %}</span>
+                                            <span class="badge badge-success"><i class="fa fa-check"></i> Correspond à {{ parent.individu_correspondant }}{% if not personne.compte_deja_utilise_par %} - cochez ci-dessous pour la lier{% endif %}</span>
                                         {% else %}
-                                            <span class="badge badge-warning">Ne correspond à personne dans la famille de {{ prenom_recherche }} {{ nom_recherche }} sur Noethys</span>
+                                            <span class="badge badge-warning">Ne correspond à personne dans la famille de {{ prenom_recherche }} {{ nom_recherche }}</span>
                                         {% endif %}
                                     </li>
                                 {% endfor %}
@@ -106,7 +106,7 @@
 
                         {% if personne.compte_deja_utilise_par %}
                             <div class="alert alert-danger mb-0">
-                                <i class="fa fa-times-circle"></i> Ce compte ENT est déjà utilisé par {{ personne.compte_deja_utilise_par }} (Noethys) - il ne peut pas être lié à {{ prenom_recherche }} {{ nom_recherche }}. Vérifiez s'il s'agit d'une fiche en double.
+                                <i class="fa fa-times-circle"></i> Ce compte ENT est déjà utilisé par {{ personne.compte_deja_utilise_par }} - il ne peut pas être lié à {{ prenom_recherche }} {{ nom_recherche }}. Vérifiez s'il s'agit d'une fiche en double.
                             </div>
                         {% else %}
                         <form method="post" class="form_spinner form_lier"

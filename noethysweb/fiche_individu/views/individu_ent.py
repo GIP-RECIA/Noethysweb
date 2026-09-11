@@ -395,26 +395,26 @@ class LierCompteEnt(Onglet, TemplateView):
 
         if resultat['corrobore_par_date_seule']:
             resultat['message_avertissement'] = (
-                f"Aucun parent/enfant ne correspond à un membre de cette famille sur "
-                f"Noethys : le seul point commun est la date de naissance "
+                f"Aucun parent/enfant ne correspond à un membre de cette famille : "
+                f"le seul point commun est la date de naissance "
                 f"({date_ent.strftime('%d/%m/%Y')})."
             )
         elif resultat['corrobore_par_ecole_seule']:
             resultat['message_avertissement'] = (
-                "Aucun parent/enfant ne correspond à un membre de cette famille sur "
-                "Noethys : le seul point commun est l'école et la classe."
+                "Aucun parent/enfant ne correspond à un membre de cette famille : "
+                "le seul point commun est l'école et la classe."
             )
         elif nom_corrobore and resultat['date_coherente'] is False:
             resultat['message_avertissement'] = (
                 f"Un nom de parent correspond, mais la date de naissance de cette personne "
                 f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "
-                f"connue dans Noethys ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
+                f"connue ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
                 f"homonyme. Vérifiez avant de continuer."
             )
         elif not vraie_corroboration and membres_lies_ailleurs:
             noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
             resultat['message_avertissement'] = (
-                f"Le seul membre retrouvé dans Noethys pour cette famille ({noms}) est déjà "
+                f"Le seul membre retrouvé pour cette famille ({noms}) est déjà "
                 f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
                 f"fiche avant de continuer."
             )
@@ -422,12 +422,12 @@ class LierCompteEnt(Onglet, TemplateView):
             noms = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_comptes_pris)
             resultat['message_avertissement'] = (
                 f"Le compte ENT du seul membre retrouvé ({noms}) est déjà utilisé par un "
-                f"autre individu dans Noethys - vérifiez s'il s'agit d'une fiche en double "
+                f"autre individu - vérifiez s'il s'agit d'une fiche en double "
                 f"avant de continuer."
             )
         elif not vraie_corroboration:
             resultat['message_avertissement'] = (
-                "Aucun parent/enfant ne correspond à un membre de cette famille sur Noethys."
+                "Aucun parent/enfant ne correspond à un membre de cette famille."
             )
 
     def _rechercher(self, nom, prenom, idfamille, idindividu_exclu):
@@ -544,7 +544,7 @@ class LierCompteEnt(Onglet, TemplateView):
             if not ent_id:
                 messages.error(request, "Donnée manquante.")
             elif Individu.objects.filter(ent_id=ent_id).exists():
-                messages.error(request, "Ce compte ENT est déjà lié à un autre individu dans Noethys.")
+                messages.error(request, "Ce compte ENT est déjà lié à un autre individu.")
             else:
                 individu = Individu.objects.get(pk=idindividu)
                 # Ne jamais écraser un lien existant, même via une requête directe - même
