@@ -29,4 +29,4 @@ class Modifier(CustomView, TemplateView):
         form.save()
         cache.delete("organisateur") # vide le cache pour que la prochain appel relise la BD
         messages.success(request, "Paramètres ENT enregistrés")
-        return HttpResponseRedirect(reverse_lazy("parametres_ent"))
+        return HttpResponseRedirect(reverse_lazy("parametrage_toc"))

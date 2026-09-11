@@ -1,5 +1,6 @@
 import logging
 import requests # pour faire les appels API vers l'ENT
+from django.conf import settings
 from django.core.cache import cache # pour stocker la data en memoire rapide
 
 logger = logging.getLogger(__name__)
@@ -35,18 +36,18 @@ def get_token():
     organisateur = _get_organisateur()
     if not organisateur or not organisateur.ent_active:
         return None
-    if not all([organisateur.ent_url, organisateur.ent_client_id,
-                organisateur.ent_client_secret, organisateur.ent_username, organisateur.ent_password]):
+    if not all([settings.ENT_URL, settings.ENT_CLIENT_ID, settings.ENT_CLIENT_SECRET,
+                organisateur.ent_username, organisateur.ent_password]):
         logger.warning("ENT : credentials incomplets dans le paramétrage.")
         return None
 
     try:
         r = requests.post(
-            f"{organisateur.ent_url.rstrip('/')}/auth/oauth2/token",
+            f"{settings.ENT_URL.rstrip('/')}/auth/oauth2/token",
             data={
                 "grant_type": "password",
-                "client_id": organisateur.ent_client_id,
-                "client_secret": organisateur.ent_client_secret,
+                "client_id": settings.ENT_CLIENT_ID,
+                "client_secret": settings.ENT_CLIENT_SECRET,
                 "username": organisateur.ent_username,
                 "password": organisateur.ent_password,
                 "scope": "directory",
@@ -72,10 +73,9 @@ def get_headers():
 
 
 def _get_base_url():
-    organisateur = _get_organisateur()
-    if not organisateur or not organisateur.ent_url:
+    if not settings.ENT_URL:
         return None
-    return organisateur.ent_url.rstrip("/")
+    return settings.ENT_URL.rstrip("/")
 
 
 class IntrouvableEnt(Exception):

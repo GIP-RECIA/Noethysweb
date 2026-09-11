@@ -16,7 +16,7 @@ from unittest.mock import patch, Mock
 
 import requests
 from django.core.cache import cache
-from django.test import TestCase, RequestFactory
+from django.test import TestCase, RequestFactory, override_settings
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.middleware import MessageMiddleware
 
@@ -931,6 +931,7 @@ class TestControleInscriptionCroiseeFamilles(TestCase):
         )
 
 
+@override_settings(ENT_URL="https://ent-test.example.com")
 class TestGetUserOuIntrouvable(TestCase):
     """Vérifie directement au niveau HTTP (pas juste via un mock de haut niveau) que
     get_user_ou_introuvable distingue bien une vraie panne d'une confirmation ENT (404)
@@ -945,7 +946,7 @@ class TestGetUserOuIntrouvable(TestCase):
         self.addCleanup(_patch_ent_actif.start)
         cache.delete("organisateur")
         Organisateur.objects.filter(pk=1).delete()
-        Organisateur.objects.create(pk=1, ent_url="https://ent-test.example.com", ent_active=True)
+        Organisateur.objects.create(pk=1, ent_active=True)
 
     @staticmethod
     def _reponse(status_code, corps=None):
