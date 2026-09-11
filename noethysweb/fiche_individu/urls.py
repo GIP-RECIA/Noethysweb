@@ -5,10 +5,10 @@
 
 from django.urls import include, path
 from core.decorators import secure_ajax
-from fiche_individu.views import individu, individu_identite, individu_coords, individu_questionnaire, individu_scolarite, individu_inscriptions, \
+from fiche_individu.views import individu_portail, individu, individu_identite, individu_coords, individu_questionnaire, individu_scolarite, individu_inscriptions, \
                                 individu_medical, individu_notes, individu_liens, individu_appliquer_forfait_date, individu_contacts, \
                                 individu_regimes_alimentaires, individu_assurances, individu_maladies, individu_transports, \
-                                individu_appliquer_forfait_date_choix
+                                individu_appliquer_forfait_date_choix, individu_ent
 
 urlpatterns = [
 
@@ -40,6 +40,7 @@ urlpatterns = [
     path('individus/individus/inscriptions/ajouter/<int:idfamille>/<int:idindividu>/<int:idactivite>/<int:idgroupe>', individu_inscriptions.Ajouter.as_view(), name='individu_inscriptions_ajouter'),
     path('individus/individus/inscriptions/modifier/<int:idfamille>/<int:idindividu>/<int:pk>', individu_inscriptions.Modifier.as_view(), name='individu_inscriptions_modifier'),
     path('individus/individus/inscriptions/supprimer/<int:idfamille>/<int:idindividu>/<int:pk>', individu_inscriptions.Supprimer.as_view(), name='individu_inscriptions_supprimer'),
+    path('individus/individus/inscriptions/reattribuer/<int:idfamille>/<int:idindividu>/<int:pk>', individu_inscriptions.ReattribuerInscription.as_view(), name='individu_inscriptions_reattribuer'),
     path('individus/individus/inscriptions/appliquer_forfait_date/<int:idfamille>/<int:idindividu>', individu_appliquer_forfait_date.View.as_view(), name='individu_appliquer_forfait_date'),
     path('individus/individus/inscriptions/appliquer_forfait_date_choix/<int:idfamille>/<int:idindividu>/<str:tarifs>', individu_appliquer_forfait_date_choix.View.as_view(), name='individu_appliquer_forfait_date_choix'),
 
@@ -70,6 +71,7 @@ urlpatterns = [
     path('individus/individus/assurances/modifier/<int:idfamille>/<int:idindividu>/<int:pk>', individu_assurances.Modifier.as_view(), name='individu_assurances_modifier'),
     path('individus/individus/assurances/supprimer/<int:idfamille>/<int:idindividu>/<int:pk>', individu_assurances.Supprimer.as_view(), name='individu_assurances_supprimer'),
     path('individus/individus/assurances/importer/<int:idfamille>/<int:idindividu>', individu_assurances.Importer.as_view(), name='individu_assurances_importer'),
+    path('individus/individus/assurances/reattribuer/<int:idfamille>/<int:idindividu>/<int:pk>', individu_assurances.ReattribuerAssurance.as_view(), name='individu_assurances_reattribuer'),
 
     path('individus/individus/notes/ajouter/<int:idfamille>/<int:idindividu>', individu_notes.Ajouter.as_view(), name='individu_notes_ajouter'),
     path('individus/individus/notes/modifier/<int:idfamille>/<int:idindividu>/<int:pk>', individu_notes.Modifier.as_view(), name='individu_notes_modifier'),
@@ -98,5 +100,15 @@ urlpatterns = [
     path('individus/ajouter_maladie', secure_ajax(individu_maladies.Ajouter_maladie), name='ajax_ajouter_maladie'),
     path('individus/ajouter_assureur', secure_ajax(individu_assurances.Ajouter_assureur), name='ajax_ajouter_assureur'),
     path('individus/get_info_transport', secure_ajax(individu_transports.Get_info_transport), name='ajax_get_info_transport'),
+    # ENT
+    path('individus/individus/ent/synchro/<int:idfamille>/<int:idindividu>', individu_ent.SynchroniserIndividu.as_view(), name='individu_ent_synchro'),
+    path('individus/individus/ent/lier/<int:idfamille>/<int:idindividu>', individu_ent.LierCompteEnt.as_view(), name='individu_ent_lier'),
+
+    # portail
+    path('individus/individus/portail/<int:idfamille>/<int:idindividu>', individu_portail.Consulter.as_view(), name='individu_portail'),
+    path('individus/individus/portail/modifier/<int:idfamille>/<int:idindividu>', individu_portail.Modifier.as_view(),name='individu_portail_modifier'),
+    path('individus/individu/regenerer_mdp', secure_ajax(individu_portail.Regenerer_mdp), name='ajax_regenerer_mdp'),
+    path('individus/individu/regenerer_identifiant_Individu', secure_ajax(individu_portail.Regenerer_identifiant),name='ajax_regenerer_identifiant_individu'),
+    path('individus/codes_internet_impression_Individu_pdf', secure_ajax(individu_portail.Envoyer_codes), name='ajax_codes_internet_envoyer_Individu'),
 
 ]
