@@ -44,7 +44,7 @@ class Page(crud.Page):
 
         # Indiquer que les messages de la discussion ouverte sont lus
         if messages_non_lus and self.get_idfamille():
-            messages_non_lus.filter(famille_id=self.get_idfamille()).update(date_lecture=datetime.datetime.now())
+            messages_non_lus.filter(famille_id=self.get_idfamille(), structure_id=self.get_idstructure()).update(date_lecture=datetime.datetime.now())
         return context
 
     def get_form_kwargs(self, **kwargs):

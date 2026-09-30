@@ -18,7 +18,10 @@ from core.models import Famille, Note, Rattachement, CATEGORIES_RATTACHEMENT, Pr
 from individus.utils import utils_pieces_manquantes, utils_informations_manquantes
 from fiche_individu.forms.individu import Formulaire
 from fiche_famille.utils.utils_famille import LISTE_ONGLETS
+from core.constants import TYPE_COMPTE_FAMILLE
 from cotisations.utils import utils_cotisations_manquantes
+from core.utils.utils_configuration_globale import Get_dict_parametres
+from core.utils.utils_ent import ent_est_actif
 
 
 def Definir_titulaire(request):
@@ -27,7 +30,7 @@ def Definir_titulaire(request):
     rattachement = Rattachement.objects.get(pk=idrattachement)
 
     # Vérifie qu'il reste au moins un titulaire dans la famille
-    if rattachement.titulaire == True:
+    if rattachement.titulaire is True:
         titulaires = Rattachement.objects.filter(famille=rattachement.famille, titulaire=True)
         if len(titulaires) <= 1:
             messages.add_message(request, messages.ERROR, "Changement de titulaire impossible : Vous devez conserver au moins un titulaire dans la famille !")
@@ -95,9 +98,46 @@ class Page(crud.Page):
     description_saisie = "Saisissez toutes les informations concernant la famille à saisir et cliquez sur le bouton Enregistrer."
     objet_singulier = "une famille"
     objet_pluriel = "des familles"
-    boutons_liste = [
-        {"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(url_ajouter), "icone": "fa fa-plus"},
-    ]
+    @property
+    def boutons_liste(self):
+        boutons = [{"label": "Ajouter", "classe": "btn btn-success", "href": reverse_lazy(self.url_ajouter), "icone": "fa fa-plus"}]
+        if not ent_est_actif():
+            return boutons
+        boutons += [
+            {"label": "Depuis l'ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_famille"), "icone": "fa fa-cloud-download"},
+            {"label": "Pré-liaison ENT", "classe": "btn btn-warning", "href": reverse_lazy("ent_preliaison"), "icone": "fa fa-link",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Import en masse ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_import_masse"), "icone": "fa fa-cloud-download",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Synchronisation ENT", "classe": "btn btn-info", "href": reverse_lazy("ent_synchro_masse"), "icone": "fa fa-refresh",
+             "onclick": (
+                 "(function(el){"
+                 "var original=el.innerHTML;"
+                 "el.innerHTML='<i class=\\'fa fa-spinner fa-spin margin-r-5\\'></i> Chargement...';"
+                 "window.addEventListener('pageshow', function(e){"
+                 "if(e.persisted){el.innerHTML=original;}"
+                 "});"
+                 "})(this)"
+             )},
+            {"label": "Civilités à vérifier", "classe": "btn btn-warning", "href": reverse_lazy("civilites_a_verifier"), "icone": "fa fa-question-circle"},
+        ]
+        return boutons
 
 
 class Liste(Page, crud.Liste):
@@ -173,12 +213,27 @@ class Onglet(CustomView):
     def get_context_data(self, **kwargs):
         context = super(Onglet, self).get_context_data(**kwargs)
         context['page_titre'] = "Fiche famille"
-        context['liste_onglets'] = [dict_onglet for dict_onglet in self.liste_onglets if self.request.user.has_perm("core.famille_%s" % dict_onglet["code"])]
+
+        # Récupérer les paramètres généraux pour filtrer les onglets
+        parametres = Get_dict_parametres()
+
+        # Vérifier le type de compte depuis la session
+        type_compte = self.request.session.get('type_compte', TYPE_COMPTE_FAMILLE)
+        context['liste_onglets'] = [
+            dict_onglet for dict_onglet in self.liste_onglets
+            if self.request.user.has_perm("core.famille_%s" % dict_onglet["code"])
+            and (dict_onglet["code"] != "portail" or type_compte == TYPE_COMPTE_FAMILLE)
+            and parametres.get(f"{dict_onglet['code']}_afficher_page_famille", True)  # Filtrage dynamique
+        ]
+
         context['famille'] = Famille.objects.get(pk=self.kwargs['idfamille'])
         context['idfamille'] = self.kwargs['idfamille']
         context['categories'] = CATEGORIES_RATTACHEMENT
-        context['rattachements'] = Rattachement.objects.prefetch_related('individu').filter(famille_id=self.kwargs['idfamille']).order_by("individu__civilite")
+        context['rattachements'] = Rattachement.objects.prefetch_related('individu').filter(
+            famille_id=self.kwargs['idfamille']
+        ).order_by("individu__civilite")
         context['categories_utilisees'] = self.Get_categories_utilisees(context['rattachements'])
+
         return context
 
     def Get_categories_utilisees(self, rattachements=[]):
@@ -205,6 +260,7 @@ class Resume(Onglet, DetailView):
         context['page_titre'] = "Fiche famille"
         context['box_introduction'] = ""
         context['onglet_actif'] = "resume"
+        context['nb_representants'] = Rattachement.objects.filter(famille_id=idfamille, categorie=1).count()
         context['nbre_messages_non_lus'] = PortailMessage.objects.filter(famille=context['famille'], utilisateur__isnull=False, date_lecture__isnull=True).count()
 
         # Alertes

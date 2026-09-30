@@ -33,7 +33,7 @@ class Page(Onglet):
         """ Context data spécial pour onglet """
         context = super(Page, self).get_context_data(**kwargs)
         context['onglet_actif'] = self.onglet_actif
-        context["famille"] = self.request.user.famille
+        context["famille"] = self.get_famille()
         if not self.get_dict_onglet_actif().validation_auto:
             context['box_introduction'] = self.description_saisie + " " + _("Ces informations devront être validées par l'administrateur de l'application.")
         return context
@@ -61,7 +61,7 @@ class Liste(Page, TemplateView):
         context = super(Liste, self).get_context_data(**kwargs)
         context['box_titre'] = _("Quotients familiaux")
         context['box_introduction'] = _("Cliquez sur le bouton Ajouter au bas de la page pour ajouter un nouveau quotient.")
-        context['liste_quotients'] = Quotient.objects.filter(famille=self.request.user.famille).order_by("date_debut")
+        context['liste_quotients'] = Quotient.objects.filter(famille=self.get_famille()).order_by("date_debut")
         return context
 
 

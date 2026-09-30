@@ -1,0 +1,91 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    <form method="post" class="form_spinner">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rechercher">
+        <div class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label>Code UAI *</label>
+                    <input type="text" name="uai" class="form-control" value="{{ uai_recherche }}" required>
+                </div>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary btn_spinner">
+                        <i class="fa fa-search"></i> Rechercher
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% if erreur %}
+        <div class="alert alert-warning mt-3">
+            <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
+        </div>
+        {% if aucun_resultat %}
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle"></i> Vous pouvez créer cette école manuellement.
+                <a href="{% url 'ecoles_ajouter' %}" class="btn btn-sm btn-primary ml-2">
+                    <i class="fa fa-plus"></i> Ajouter une école manuellement
+                </a>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    {% if ecole_existante %}
+        <div class="alert alert-secondary mt-3">
+            <i class="fa fa-info-circle"></i> Cette école est déjà importée (« {{ ecole_existante.nom }} »). Vous pouvez continuer pour actualiser ses informations.
+        </div>
+    {% endif %}
+
+    {% if resultat %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <strong>{{ resultat.name }}</strong>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-3">
+                    <tr><td width="150"><strong>UAI :</strong></td><td>{{ resultat.UAI|default:"Non renseigné" }}</td></tr>
+                    <tr><td><strong>Ville :</strong></td><td>{{ resultat.city|default:"Non renseignée" }}</td></tr>
+                    <tr><td><strong>Code postal :</strong></td><td>{{ resultat.zipCode|default:"Non renseigné" }}</td></tr>
+                    <tr><td><strong>Adresse :</strong></td><td>{{ resultat.adresse|default:"Non renseignée" }}</td></tr>
+                    <tr><td><strong>Téléphone :</strong></td><td>{{ resultat.phone|default:"Non renseigné" }}</td></tr>
+                    <tr><td><strong>Email :</strong></td><td>{{ resultat.email|default:"Non renseigné" }}</td></tr>
+                </table>
+
+                <form method="post" class="form_spinner">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="importer">
+                    <input type="hidden" name="ent_id" value="{{ resultat.id }}">
+                    <button type="submit" class="btn btn-success btn_spinner">
+                        <i class="fa fa-check"></i> Confirmer l'import
+                    </button>
+                </form>
+            </div>
+        </div>
+    {% endif %}
+
+    <script>
+        document.querySelectorAll('.form_spinner').forEach(function(form) {
+            form.addEventListener('submit', function() {
+                var btn = form.querySelector('.btn_spinner');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+            });
+        });
+    </script>
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}
