@@ -22,48 +22,51 @@
         </div>
     {% endif %}
 
+    {% for data in donnees_par_famille %}
+        <h3>Famille: {{ data.famille }}</h3>
+
     {# Solde famille #}
-    {% if parametres_portail.facturation_afficher_solde_famille %}
-        <div class="alert alert-{% if solde_famille > 0 %}danger{% else %}success{% endif %}">
-            <i class='fa fa-{% if solde_famille > 0 %}exclamation-triangle{% else %}check-circle{% endif %} margin-r-5'></i>
+    {% if parametres_portail.facturation_afficher_solde_famille and data.solde_famille != None %}
+        <div class="alert alert-{% if data.solde_famille > 0 %}danger{% else %}success{% endif %}">
+            <i class='fa fa-{% if data.solde_famille > 0 %}exclamation-triangle{% else %}check-circle{% endif %} margin-r-5'></i>
             {% blocktrans %}Solde du compte{% endblocktrans %} :
-            {% if solde_famille < 0 %}
-                {% blocktrans %}Il reste un crédit de{% endblocktrans %} <b>{{ solde_famille|inverse_signe|montant }}</b>
+            {% if data.solde_famille < 0 %}
+                {% blocktrans %}Il reste un crédit de{% endblocktrans %} <b>{{ data.solde_famille|inverse_signe|montant }}</b>
             {% else %}
-                {% blocktrans %}Il reste à régler un total de{% endblocktrans %} <b>{{ solde_famille|montant }}</b>
+                {% blocktrans %}Il reste à régler un total de{% endblocktrans %} <b>{{ data.solde_famille|montant }}</b>
             {% endif %}
         </div>
     {% endif %}
 
     {# Texte impayés #}
-    {% if texte_impayes and parametres_portail.facturation_afficher_solde_facture %}
+    {% if data.texte_impayes and parametres_portail.facturation_afficher_solde_facture %}
         <div class="alert alert-danger">
-            <i class='fa fa-exclamation-triangle margin-r-5'></i>{{ texte_impayes|safe }}
+            <i class='fa fa-exclamation-triangle margin-r-5'></i>{{ data.texte_impayes|safe }}
         </div>
     {% endif %}
 
     {# Prélèvement activé #}
-    {% if prelevement_actif %}
+    {% if data.prelevement_actif %}
         <div class="alert alert-info">
             <i class='fa fa-info-circle margin-r-5'></i>{% blocktrans %}Vous êtes abonné au prélèvement automatique.{% endblocktrans %}
         </div>
     {% endif %}
 
     {# Paiements en cours #}
-    {% if liste_paiements %}
+    {% if data.liste_paiements %}
         <div class="alert alert-warning">
             <i class='fa fa-exclamation-triangle margin-r-5'></i>
-            {% if liste_paiements|length == 1 %}
+            {% if data.liste_paiements|length == 1 %}
                 {% blocktrans %}Un paiement est en attente.{% endblocktrans %}
             {% else %}
-                {{ liste_paiements|length }} {% blocktrans %}paiements sont en attente.{% endblocktrans %}
+                {{ data.liste_paiements|length }} {% blocktrans %}paiements sont en attente.{% endblocktrans %}
             {% endif %}
             {% blocktrans %}Si vous avez interrompu la procédure de paiement, vous devez attendre quelques minutes avant de réactualiser cette page pour voir de nouveau la facture impayée apparaître ci-dessous.{% endblocktrans %}
         </div>
     {% endif %}
 
     {# Récapitulatif des factures impayées #}
-    {% if texte_impayes and parametres_portail.facturation_afficher_solde_facture %}
+    {% if data.texte_impayes and parametres_portail.facturation_afficher_solde_facture %}
         {% embed 'core/box.html' with box_titre=True %}
             {% block box_theme %}card-outline card-danger{% endblock %}
             {% block box_titre %}{% blocktrans %}Récapitulatif des impayés{% endblocktrans %}{% endblock %}
@@ -79,7 +82,7 @@
                                 <th>{% blocktrans %}Reste à régler{% endblocktrans %}</th>
                             </tr>
 
-                            {% for facture in liste_factures_impayees %}
+                            {% for facture in data.liste_factures_impayees %}
                                 <tr>
                                     <td>{% trans "Facture" %} n°{{ facture.numero }}</td>
                                     <td>{{ facture.total|montant }}</td>
@@ -88,7 +91,7 @@
                                 </tr>
                             {% endfor %}
 
-                            {% for periode in liste_periodes_prefacturation %}
+                            {% for periode in data.liste_periodes_prefacturation %}
                                 <tr>
                                     <td>{{ periode.nom }}</td>
                                     <td>{{ periode.total|montant }}</td>
@@ -97,7 +100,7 @@
                                 </tr>
                             {% endfor %}
 
-                            {% for prestation_cotisation in liste_cotisations_prefacturation %}
+                            {% for prestation_cotisation in data.liste_cotisations_prefacturation %}
                                 <tr>
                                     <td>{{ prestation_cotisation.label }}</td>
                                     <td>{{ prestation_cotisation.total|montant }}</td>
@@ -113,7 +116,7 @@
     {% endif %}
 
     {# Paiement en ligne #}
-    {% if texte_impayes and parametres_portail.paiement_ligne_systeme and paiement_actif %}
+    {% if data.texte_impayes and parametres_portail.paiement_ligne_systeme and data.paiement_actif %}
         {% embed 'core/box.html' with box_titre=True %}
             {% block box_theme %}card-outline card-lightblue{% endblock %}
             {% block box_titre %}{% blocktrans %}Payer en ligne{% endblocktrans %}{% endblock %}
@@ -126,7 +129,7 @@
                     <p>{% blocktrans %}Vous pouvez payer en ligne à l'aide de votre carte bancaire. Les transactions effectuées sur ce portail sont sécurisées par la plateforme de paiement en ligne PAYFIP. Cliquez sur le bouton ci-dessous pour sélectionner le montant à régler et accéder au site sécurisé de notre partenaire.{% endblocktrans %}</p>
                 {% endif %}
                 <div>
-                    <a href="#" class="btn btn-success" data-toggle="modal" data-target="#modal_selection_factures" title="Payer en ligne avec une carte bancaire"><i class="fa fa-credit-card margin-r-5"></i>{% blocktrans %}Payer en ligne{% endblocktrans %}</a>
+                    <a href="#" class="btn btn-success" data-toggle="modal" data-target="#modal_selection_factures_{{ data.famille.pk }}" title="Payer en ligne avec une carte bancaire"><i class="fa fa-credit-card margin-r-5"></i>{% blocktrans %}Payer en ligne{% endblocktrans %}</a>
                 </div>
             {% endblock box_contenu %}
             {% block box_conclusion %}{{ box_conclusion|safe }}{% endblock %}
@@ -134,12 +137,12 @@
 
         {# Modal Sélection des impayés à régler #}
         {% embed 'core/modal.html' with modal_footer=True %}
-            {% block modal_id %}modal_selection_factures{% endblock %}
+            {% block modal_id %}modal_selection_factures_{{ data.famille.pk }}{% endblock %}
             {% block modal_titre %}{% blocktrans %}Payer en ligne{% endblocktrans %}{% endblock %}
             {% block modal_classe %}modal-lg{% endblock %}
             {% block modal_body %}
                 <p>{% blocktrans %}Cochez les sommes à payer et cliquez sur le bouton Valider pour accéder à la page de paiement sécurisée de notre partenaire.{% endblocktrans %}</p>
-			    <div id="message_erreur" class="text-red"></div>
+			    <div id="message_erreur_{{ data.famille.pk }}" class="text-red"></div>
                 <div class="box-body table-responsive">
 
                     <table class="table-facturation table table-bordered table-striped">
@@ -152,7 +155,7 @@
                                 <th>{% blocktrans %}Reste à régler{% endblocktrans %}</th>
                             </tr>
 
-                            {% for facture in liste_factures_impayees %}
+                            {% for facture in data.liste_factures_impayees %}
                                 <tr>
                                     <td><input type="checkbox" class="check_impaye" name="check_impaye" value="{{ facture.solde_actuel|stringformat:".2f" }}" data-type='facture' data-id={{ facture.pk }} data-num={{ facture.numero }} data-solde={{ facture.solde_actuel|stringformat:".2f" }}></td>
                                     <td>Facture n°{{ facture.numero }}</td>
@@ -162,7 +165,7 @@
                                 </tr>
                             {% endfor %}
 
-                            {% for periode in liste_periodes_prefacturation %}
+                            {% for periode in data.liste_periodes_prefacturation %}
                                 <tr>
                                     <td><input type="checkbox" class="check_impaye" name="check_impaye" value={{ periode.solde|stringformat:".2f" }} unchecked data-type='periode' data-id={{ periode.pk }} data-num="" data-solde={{ periode.solde|stringformat:".2f" }}></td>
                                     <td>{{ periode.nom }}</td>
@@ -172,7 +175,7 @@
                                 </tr>
                             {% endfor %}
 
-                            {% for prestation_cotisation in liste_cotisations_prefacturation %}
+                            {% for prestation_cotisation in data.liste_cotisations_prefacturation %}
                                 <tr>
                                     <td><input type="checkbox" class="check_impaye" name="check_impaye" value={{ prestation_cotisation.solde|stringformat:".2f" }} unchecked data-type='cotisation' data-id={{ prestation_cotisation.pk }} data-num="" data-solde={{ prestation_cotisation.solde|stringformat:".2f" }}></td>
                                     <td>{{ prestation_cotisation.label }}</td>
@@ -191,50 +194,52 @@
                     {% if parametres_portail.payzen_echelonnement %}
                         </br>
                         <div>
-                            <input type="checkbox" id="check_echelonnement" name="check_echelonnement"> {% blocktrans %}Payer en 3 fois sans frais (Echelonnement sur 3 mois){% endblocktrans %}
+                            <input type="checkbox" id="check_echelonnement_{{ data.famille.pk }}" name="check_echelonnement"> {% blocktrans %}Payer en 3 fois sans frais (Echelonnement sur 3 mois){% endblocktrans %}
                         </div>
                     {% endif %}
                 </div>
             {% endblock %}
 
             {% block modal_footer %}
-                <div id="div_form_paiement" style="visibility:hidden"></div>
-                <button type="button" class="btn btn-primary" id="bouton_valider_montant"><i class="fa fa-check margin-r-5"></i>{% trans "Valider" %}</button>
+                <div id="div_form_paiement_{{ data.famille.pk }}" style="visibility:hidden"></div>
+                <button type="button" class="btn btn-primary" id="bouton_valider_montant_{{ data.famille.pk }}"><i class="fa fa-check margin-r-5"></i>{% trans "Valider" %}</button>
                 <button type="button" class="btn btn-danger" data-dismiss="modal"><i class='fa fa-ban margin-r-5'></i>{% trans "Annuler" %}</button>
             {% endblock %}
 
         {% endembed %}
 
-        <a id="lien_externe"></a>
+        <a id="lien_externe_{{ data.famille.pk }}"></a>
 
         <script>
             // Reset des champs de saisie de la fenêtre modale
-            $('#modal_selection_factures').on('show.bs.modal', function (event) {
-                $('#message_erreur').text('')
-                $('#div_form_paiement').hide();
-                $('#div_form_paiement').html('');
+            $('#modal_selection_factures_{{ data.famille.pk }}').on('show.bs.modal', function (event) {
+                $('#message_erreur_{{ data.famille.pk }}').text('')
+                $('#div_form_paiement_{{ data.famille.pk }}').hide();
+                $('#div_form_paiement_{{ data.famille.pk }}').html('');
             })
 
             $(document).ready(function() {
+                var modal_selector = "#modal_selection_factures_{{ data.famille.pk }}";
+
                 {# Fonction de calcul du total du paiement #}
                 function maj_montant_paiement() {
                     var montant_reglement = 0.0;
-                    $("input[name='check_impaye']:checked").each(function() {
+                    $(modal_selector + " input[name='check_impaye']:checked").each(function() {
                         montant_reglement += parseFloat($(this).val());
                     });
-                    $('.total').html(parseFloat(montant_reglement).toFixed(2) + " €");
+                    $(modal_selector + ' .total').html(parseFloat(montant_reglement).toFixed(2) + " €");
                 }
 
                 {# Mise à jour du montant total du règlement #}
-                $(".check_impaye").change(function() {
+                $(modal_selector + " .check_impaye").change(function() {
                     maj_montant_paiement();
                 });
 
                 {# Sélection d'une seule facture si multi factures non actif #}
                 {% if not parametres_portail.paiement_ligne_multi_factures %}
-                    $(".check_impaye").change(function() {
+                    $(modal_selector + " .check_impaye").change(function() {
                         if ($(this).prop("checked") === true) {
-                            $("#modal_selection_factures .check_impaye:checked").prop("checked", false);
+                            $(modal_selector + " .check_impaye:checked").prop("checked", false);
                             $(this).prop("checked", true);
                             maj_montant_paiement();
                         }
@@ -242,17 +247,17 @@
                 {% endif %}
 
                 {# Validation du montant du paiement #}
-                $('#bouton_valider_montant').on('click', function(event) {
+                $('#bouton_valider_montant_{{ data.famille.pk }}').on('click', function(event) {
                     var nbr_selected_impayes = 0;
                     var selected_impayes = [];
                     var montant_reglement = 0;
                     var paiement_echelonne = 0;
-                    $(".check_impaye:checked").each(function() {
+                    $(modal_selector + " .check_impaye:checked").each(function() {
                         nbr_selected_impayes += 1;
                         selected_impayes.push($(this).attr("data-type") + "##" + $(this).attr("data-id") + "##" + $(this).attr("data-solde"));
                         montant_reglement += parseFloat($(this).attr("data-solde"));
                     });
-                    if (($("#check_echelonnement").length) && ($("#check_echelonnement").prop("checked") === true)) {
+                    if (($("#check_echelonnement_{{ data.famille.pk }}").length) && ($("#check_echelonnement_{{ data.famille.pk }}").prop("checked") === true)) {
                         paiement_echelonne = 1;
                     };
                     $.ajax({
@@ -270,12 +275,12 @@
                                 toastr.info(data.texte);
                             }
                             if (data.systeme_paiement === "payzen") {
-                                $('#div_form_paiement').html(data.form_paiement);
-                                $('#div_form_paiement').hide();
-                                $("#form_paiement").submit()
+                                $('#div_form_paiement_{{ data.famille.pk }}').html(data.form_paiement);
+                                $('#div_form_paiement_{{ data.famille.pk }}').hide();
+                                $("#div_form_paiement_{{ data.famille.pk }} #form_paiement").submit()
                             }
                             if (data.systeme_paiement === "payfip") {
-                                $('#modal_selection_factures').modal('hide');
+                                $('#modal_selection_factures_{{ data.famille.pk }}').modal('hide');
                                 window.open(data.urltoredirect, '_blank', 'height=700, width=900, toolbar=no, menubar=no, scrollbars=no, resizable=yes, location=no, directories=no, status=no');
                                 window.location.href = "{% url 'portail_attente_paiement' %}"
                             }
@@ -301,7 +306,7 @@
 
             {# Liste des factures #}
             <div style="display: block;overflow-x: auto;white-space: nowrap;">
-                {% if liste_factures %}
+                {% if data.factures %}
                     <table class="table projects mb-0">
                         <thead>
                             <tr class="text-center">
@@ -320,7 +325,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for facture in liste_factures %}
+                            {% for facture in data.factures %}
                                 <tr class="text-center">
                                     <td>{{ facture.date_debut|date:'d/m/Y' }}</td>
                                     <td>{{ facture.date_fin|date:'d/m/Y' }}</td>
@@ -334,10 +339,10 @@
                                     {% if parametres_portail.facturation_autoriser_telechargement_facture or parametres_portail.facturation_autoriser_detail_facture %}
                                         <td>
                                             {% if parametres_portail.facturation_autoriser_detail_facture %}
-                                                <button data-idfacture="{{ facture.pk }}" class="btn btn-primary btn-xs bouton_detail_facture" title="{% trans "Afficher le détail de la facture" %}"><i class="fa fa-fw fa-search"></i></button>
+                                                <button data-idfacture="{{ facture.pk }}" class="btn btn-primary btn-xs bouton_detail_facture_{{ data.famille.pk }}" title="{% trans "Afficher le détail de la facture" %}"><i class="fa fa-fw fa-search"></i></button>
                                             {% endif %}
                                             {% if parametres_portail.facturation_autoriser_telechargement_facture and parametres_portail.facturation_modele_impression_facture %}
-                                                <button data-idfacture="{{ facture.pk }}" class="btn btn-primary btn-xs bouton_imprimer_facture" title="{% trans "Télécharger la facture" %}"><i class="fa fa-fw fa-download"></i></button>
+                                                <button data-idfacture="{{ facture.pk }}" class="btn btn-primary btn-xs bouton_imprimer_facture_{{ data.famille.pk }}" title="{% trans "Télécharger la facture" %}"><i class="fa fa-fw fa-download"></i></button>
                                             {% endif %}
                                         </td>
                                     {% endif %}
@@ -351,7 +356,7 @@
             </div>
 
             {# Lien de téléchargement de la facture #}
-            <a id="download" download></a>
+            <a id="download_{{ data.famille.pk }}" download></a>
 
         {% endblock box_contenu %}
         {% block box_conclusion %}{{ box_conclusion|safe }}{% endblock %}
@@ -360,11 +365,11 @@
 
     {# Modal Détail d'une facture #}
     {% embed 'core/modal.html' %}
-        {% block modal_id %}modal_detail_facture{% endblock %}
+        {% block modal_id %}modal_detail_facture_{{ data.famille.pk }}{% endblock %}
         {% block modal_classe %}modal-xl modal-dialog-scrollable{% endblock %}
         {% block modal_titre %}{% blocktrans %}Détail d'une facture{% endblocktrans %}{% endblock %}
         {% block modal_body %}
-            <div id="texte_detail_facture"></div>
+            <div id="texte_detail_facture_{{ data.famille.pk }}"></div>
         {% endblock %}
     {% endembed %}
 
@@ -372,7 +377,7 @@
         $(document).ready(function() {
 
             // Affiche le détail d'une facture
-            $(".bouton_detail_facture").on('click', function(e) {
+            $(".bouton_detail_facture_{{ data.famille.pk }}").on('click', function(e) {
                 $.ajax({
                     type: "POST",
                     url: "{% url 'portail_ajax_get_detail_facture' %}",
@@ -381,14 +386,14 @@
                         csrfmiddlewaretoken: "{{ csrf_token }}",
                     },
                     success: function (data) {
-                        $("#texte_detail_facture").html(data);
-                        $('#modal_detail_facture').modal('show');
+                        $("#texte_detail_facture_{{ data.famille.pk }}").html(data);
+                        $('#modal_detail_facture_{{ data.famille.pk }}').modal('show');
                     },
                 });
             });
 
             // Impression du PDF
-            $(".bouton_imprimer_facture").on('click', function(e) {
+            $(".bouton_imprimer_facture_{{ data.famille.pk }}").on('click', function(e) {
                 $.ajax({
                     type: "POST",
                     url: "{% url 'portail_ajax_imprimer_facture' %}",
@@ -400,7 +405,7 @@
                     datatype: "json",
                     success: function(data){
                         window.location = "{{ MEDIA_URL }}" + data.nom_fichier;
-                        // $("#download").attr("href", data.nom_fichier);
+                        // $("#download_{{ data.famille.pk }}").attr("href", data.nom_fichier);
                         // document.getElementById("download").click();
                     },
                 })
@@ -408,5 +413,7 @@
 
         });
     </script>
+
+    {% endfor %}
 
 {% endblock contenu_page %}

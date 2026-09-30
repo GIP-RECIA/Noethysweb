@@ -20,9 +20,62 @@ class View(CustomView, TemplateView):
         context = super(View, self).get_context_data(**kwargs)
         context['page_titre'] = _("Activités")
 
-        # Importation des inscriptions
-        conditions = Q(famille=self.request.user.famille) & Q(statut="ok") & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.date.today())) & Q(individu__deces=False)
-        inscriptions = Inscription.objects.select_related("activite", "individu").filter(conditions).exclude(individu__in=self.request.user.famille.individus_masques.all())
+        familles = self.get_famille_object()
+        context["familles"] = familles
+
+        # -----------------------------
+        # Données par famille (multi-famille)
+        # -----------------------------
+        donnees_par_famille = []
+        dict_activites = {activite.pk: activite.nom for activite in Activite.objects.all()}
+        for famille in familles:
+            # Importation des inscriptions (par famille)
+            conditions = Q(famille=famille) & Q(statut="ok") & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.date.today())) & Q(individu__deces=False)
+            inscriptions = Inscription.objects.select_related("activite", "individu").filter(conditions).exclude(individu__in=famille.individus_masques.all())
+
+            # Récupération des individus
+            liste_individus = sorted(list({inscription.individu for inscription in inscriptions}), key=lambda individu: individu.prenom)
+
+            # Récupération des activités pour chaque individu
+            dict_inscriptions = {}
+            for inscription in inscriptions:
+                dict_inscriptions.setdefault(inscription.individu, [])
+                dict_inscriptions[inscription.individu].append(inscription)
+
+            activites_par_individu = []
+            for individu in liste_individus:
+                activites_par_individu.append({
+                    "individu": individu,
+                    "inscriptions": sorted(dict_inscriptions.get(individu, []), key=lambda inscription: inscription.activite.nom),
+                })
+
+            # Demandes d'inscription en attente de traitement (par famille)
+            demandes = []
+            for demande in PortailRenseignement.objects.select_related("individu").filter(
+                famille=famille,
+                etat="ATTENTE",
+                code="inscrire_activite",
+            ).order_by("individu__prenom"):
+                demande.nom_activite = dict_activites.get(int(json.loads(demande.nouvelle_valeur).split(";")[0]), "?")
+                demandes.append(demande)
+
+            donnees_par_famille.append({
+                "famille": famille,
+                "activites": activites_par_individu,
+                "demandes_inscriptions_attente": demandes,
+            })
+
+        context["donnees_par_famille"] = donnees_par_famille
+
+        # -----------------------------
+        # Contexte historique (template actuel)
+        # -----------------------------
+        # Importation des inscriptions (toutes familles confondues)
+        conditions = Q(famille__in=familles) & Q(statut="ok") & (Q(date_fin__isnull=True) | Q(date_fin__gte=datetime.date.today())) & Q(individu__deces=False)
+        individus_masques = set()
+        for famille in familles:
+            individus_masques.update(list(famille.individus_masques.all()))
+        inscriptions = Inscription.objects.select_related("activite", "individu").filter(conditions).exclude(individu__in=individus_masques)
 
         # Récupération des individus
         context['liste_individus'] = sorted(list(set([inscription.individu for inscription in inscriptions])), key=lambda individu: individu.prenom)
@@ -37,8 +90,7 @@ class View(CustomView, TemplateView):
 
         # Demandes d'inscription en attente de traitement
         demandes = []
-        dict_activites = {activite.pk: activite.nom for activite in Activite.objects.all()}
-        for demande in PortailRenseignement.objects.select_related("individu").filter(famille=self.request.user.famille, etat="ATTENTE", code="inscrire_activite").order_by("individu__prenom"):
+        for demande in PortailRenseignement.objects.select_related("individu").filter(famille__in=familles, etat="ATTENTE", code="inscrire_activite").order_by("individu__prenom"):
             demande.nom_activite = dict_activites.get(int(json.loads(demande.nouvelle_valeur).split(";")[0]), "?")
             demandes.append(demande)
         context["demandes_inscriptions_attente"] = demandes

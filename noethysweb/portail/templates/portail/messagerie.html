@@ -19,9 +19,47 @@
 
     {# Lien de retour vers la page contact #}
 	<div class="d-print-none" style="margin-bottom: 10px;">
-        <a href="{% url 'portail_contact' %}"><i class="fa fa-arrow-circle-o-left"></i> {% blocktrans %}Revenir à la page contact{% endblocktrans %}</a>
+        <a href="{% if discussion_famille and familles|length > 1 %}{% url 'portail_messagerie' idstructure=structure.pk %}{% else %}{% url 'portail_contact' %}{% endif %}"><i class="fa fa-arrow-circle-o-left"></i> {% blocktrans %}Revenir à la page contact{% endblocktrans %}</a>
 	</div>
 
+
+    {# Sélecteur de famille (si plusieurs familles) #}
+    {% if familles|length > 1 and not discussion_famille %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">{% trans "Sélection de la famille" %}</h3>
+            </div>
+            <div class="card-body">
+                <p>{% trans "Cliquez sur la famille pour laquelle vous souhaitez consulter la messagerie." %}</p>
+                <div class="row">
+                    {% for famille in familles %}
+                        <div class="col-md-6" style="margin-bottom: 10px;">
+                            <a href="{% url 'portail_messagerie_famille' idstructure=structure.pk idfamille=famille.pk %}" 
+                               style="text-decoration: none;">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h4>{{ famille }}</h4>
+                                        {% if unread_messages_by_family|get_item:famille.pk %}
+                                            <span class="badge badge-danger">
+                                                {{ unread_messages_by_family|get_item:famille.pk }} message(s) non lu(s)
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+
+
+
+    {# Discussion (si famille sélectionnée) #}
+    {% if discussion_famille %}
     {# Messagerie #}
     {% embed 'core/box.html' with box_titre=True box_conclusion=True %}
         {% block box_theme %}card-outline card-lightblue direct-chat direct-chat-primary{% endblock %}
@@ -78,7 +116,7 @@
 
         {% endblock box_contenu %}
         {% block box_conclusion %}
-            {% crispy form %}
+            {% if discussion_famille %}{% crispy form %}{% endif %}
         {% endblock %}
     {% endembed %}
 
@@ -87,4 +125,5 @@
         $("#div_messages").scrollTop($("#div_messages").get(0).scrollHeight);
     </script>
 
+    {% endif %}
 {% endblock contenu_page %}
