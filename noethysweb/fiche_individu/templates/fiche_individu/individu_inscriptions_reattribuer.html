@@ -1,0 +1,53 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    <table class="table table-sm table-borderless mb-3">
+        <tr>
+            <td width="150"><strong>Activité :</strong></td>
+            <td>{{ inscription.activite }}</td>
+        </tr>
+        <tr>
+            <td><strong>Individu :</strong></td>
+            <td>{{ inscription.individu }}</td>
+        </tr>
+        <tr>
+            <td><strong>Famille actuelle :</strong></td>
+            <td>{{ inscription.famille.nom }}</td>
+        </tr>
+    </table>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            <label>Nouvelle famille</label>
+            <select name="idfamille_cible" class="form-control" required>
+                <option value="">---------</option>
+                {% for famille in familles %}
+                    <option value="{{ famille.pk }}" {% if famille.pk == inscription.famille_id %}disabled{% endif %}>
+                        {{ famille.nom }}{% if famille.pk == inscription.famille_id %} (famille actuelle){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="fa fa-exchange"></i> Réattribuer
+            </button>
+            <a href="{% url 'individu_inscriptions_liste' idfamille=idfamille idindividu=idindividu %}" class="btn btn-default ml-2">
+                <i class="fa fa-times"></i> Annuler
+            </a>
+        </div>
+    </form>
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}

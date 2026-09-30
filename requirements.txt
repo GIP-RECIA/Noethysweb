@@ -40,3 +40,4 @@ pcloud
 crispy-bootstrap4
 openpyxl
 py7zr
+mozilla-django-oidc==4.0.1

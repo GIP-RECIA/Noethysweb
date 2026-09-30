@@ -30,6 +30,7 @@ class Formulaire(FormulaireBase, ModelForm):
 
     def __init__(self, *args, **kwargs):
         idstructure = kwargs.pop("idstructure", None)
+        idfamille = kwargs.pop("idfamille", None)
         super(Formulaire, self).__init__(*args, **kwargs)
         self.helper = FormHelper()
         self.helper.form_id = 'portail_messages_form'
@@ -37,7 +38,7 @@ class Formulaire(FormulaireBase, ModelForm):
 
         # Affichage
         self.helper.layout = Layout(
-            Hidden('famille', value=self.request.user.famille.pk),
+            Hidden('famille', value=idfamille),
             Hidden('structure', value=idstructure),
             Field('texte'),
             Commandes(enregistrer_label="<i class='fa fa-send margin-r-5'></i>%s" % _("Envoyer"), annuler_url="{% url 'portail_contact' %}", ajouter=False, aide=False, css_class="pull-right"),

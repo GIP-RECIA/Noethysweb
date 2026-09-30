@@ -157,6 +157,7 @@ WSGI_APPLICATION = 'noethysweb.wsgi.application'
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesBackend',
     'django.contrib.auth.backends.ModelBackend',
+    'portail.oidc_backend.OIDCBackendEnt',
 ]
 
 # Database
@@ -313,6 +314,26 @@ CSP_FRAME_SRC = (
 CSP_FRAME_ANCESTORS = (
     "'self'",
 )
+
+# Connexion ENT (identiques pour toutes les collectivités sur la même recette Edifice,
+# à surcharger dans settings_production.py)
+ENT_URL = ""
+ENT_CLIENT_ID = ""
+ENT_CLIENT_SECRET = ""
+
+# SSO ENT (OIDC) - identifiants et endpoints en attente de la réponse d'Edifice, à surcharger
+# dans settings_production.py. Distinct de ENT_CLIENT_ID/SECRET ci-dessus (compte de service
+# pour l'API annuaire) : ici c'est l'enregistrement OIDC dédié au SSO parent.
+OIDC_RP_CLIENT_ID = ""
+OIDC_RP_CLIENT_SECRET = ""
+OIDC_OP_AUTHORIZATION_ENDPOINT = ""
+OIDC_OP_TOKEN_ENDPOINT = ""
+OIDC_OP_USER_ENDPOINT = ""
+OIDC_OP_JWKS_ENDPOINT = ""
+OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_RP_SCOPES = "openid"
+OIDC_CREATE_USER = False  # on ne crée jamais de compte via le SSO, seul un compte existant peut se connecter
+OIDC_ENT_ID_CLAIM = "sub"  # nom du claim OIDC contenant l'identifiant ENT - à confirmer avec Edifice
 
 # Chargement des settings de production
 try:

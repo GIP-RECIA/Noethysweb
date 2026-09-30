@@ -46,8 +46,6 @@ class Onglet(CustomView):
         rattachement = self.get_rattachement()
         return rattachement.categorie if rattachement else None
 
-    def get_famille(self):
-        return self.request.user.famille
 
     def get_individu(self):
         rattachement = self.get_rattachement()
@@ -65,10 +63,12 @@ class Onglet(CustomView):
         """ Vérifie que l'utilisateur peut se connecter à cette page """
         if not super(Onglet, self).test_func():
             return False
+
+        familles = self.get_famille_object()
         rattachement = self.get_rattachement()
-        if rattachement and rattachement.famille != self.request.user.famille:
+        if rattachement and rattachement.famille not in familles:
             return False
-        if self.get_famille() != self.request.user.famille:
+        if self.get_famille() not in familles:
             return False
         return True
 

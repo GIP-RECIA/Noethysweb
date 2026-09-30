@@ -10,10 +10,13 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.template import Template, RequestContext
 from django.db.models import Q
 from django.contrib import messages
+from django.shortcuts import get_object_or_404
+from django.views.generic import TemplateView
+from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
-from core.models import Inscription, Prestation, Groupe, CategorieTarif, Consommation, Ouverture
-from core.utils import utils_dates
+from core.models import Famille, Inscription, Prestation, Groupe, CategorieTarif, Consommation, Ouverture, Rattachement
+from core.utils import utils_dates, utils_historique
 from fiche_individu.forms.individu_inscriptions import Formulaire
 from fiche_individu.views.individu import Onglet
 from individus.utils import utils_forfaits
@@ -99,18 +102,39 @@ class Page(Onglet):
         return reverse_lazy(url, kwargs={'idindividu': self.Get_idindividu(), 'idfamille': self.kwargs.get('idfamille', None)})
 
     def check_inscriptions_existantes(self, form=None, instance=None):
-        # On vérifie si l'individu est déjà inscrit à cette activité sur cette famille
+        # On vérifie si l'individu est déjà inscrit à cette activité sur cette période - sur
+        # cette famille, ou sur une AUTRE de ses familles (enfant partagé entre 2 familles
+        # après une séparation). Sans ce 2e contrôle, rien n'empêchait de créer une inscription
+        # en double dans chaque famille séparément - chacune générant ses propres prestations,
+        # jusqu'à ce qu'une fusion de familles réunisse les deux sans que le doublon soit
+        # détectable, ni simple à nettoyer une fois que des consommations y sont accrochées.
+        # C'est ici, et uniquement ici, que toute inscription réelle est créée - qu'elle vienne
+        # d'une demande du portail ou d'une saisie directe par l'agent (une demande "inscrire_
+        # activite" redirige toujours vers cet écran, jamais de validation automatique).
         activite = form.cleaned_data["activite"]
         if not activite.inscriptions_multiples:
+            individu = form.cleaned_data["individu"]
             date_debut = form.cleaned_data["date_debut"]
             date_fin = form.cleaned_data["date_fin"] if form.cleaned_data["date_fin"] else datetime.date(2999, 12, 31)
-            inscriptions_paralleles = []
-            for inscription in Inscription.objects.filter(individu=form.cleaned_data["individu"], famille=form.cleaned_data["famille"], activite=form.cleaned_data["activite"]):
+
+            def _chevauche(inscription):
                 date_fin_temp = inscription.date_fin if inscription.date_fin else datetime.date(2999, 12, 31)
-                if inscription.date_debut <= date_fin and date_fin_temp >= date_debut and inscription != instance:
-                    inscriptions_paralleles.append(inscription)
-            if inscriptions_paralleles:
+                return inscription.date_debut <= date_fin and date_fin_temp >= date_debut and inscription != instance
+
+            inscriptions_meme_famille = [
+                i for i in Inscription.objects.filter(individu=individu, famille=form.cleaned_data["famille"], activite=activite)
+                if _chevauche(i)
+            ]
+            if inscriptions_meme_famille:
                 messages.add_message(self.request, messages.ERROR, "Inscription impossible : Cet individu est déjà inscrit à cette activité sur cette période et sur cette famille")
+                return False
+
+            inscriptions_autre_famille = [
+                i for i in Inscription.objects.filter(individu=individu, activite=activite).exclude(famille=form.cleaned_data["famille"])
+                if _chevauche(i)
+            ]
+            if inscriptions_autre_famille:
+                messages.add_message(self.request, messages.ERROR, "Inscription impossible : Cet individu est déjà inscrit à cette activité sur cette période via une autre famille")
                 return False
         return True
 
@@ -168,6 +192,15 @@ class Liste(Page, crud.Liste):
                     self.Create_bouton_modifier(url=reverse(view.url_modifier, kwargs=kwargs)),
                     self.Create_bouton_supprimer(url=reverse(view.url_supprimer, kwargs=kwargs)),
                 ]
+                # Réattribution manuelle : uniquement si l'individu est rattaché à plusieurs
+                # familles (ex: enfant partagé après une séparation) - même règle que pour les
+                # prestations et les assurances (ReattribuerPrestation, ReattribuerAssurance).
+                nb_familles = Rattachement.objects.filter(individu_id=instance.individu_id).values("famille_id").distinct().count()
+                if nb_familles > 1:
+                    html.append(self.Create_bouton(
+                        url=reverse("individu_inscriptions_reattribuer", kwargs=kwargs),
+                        title="Réattribuer à une autre famille", icone="fa-exchange"
+                    ))
             else:
                 # Afficher que l'accès est interdit
                 html = ["<span class='text-red'><i class='fa fa-minus-circle margin-r-5' title='Accès non autorisé'></i>Accès interdit</span>",]
@@ -339,3 +372,59 @@ class Supprimer(Page, crud.Supprimer):
             protections.append("Vous ne pouvez pas supprimer cette inscription car %s prestations sont déjà associées." % nbre_prestations)
 
         return protections
+
+
+class ReattribuerInscription(CustomView, TemplateView):
+    """
+    Corrige manuellement une inscription restée ambiguë après une séparation de famille
+    (enfant partagé, aucun titulaire clair pour trancher automatiquement) - même outil que
+    pour les prestations et les assurances (ReattribuerPrestation, ReattribuerAssurance).
+    """
+    template_name = "fiche_individu/individu_inscriptions_reattribuer.html"
+    menu_code = "individus_toc"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        inscription = get_object_or_404(Inscription, pk=self.kwargs["pk"])
+
+        context["page_titre"] = "Réattribuer une inscription"
+        context["box_titre"] = "Réattribution manuelle"
+        context["box_introduction"] = "Sélectionnez la famille à laquelle vous souhaitez réattribuer cette inscription."
+        context["idfamille"] = self.kwargs["idfamille"]
+        context["idindividu"] = self.kwargs["idindividu"]
+        context["inscription"] = inscription
+        context["familles"] = Famille.objects.filter(rattachement__individu_id=inscription.individu_id).distinct()
+        return context
+
+    def get(self, request, *args, **kwargs):
+        return self.render_to_response(self.get_context_data())
+
+    def post(self, request, *args, **kwargs):
+        inscription = get_object_or_404(Inscription, pk=self.kwargs["pk"])
+        idfamille_cible = request.POST.get("idfamille_cible")
+
+        if not idfamille_cible:
+            messages.error(request, "Veuillez sélectionner une famille.")
+            return HttpResponseRedirect(reverse("individu_inscriptions_reattribuer", kwargs=self.kwargs))
+
+        famille_cible = get_object_or_404(Famille, pk=idfamille_cible)
+
+        # Vérifie que l'individu est bien rattaché à cette famille cible (sécurité) - même
+        # garde-fou que pour les prestations et les assurances.
+        if not Rattachement.objects.filter(individu_id=inscription.individu_id, famille=famille_cible).exists():
+            messages.error(request, "Cette famille n'est pas autorisée pour cette inscription.")
+            return HttpResponseRedirect(reverse("individu_inscriptions_reattribuer", kwargs=self.kwargs))
+
+        famille_origine = inscription.famille
+        inscription.famille = famille_cible
+        inscription.save()
+
+        # Traçabilité (même principe que pour les liaisons ENT et les autres réattributions).
+        utils_historique.Ajouter(
+            titre="Réattribution manuelle d'une inscription",
+            detail=f"Inscription « {inscription.activite} » déplacée de « {famille_origine.nom if famille_origine else '?'} » vers « {famille_cible.nom} ».",
+            utilisateur=request.user, famille=famille_cible.pk, individu=inscription.individu_id,
+        )
+
+        messages.success(request, f"L'inscription a été réattribuée à la famille {famille_cible.nom}.")
+        return HttpResponseRedirect(reverse("individu_inscriptions_liste", kwargs={"idfamille": famille_cible.pk, "idindividu": self.kwargs["idindividu"]}))

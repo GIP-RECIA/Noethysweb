@@ -56,14 +56,28 @@ def Valid_form(request):
 
     if not activite.inscriptions_multiples:
 
-        # Vérifie que l'individu n'est pas déjà inscrit à cette activité
+        # Vérifie que l'individu n'est pas déjà inscrit à cette activité (même famille)
         if Inscription.objects.filter(famille=famille, individu=individu, activite=activite).exists():
             return JsonResponse({"erreur": "Cet individu est déjà inscrit à cette activité"}, status=401)
 
-        # Vérifie qu'il n'y a pas déjà une demande en attente pour la même activité et le même individu
+        # Vérifie qu'il n'y a pas déjà une demande en attente pour la même activité et le même individu (même famille)
         for demande in PortailRenseignement.objects.filter(famille=famille, individu=individu, etat="ATTENTE", code="inscrire_activite"):
             if int(json.loads(demande.nouvelle_valeur).split(";")[0]) == activite.pk:
                 return JsonResponse({"erreur": "Une demande en attente de traitement existe déjà pour cet individu et cette activité"}, status=401)
+
+        # Avertissement (contournable) si l'individu est déjà inscrit via une autre famille
+        # (parents séparés). Le portail n'a pas les dates de la nouvelle demande pour juger
+        # d'un vrai chevauchement : c'est l'agent qui tranche à la validation de la demande,
+        # avec les dates réelles (voir check_inscriptions_existantes côté fiche individu).
+        if not request.POST.get("confirmer"):
+            inscrit_autre_famille = Inscription.objects.filter(individu=individu, activite=activite).exclude(famille=famille).exists()
+            if not inscrit_autre_famille:
+                for demande_autre in PortailRenseignement.objects.filter(individu=individu, etat="ATTENTE", code="inscrire_activite").exclude(famille=famille):
+                    if int(json.loads(demande_autre.nouvelle_valeur).split(";")[0]) == activite.pk:
+                        inscrit_autre_famille = True
+                        break
+            if inscrit_autre_famille:
+                return JsonResponse({"avertissement": "Cet individu est déjà inscrit à cette activité via une autre famille. Voulez-vous quand même envoyer cette demande d'inscription ?"})
 
     # Vérifie s'il reste de la place
     if activite.portail_inscriptions_bloquer_si_complet:
@@ -95,7 +109,7 @@ def Valid_form(request):
                                          date_debut=datetime.date.today(), date_fin=type_piece.Get_date_fin_validite())
 
             # Enregistrement du renseignement de portail
-            PortailRenseignement.objects.create(famille=request.user.famille, individu=individu, categorie="famille_pieces", code="Nouvelle pièce", validation_auto=True,
+            PortailRenseignement.objects.create(famille=form.cleaned_data["famille"], individu=individu, categorie="famille_pieces", code="Nouvelle pièce", validation_auto=True,
                                                 nouvelle_valeur=json.dumps(piece.Get_nom(), cls=DjangoJSONEncoder), idobjet=piece.pk)
 
     # Message de confirmation
