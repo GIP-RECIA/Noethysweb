@@ -1,0 +1,518 @@
+from core.models import Scolarite, Individu, Classe, NiveauScolaire, Ecole, SynchronisationLock
+from fiche_individu.views.individu import Onglet
+from django.views.generic import TemplateView
+from core.views.base import CustomView
+from django.contrib import messages
+from core.utils.utils_ent import get_ent_user_info_by_ent_id
+from django.shortcuts import redirect
+from django.db.models import Q
+from django.db import transaction
+from django.utils import timezone
+import logging
+import threading
+
+logger = logging.getLogger(__name__)
+
+# Type de verrou pour la synchronisation en masse
+SYNC_TYPE_MASSE = 'synchronisation_masse_ent'
+
+class UpdateIndividu(Onglet, TemplateView):
+    menu_code = "individu_synchroniser"
+    template_name = "fiche_individu/individu_update_ent.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(UpdateIndividu, self).get_context_data(**kwargs)
+        context['box_titre'] = "Synchronisation"
+        context['onglet_actif'] = "synchroniser"
+        individu = Individu.objects.get(pk=self.kwargs['idindividu'])
+
+        # Récupérer les données externes
+        external_data = get_ent_user_info_by_ent_id(individu.ent_id)
+        
+        # Vérifier si l'utilisateur existe dans l'ENT
+        if not external_data:
+            context["individu"] = individu
+            context["user_not_found"] = True
+            context["box_titre"] = f"Synchronisation - {individu.prenom} {individu.nom}"
+            context["box_introduction"] = "Cet utilisateur n'a pas été trouvé dans l'ENT."
+            context["onglet_actif"] = "synchronisation"
+            return context
+        
+        # Préparer les données locales
+        local_data = {
+            "id": individu.idindividu,
+            "civilite": individu.get_civilite_display() if individu.civilite else None,
+            "nom": individu.nom,
+            "prenom": individu.prenom,
+            "nom_jfille": individu.nom_jfille,
+            "rue": individu.rue_resid,
+            "cp": individu.cp_resid,
+            "ville": individu.ville_resid,
+            "tel_mobile": individu.tel_mobile,
+            "mail": individu.mail,
+        }
+        
+        # Préparer les données externes avec mapping
+        external_display = {
+            "civilite": external_data.get('civilite'),
+            "nom": external_data.get('nom'),
+            "prenom": external_data.get('prenom'),
+            "nom_jfille": external_data.get('nom_jfille'),
+            "rue": external_data.get('rue'),
+            "cp": external_data.get('cp'),
+            "ville": external_data.get('ville'),
+            "tel_mobile": external_data.get('telephone'),
+            "mail": external_data.get('email'),
+        }
+        
+        # Si c'est un enfant avec scolarité
+        has_scolarite = 'scolarite' in external_data and external_data['scolarite']
+        if has_scolarite:
+            scolarite = external_data['scolarite']
+            ecole = scolarite.get('ecole', {})
+            classe = scolarite.get('classe', {})
+            niveau = scolarite.get('niveau', {})
+            
+            # Ajouter les informations de scolarité
+            external_display.update({
+                'ecole_nom': ecole.get('nom'),
+                'ecole_rue': ecole.get('rue'),
+                'ecole_cp': ecole.get('cp'),
+                'ecole_ville': ecole.get('ville'),
+                'classe_nom': classe.get('nom'),
+                'niveau_nom': niveau.get('nom'),
+            })
+            
+            local_data.update({
+                'ecole_nom': None,
+                'ecole_rue': None,
+                'ecole_cp': None,
+                'ecole_ville': None,
+                'classe_nom': None,
+                'niveau_nom': None,
+            })
+
+        # Mapping des champs avec leurs labels
+        fields_mapping = [
+            {'key': 'civilite', 'label': 'Civilité', 'local_key': 'civilite', 'external_key': 'civilite'},
+            {'key': 'nom', 'label': 'Nom', 'local_key': 'nom', 'external_key': 'nom'},
+            {'key': 'nom_jfille', 'label': 'Nom de jeune fille', 'local_key': 'nom_jfille', 'external_key': 'nom_jfille'},
+            {'key': 'prenom', 'label': 'Prénom', 'local_key': 'prenom', 'external_key': 'prenom'},
+            {'key': 'rue', 'label': 'Rue', 'local_key': 'rue', 'external_key': 'rue'},
+            {'key': 'cp', 'label': 'Code postal', 'local_key': 'cp', 'external_key': 'cp'},
+            {'key': 'ville', 'label': 'Ville', 'local_key': 'ville', 'external_key': 'ville'},
+            {'key': 'tel_mobile', 'label': 'Téléphone mobile', 'local_key': 'tel_mobile', 'external_key': 'tel_mobile'},
+            {'key': 'mail', 'label': 'Mail personnel', 'local_key': 'mail', 'external_key': 'mail'},
+        ]
+        
+        # Ajouter les champs de scolarité si applicable
+        if has_scolarite:
+            fields_mapping.extend([
+                {'key': 'ecole_nom', 'label': 'École', 'local_key': 'ecole_nom', 'external_key': 'ecole_nom'},
+                {'key': 'classe_nom', 'label': 'Classe', 'local_key': 'classe_nom', 'external_key': 'classe_nom'},
+                {'key': 'niveau_nom', 'label': 'Niveau', 'local_key': 'niveau_nom', 'external_key': 'niveau_nom'},
+            ])
+
+        context["individu"] = individu
+        context["local"] = local_data
+        context["external"] = external_display
+        context["fields_mapping"] = fields_mapping
+        context["has_scolarite"] = has_scolarite
+        context["box_titre"] = f"Synchronisation - {individu.prenom} {individu.nom}"
+        context["box_introduction"] = "Sélectionnez les champs à synchroniser depuis l'ENT vers CoCliCo."
+        context["onglet_actif"] = "synchronisation"
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Traite la synchronisation des champs sélectionnés"""
+        try:
+            individu = Individu.objects.get(pk=self.kwargs['idindividu'])
+            external_data = get_ent_user_info_by_ent_id(individu.ent_id)
+            
+            # Récupérer les champs sélectionnés
+            selected_fields = request.POST.getlist('sync_fields')
+            
+            if not selected_fields:
+                messages.warning(request, "Aucun champ sélectionné pour la synchronisation.")
+                return redirect(request.path)
+            
+            # Mapping des champs du formulaire vers les attributs du modèle
+            field_mapping = {
+                'civilite': 'civilite',
+                'nom': 'nom',
+                'nom_jfille': 'nom_jfille',
+                'prenom': 'prenom',
+                'rue': 'rue_resid',
+                'cp': 'cp_resid',
+                'ville': 'ville_resid',
+                'tel_mobile': 'tel_mobile',
+                'mail': 'mail'
+            }
+            
+            # Mapping des champs externes (API) vers les clés
+            external_field_mapping = {
+                'civilite': 'civilite',
+                'nom': 'nom',
+                'nom_jfille': 'nom_jfille',
+                'prenom': 'prenom',
+                'rue': 'rue',
+                'cp': 'cp',
+                'ville': 'ville',
+                'tel_mobile': 'telephone',
+                'mail': 'email'
+            }
+            
+            updated_fields = []
+            for field in selected_fields:
+                if field in field_mapping:
+                    model_field = field_mapping[field]
+                    external_field = external_field_mapping[field]
+                    
+                    if external_field in external_data:
+                        new_value = external_data[external_field]
+                        
+                        # Traitement spécial pour civilite (conversion texte vers ID)
+                        if field == 'civilite' and new_value:
+                            # Mapper les civilités texte vers les IDs du modèle
+                            civilite_mapping = {
+                                'M.': 1,  # Ajustez selon vos choix de civilité
+                                'Mme': 2,
+                                'Mlle': 3,
+                            }
+                            new_value = civilite_mapping.get(new_value, individu.civilite)
+                        
+                        setattr(individu, model_field, new_value)
+                        updated_fields.append(field)
+            
+            # Gérer les champs de scolarité si présents (nécessite adaptation selon votre modèle)
+            if 'scolarite' in external_data and external_data['scolarite']:
+                # TODO: Implémenter la synchronisation de la scolarité selon votre modèle
+                # Exemple: créer ou mettre à jour les inscriptions, écoles, classes, etc.
+                pass
+            
+            if updated_fields:
+                individu.save()
+                messages.success(
+                    request, 
+                    f"Synchronisation réussie ! {len(updated_fields)} champ(s) mis à jour : {', '.join(updated_fields)}"
+                )
+            else:
+                messages.info(request, "Aucun champ n'a été mis à jour.")
+            
+            return redirect(request.path)
+            
+        except Individu.DoesNotExist:
+            messages.error(request, "Individu introuvable.")
+            return redirect('individus_liste')
+        except Exception as e:
+            messages.error(request, f"Erreur lors de la synchronisation : {str(e)}")
+            return redirect(request.path)
+        
+
+
+
+
+class SynchronisationMasseIndividus(CustomView, TemplateView):
+    template_name = "fiche_individu/individu_liste_maj.html"
+    menu_code = "mettre_a_jour_liste_individu_ent"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+         # Récupérer les filtres
+        search_query = self.request.GET.get('search', '')
+        type_filtre = self.request.GET.get('type', '')  # '' = tous, '1' = Représentant, '2' = Enfant, '3' = Contact
+
+        # Base query - Tous les individus avec ENT ID par défaut
+        individus = Individu.objects.filter(ent_id__isnull=False).exclude(ent_id='')
+
+        # Filtrer par type si spécifié
+        if type_filtre:
+            from core.models import Rattachement
+            # Récupérer les IDs des individus ayant ce type de rattachement
+            individus_ids = Rattachement.objects.filter(
+                categorie=int(type_filtre)
+            ).values_list('individu_id', flat=True).distinct()
+            individus = individus.filter(idindividu__in=individus_ids)
+
+        # Recherche textuelle
+        if search_query:
+            individus = individus.filter(
+                Q(nom__icontains=search_query) |
+                Q(prenom__icontains=search_query) |
+                Q(ent_id__icontains=search_query)
+                # Note: mail est un champ chiffré (EncryptedEmailField), impossible de faire une recherche dessus
+            )
+
+        individus = individus.order_by('nom', 'prenom')
+
+        # Récupérer la liste des écoles - Non utilisé maintenant
+        ecoles = []
+        
+        # Préparer les données des individus
+        individus_data = []
+        for individu in individus[:200]:  # Limiter à 200 pour la performance
+            # Récupérer les types d'individu via les rattachements
+            rattachements = individu.rattachement_set.all()
+            types_individu = []
+
+            for ratt in rattachements:
+                if ratt.categorie == 1:
+                    types_individu.append("Représentant")
+                elif ratt.categorie == 2:
+                    types_individu.append("Enfant")
+                elif ratt.categorie == 3:
+                    types_individu.append("Contact")
+
+            # Si plusieurs types, les joindre par des virgules
+            type_display = ", ".join(set(types_individu)) if types_individu else "-"
+
+            # Récupérer l'école actuelle pour les enfants
+            ecole_nom = "-"
+            classe_nom = "-"
+            if "Enfant" in types_individu:
+                # Récupérer la scolarité actuelle (la plus récente)
+                from datetime import date
+                scolarite_actuelle = individu.scolarite_set.filter(
+                    date_debut__lte=date.today()
+                ).order_by('-date_debut').first()
+
+                if scolarite_actuelle:
+                    if scolarite_actuelle.ecole:
+                        ecole_nom = scolarite_actuelle.ecole.nom
+                    if scolarite_actuelle.classe:
+                        classe_nom = scolarite_actuelle.classe.nom
+
+            individus_data.append({
+                'id': individu.idindividu,
+                'ent_id': individu.ent_id,
+                'civilite': individu.get_civilite_display() if individu.civilite else "-",
+                'nom': individu.nom,
+                'prenom': individu.prenom or "-",
+                'type': type_display,
+                'ecole': ecole_nom,
+                'classe': classe_nom,
+                'mail': individu.mail or "-",
+                'tel_mobile': individu.tel_mobile or "-",
+            })
+        
+        context['individus'] = individus_data
+        context['total_count'] = individus.count()
+        context['total_all_individus'] = Individu.objects.count()
+        context['search_query'] = search_query
+        context['type_filtre'] = type_filtre
+        context['page_titre'] = "Synchronisation en masse"
+        context['box_titre'] = "Synchronisation en masse depuis l'ENT"
+        context['box_introduction'] = "Visualisez tous les individus avec un ENT ID et sélectionnez ceux à synchroniser avec les données de l'ENT."
+
+        # Récupérer les informations de la dernière synchronisation
+        try:
+            lock = SynchronisationLock.objects.get(type_sync=SYNC_TYPE_MASSE)
+            context['sync_en_cours'] = lock.est_verrouille
+            context['sync_date_derniere_fin'] = lock.date_derniere_fin
+            context['sync_nb_succes_dernier'] = lock.nb_succes_dernier
+            context['sync_dernier_utilisateur'] = lock.dernier_utilisateur
+            if lock.est_verrouille:
+                context['sync_date_debut'] = lock.date_debut
+                context['sync_utilisateur_actuel'] = lock.utilisateur
+                context['sync_nb_individus'] = lock.nb_individus
+        except SynchronisationLock.DoesNotExist:
+            context['sync_en_cours'] = False
+
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Lance la synchronisation en masse des individus sélectionnés"""
+        try:
+            # Récupérer les IDs des individus sélectionnés
+            selected_ids = request.POST.getlist('selected_individus')
+
+            if not selected_ids:
+                messages.warning(request, "Aucun individu sélectionné pour la synchronisation.")
+                return redirect(request.path)
+
+            # Convertir en integers
+            selected_ids = [int(id) for id in selected_ids]
+
+            # Vérifier si une synchronisation est déjà en cours
+            with transaction.atomic():
+                lock, created = SynchronisationLock.objects.select_for_update().get_or_create(
+                    type_sync=SYNC_TYPE_MASSE,
+                    defaults={'est_verrouille': False}
+                )
+
+                if lock.est_verrouille:
+                    # Une synchronisation est déjà en cours
+                    messages.warning(
+                        request,
+                        f"Une synchronisation est déjà en cours depuis {lock.date_debut.strftime('%H:%M:%S')} "
+                        f"({lock.nb_individus} individu(s)). "
+                        f"Veuillez attendre qu'elle se termine avant d'en lancer une nouvelle."
+                    )
+                    return redirect(request.path + f"?{request.GET.urlencode()}")
+
+                # Verrouiller pour cette synchronisation
+                lock.est_verrouille = True
+                lock.utilisateur = request.user
+                lock.date_debut = timezone.now()
+                lock.nb_individus = len(selected_ids)
+                lock.save()
+
+            # Lancer la synchronisation en arrière-plan dans un thread
+            thread = threading.Thread(
+                target=self.synchroniser_individus_masse_background,
+                args=(selected_ids, request.user.pk)
+            )
+            thread.daemon = True
+            thread.start()
+
+            # Afficher un message immédiat à l'utilisateur
+            messages.info(
+                request,
+                f"Synchronisation de {len(selected_ids)} individu(s) lancée en arrière-plan. "
+                "Cette opération peut prendre quelques minutes. "
+                "Vous pouvez continuer à travailler pendant ce temps."
+            )
+
+            return redirect(request.path + f"?{request.GET.urlencode()}")
+
+        except Exception as e:
+            messages.error(request, f"Erreur lors du lancement de la synchronisation : {str(e)}")
+            return redirect(request.path)
+
+    def synchroniser_individus_masse_background(self, individu_ids, utilisateur_id):
+        """
+        Méthode wrapper pour exécuter la synchronisation en arrière-plan
+        et logger les résultats. Déverrouille automatiquement à la fin.
+        """
+        logger.info(f"=== DÉBUT Synchronisation en arrière-plan de {len(individu_ids)} individu(s) ===")
+        success_count = 0
+        try:
+            success_count = self.synchroniser_individus_masse(individu_ids)
+            logger.info(f"=== FIN Synchronisation terminée: {success_count}/{len(individu_ids)} individu(s) synchronisé(s) avec succès ===")
+        except Exception as e:
+            logger.exception(f"=== ERREUR Synchronisation en arrière-plan échouée: {str(e)} ===")
+        finally:
+            # Toujours déverrouiller et enregistrer les stats, même en cas d'erreur
+            try:
+                from core.models import Utilisateur
+                lock = SynchronisationLock.objects.get(type_sync=SYNC_TYPE_MASSE)
+                lock.est_verrouille = False
+                lock.date_derniere_fin = timezone.now()
+                lock.nb_succes_dernier = success_count
+                lock.dernier_utilisateur = Utilisateur.objects.get(pk=utilisateur_id)
+                lock.save()
+                logger.info(f"=== Verrou de synchronisation libéré - {success_count} succès ===")
+            except SynchronisationLock.DoesNotExist:
+                logger.warning("=== Verrou de synchronisation introuvable lors de la libération ===")
+    
+    def synchroniser_individus_masse(self, individu_ids):
+        """
+        Synchronise les individus sélectionnés avec les données de l'ENT
+
+        Args:
+            individu_ids: Liste des IDs des individus à synchroniser
+
+        Returns:
+            int: Nombre d'individus synchronisés avec succès
+        """
+        success_count = 0
+        errors = []
+        import time
+        time.sleep(20)
+        # Mapping des champs à synchroniser
+        champs_mapping = {
+            'nom': 'nom',
+            'prenom': 'prenom',
+            'civilite': 'civilite',
+            'email': 'mail',
+            'telephone_mobile': 'tel_mobile',
+            'telephone': 'tel_domicile',
+            'adresse': 'adresse_auto',
+            'code_postal': 'cp_auto',
+            'ville': 'ville_auto',
+        }
+
+        for individu_id in individu_ids:
+            try:
+                with transaction.atomic():
+                    # Récupérer l'individu
+                    individu = Individu.objects.select_for_update().get(idindividu=individu_id)
+
+                    if not individu.ent_id:
+                        logger.warning(f"Individu {individu_id} n'a pas d'ent_id")
+                        continue
+
+                    # Récupérer les données depuis l'ENT par ent_id
+                    donnees_ent = get_ent_user_info_by_ent_id(individu.ent_id)
+
+                    if not donnees_ent:
+                        logger.warning(f"Aucune donnée ENT trouvée pour {individu.nom} {individu.prenom} (ent_id: {individu.ent_id})")
+                        errors.append(f"{individu.nom} {individu.prenom}: Données ENT introuvables")
+                        continue
+
+                    # Mettre à jour les champs
+                    updated = False
+                    for champ_ent, champ_db in champs_mapping.items():
+                        if champ_ent in donnees_ent and donnees_ent[champ_ent]:
+                            valeur_ent = donnees_ent[champ_ent]
+
+                            # Traitement spécial pour la civilité
+                            if champ_db == 'civilite':
+                                valeur_ent = self.convertir_civilite_ent(valeur_ent)
+
+                            # Mettre à jour si la valeur est différente
+                            valeur_actuelle = getattr(individu, champ_db)
+                            if valeur_actuelle != valeur_ent:
+                                setattr(individu, champ_db, valeur_ent)
+                                updated = True
+
+                    if updated:
+                        individu.save()
+                        success_count += 1
+                        logger.info(f"Individu {individu.nom} {individu.prenom} synchronisé avec succès")
+
+            except Individu.DoesNotExist:
+                logger.error(f"Individu {individu_id} introuvable")
+                errors.append(f"Individu ID {individu_id} introuvable")
+            except Exception as e:
+                logger.exception(f"Erreur lors de la synchronisation de l'individu {individu_id}: {str(e)}")
+                errors.append(f"Individu ID {individu_id}: {str(e)}")
+
+        # Log les erreurs s'il y en a
+        if errors:
+            logger.warning(f"Synchronisation terminée avec {len(errors)} erreur(s): {errors}")
+
+        return success_count
+
+    def convertir_civilite_ent(self, valeur):
+        """
+        Convertit la civilité de l'ENT en ID pour la base de données
+        """
+        from core.data import data_civilites
+
+        dict_civilites_data = data_civilites.GetDictCivilites()
+
+        # Mapping: texte ENT -> ID civilité
+        mapping_civilite = {}
+        for civ_id, civ_info in dict_civilites_data.items():
+            if civ_info.get('label'):
+                mapping_civilite[civ_info['label']] = civ_id
+            if civ_info.get('abrege'):
+                mapping_civilite[civ_info['abrege']] = civ_id
+
+        # Variations courantes
+        variations = {
+            'M': 1,
+            'M.': 1,
+            'Mr': 1,
+            'Monsieur': 1,
+            'Mme': 3,
+            'Madame': 3,
+            'Melle': 2,
+            'Mlle': 2,
+            'Mademoiselle': 2,
+        }
+        mapping_civilite.update(variations)
+
+        return mapping_civilite.get(valeur, 1)  # Par défaut Monsieur

@@ -1,0 +1,746 @@
+{% extends "core/page.html" %}
+{% load static %}
+
+{% block contenu_page %}
+<style>
+.family-card {
+    margin-bottom: 1.5rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.family-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.family-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+}
+
+.family-header span {
+    font-size: 1.1rem;
+}
+
+.btn-sync {
+    transition: all 0.3s;
+}
+
+.btn-sync:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-sync:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-sync .fa-refresh {
+    transition: transform 0.3s;
+}
+
+.btn-sync.loading .fa-refresh {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+.no-results {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+    font-size: 1.1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.result-content {
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+    margin-top: 1rem;
+}
+
+.diff-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+}
+
+.diff-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    background: #f8f9fa;
+    border-left: 4px solid #17a2b8;
+}
+
+.diff-item.representant {
+    border-left-color: #007bff;
+}
+
+.diff-item.enfant {
+    border-left-color: #28a745;
+}
+
+.diff-header {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.diff-details {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-left: 1rem;
+}
+
+.diff-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    background: white;
+    border: 1px solid #dee2e6;
+}
+
+.diff-field-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.diff-field-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.25rem;
+}
+
+.diff-field-values {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.old-value {
+    color: #dc3545;
+    padding: 0.25rem 0.5rem;
+    background: #f8d7da;
+    border-radius: 4px;
+}
+
+.new-value {
+    color: #28a745;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    background: #d4edda;
+    border-radius: 4px;
+}
+
+.diff-checkbox {
+    margin-left: 1rem;
+}
+
+.diff-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.select-all-box {
+    background: #e7f3ff;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.select-all-box input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.select-all-box label {
+    margin: 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.success-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: #d4edda;
+    color: #155724;
+    border-radius: 6px;
+    border: 1px solid #c3e6cb;
+}
+
+.sync-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.selected-count {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.selected-count strong {
+    color: #007bff;
+}
+
+.alert-warning-list {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+}
+
+.alert-warning-list ul {
+    margin: 0.5rem 0 0 1.5rem;
+    padding: 0;
+}
+
+.alert-warning-list li {
+    color: #856404;
+    margin-bottom: 0.25rem;
+}
+</style>
+
+<div class="container-fluid">
+    <h2 class="mb-4">
+        <i class="fa fa-users"></i> Familles non synchronisées
+        <span class="badge badge-secondary">{{ familles_non_sync|length }}</span>
+    </h2>
+
+    {% if familles_non_sync %}
+        {% for fam in familles_non_sync %}
+        <div class="card family-card">
+            <div class="family-header">
+                <span>
+                    <i class="fa fa-home"></i> Famille {{ fam.nom }}
+                    <small class="ml-3" style="opacity: 0.9;">
+                        {{ fam.rattachement_set.count }} membre{{ fam.rattachement_set.count|pluralize }}
+                    </small>
+                </span>
+                <button class="btn btn-sm btn-success btn-sync" data-id="{{ fam.idfamille }}">
+                    <i class="fa fa-refresh"></i> Vérifier et Synchroniser
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="initial-{{ fam.idfamille }}">
+                    <p class="text-muted">
+                        <i class="fa fa-info-circle"></i> 
+                        Cliquez sur "Vérifier et Synchroniser" pour comparer avec les données de l'ENT
+                    </p>
+                </div>
+                <div id="result-{{ fam.idfamille }}" class="result-content" style="display: none;"></div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="no-results">
+            <i class="fa fa-check-circle fa-3x mb-3" style="color: #28a745;"></i>
+            <p>Aucune famille non synchronisée trouvée</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+function updateSelectedCount(familleId) {
+    // Compter uniquement les checkboxes cochées dans les containers visibles
+    const allCheckboxes = document.querySelectorAll(`#result-${familleId} .field-checkbox:checked`);
+    let visibleCount = 0;
+
+    allCheckboxes.forEach(checkbox => {
+        const fieldsContainer = checkbox.closest('.fields-container');
+        // Si pas de container ou container visible, compter
+        if (!fieldsContainer || fieldsContainer.style.display !== 'none') {
+            visibleCount++;
+        }
+    });
+
+    const countElement = document.querySelector(`#count-${familleId}`);
+    if (countElement) {
+        countElement.textContent = visibleCount;
+    }
+
+    const validateBtn = document.querySelector(`#result-${familleId} .btn-valider-sync`);
+    if (validateBtn) {
+        validateBtn.disabled = visibleCount === 0;
+    }
+}
+
+function groupPersonsByIndividuId(personsList) {
+    // Regrouper les personnes par leur ID individu
+    const grouped = {};
+
+    personsList.forEach(person => {
+        const key = person.id;
+        if (!grouped[key]) {
+            grouped[key] = [];
+        }
+        grouped[key].push(person);
+    });
+
+    return grouped;
+}
+
+function createGroupedDiffHTML(persons, type, familleId, baseIndex) {
+    if (!persons || persons.length === 0) return '';
+
+    const firstPerson = persons[0];
+    const hasMultiple = persons.length > 1;
+    const personId = firstPerson.id;
+
+    // Récupérer le nom sans le badge (si présent)
+    const nomBase = firstPerson.nom ? firstPerson.nom.split('<span')[0].trim() : `ID ${personId}`;
+
+    let html = `<li class="diff-item ${type}" data-person-id="${personId}" data-person-type="${type}">`;
+    html += `<div class="diff-header">`;
+    html += `<span><i class="fa fa-${type === 'representant' ? 'user' : 'child'}"></i> `;
+    html += `${type === 'representant' ? 'Représentant' : 'Enfant'}: ${nomBase}</span>`;
+    html += `</div>`;
+    html += `<div class="diff-details">`;
+
+    // Si plusieurs personnes trouvées, afficher les radios
+    if (hasMultiple) {
+        const personKey = `person-${personId}-${type}`;
+        html += `<div class="alert alert-info mb-3">`;
+        html += `<i class="fa fa-users"></i> `;
+        html += `<strong>${persons.length} personnes trouvées - Sélectionnez la bonne:</strong>`;
+
+        persons.forEach((person, idx) => {
+            html += `<div class="mt-2">`;
+            html += `<input type="radio" name="select-${personKey}" id="radio-${personKey}-${idx}" `;
+            html += `class="person-selector" data-person-id="${personId}" data-index-personne="${idx}" `;
+            html += `value="${idx}" ${idx === 0 ? 'checked' : ''}>`;
+            html += `<label for="radio-${personKey}-${idx}" class="ml-2" style="font-weight: normal; cursor: pointer;">`;
+            html += `Personne ${idx + 1}/${persons.length}`;
+            if (person.info_distinctive) {
+                html += ` - <strong>${person.info_distinctive}</strong>`;
+            }
+            html += `</label>`;
+            html += `</div>`;
+        });
+
+        html += `</div>`;
+    }
+
+    // Afficher les champs pour chaque personne (masqués sauf la première)
+    persons.forEach((person, idx) => {
+        const isVisible = idx === 0;
+        const containerId = `fields-container-${personId}-${type}-${idx}`;
+
+        html += `<div id="${containerId}" class="fields-container" data-person-id="${personId}" data-index-personne="${idx}" style="${!isVisible ? 'display:none;' : ''}">`;
+
+        if (person.differences && typeof person.differences === 'object') {
+            const diffEntries = Object.entries(person.differences);
+            const isNotFound = diffEntries.length === 1 &&
+                (diffEntries[0][0] === 'statut' || diffEntries[0][0] === 'erreur');
+
+            if (isNotFound) {
+                const [field, values] = diffEntries[0];
+                html += `<div class="alert alert-warning mb-0" style="border-left: 4px solid #ffc107;">`;
+                html += `<i class="fa fa-exclamation-triangle"></i> `;
+                html += `<strong>${values.new}</strong>`;
+                html += `</div>`;
+            } else if (diffEntries.length > 0) {
+                html += `<div class="select-all-box">`;
+                html += `<input type="checkbox" id="select-all-${type}-${baseIndex}-${idx}" class="select-all-person" data-person="${type}-${baseIndex}-${idx}">`;
+                html += `<label for="select-all-${type}-${baseIndex}-${idx}">Tout sélectionner</label>`;
+                html += `</div>`;
+
+                diffEntries.forEach(([field, values], fieldIndex) => {
+                    const fieldId = `${type}-${baseIndex}-${idx}-field-${fieldIndex}`;
+                    html += `<div class="diff-field">`;
+                    html += `<div class="diff-field-info">`;
+                    html += `<div class="diff-field-label">${field}</div>`;
+                    html += `<div class="diff-field-values">`;
+                    html += `<span class="old-value">${values.old || 'vide'}</span>`;
+                    html += `<i class="fa fa-arrow-right" style="color: #6c757d;"></i>`;
+                    html += `<span class="new-value">${values.new || 'vide'}</span>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                    html += `<div class="diff-checkbox">`;
+                    html += `<input type="checkbox" id="${fieldId}" class="field-checkbox" `;
+                    html += `data-person-type="${type}" data-person-id="${personId}" data-field="${field}" `;
+                    html += `data-person-index="${type}-${baseIndex}-${idx}" checked>`;
+                    html += `</div>`;
+                    html += `</div>`;
+                });
+            }
+        }
+
+        html += `</div>`; // Fin fields-container
+    });
+
+    html += `</div></li>`;
+    return html;
+}
+
+function createDiffHTML(person, type, familleId, index) {
+    const hasMultiple = person.multiple_personnes || false;
+    const indexPersonne = person.index_personne || 0;
+    const totalPersonnes = person.total_personnes || 1;
+
+    let html = `<li class="diff-item ${type}" data-person-id="${person.id}" data-person-type="${type}" data-index-personne="${indexPersonne}" data-has-multiple="${hasMultiple}">`;
+    html += `<div class="diff-header">`;
+    html += `<span><i class="fa fa-${type === 'representant' ? 'user' : 'child'}"></i> ${type === 'representant' ? 'Représentant' : 'Enfant'}: ${person.nom || 'ID ' + person.id}</span>`;
+    html += `</div>`;
+    html += `<div class="diff-details">`;
+
+    // Si plusieurs personnes trouvées, afficher d'abord un sélecteur radio
+    if (hasMultiple) {
+        // IMPORTANT: le nom du radio doit être le même pour toutes les personnes avec le même ID
+        const personKey = `person-${person.id}-${type}`;
+        html += `<div class="alert alert-info mb-3">`;
+        html += `<i class="fa fa-users"></i> `;
+        html += `<strong>Plusieurs personnes trouvées - Sélectionnez la bonne personne:</strong>`;
+        html += `<div class="mt-2">`;
+        html += `<input type="radio" name="select-${personKey}" id="radio-${personKey}-${indexPersonne}" `;
+        html += `class="person-selector" data-person-id="${person.id}" data-index-personne="${indexPersonne}" `;
+        html += `data-person-key="${personKey}" value="${indexPersonne}" ${indexPersonne === 0 ? 'checked' : ''}>`;
+        html += `<label for="radio-${personKey}-${indexPersonne}" class="ml-2" style="font-weight: normal; cursor: pointer;">`;
+        html += `Personne ${indexPersonne + 1}/${totalPersonnes}`;
+        if (person.info_distinctive) {
+            html += ` - <strong>${person.info_distinctive}</strong>`;
+        }
+        html += `</label>`;
+        html += `</div>`;
+        html += `</div>`;
+    }
+
+    if (person.differences && typeof person.differences === 'object') {
+        const diffEntries = Object.entries(person.differences);
+
+        // Vérifier si c'est un cas "non trouvé" ou "erreur"
+        const isNotFound = diffEntries.length === 1 &&
+                          (diffEntries[0][0] === 'statut' || diffEntries[0][0] === 'erreur');
+
+        if (isNotFound) {
+            // Affichage simplifié pour les individus non trouvés
+            const [field, values] = diffEntries[0];
+            html += `<div class="alert alert-warning mb-0" style="border-left: 4px solid #ffc107;">`;
+            html += `<i class="fa fa-exclamation-triangle"></i> `;
+            html += `<strong>${values.new}</strong>`;
+            html += `</div>`;
+        } else {
+            // Affichage normal avec checkboxes pour les différences
+            if (diffEntries.length > 0) {
+                html += `<div class="select-all-box">`;
+                html += `<input type="checkbox" id="select-all-${type}-${index}" class="select-all-person" data-person="${type}-${index}">`;
+                html += `<label for="select-all-${type}-${index}">Tout sélectionner pour cette personne</label>`;
+                html += `</div>`;
+            }
+
+            diffEntries.forEach(([field, values], fieldIndex) => {
+                const fieldId = `${type}-${index}-field-${fieldIndex}`;
+                html += `<div class="diff-field">`;
+                html += `<div class="diff-field-info">`;
+                html += `<div class="diff-field-label">${field}</div>`;
+                html += `<div class="diff-field-values">`;
+                html += `<span class="old-value">${values.old || 'vide'}</span>`;
+                html += `<i class="fa fa-arrow-right" style="color: #6c757d;"></i>`;
+                html += `<span class="new-value">${values.new || 'vide'}</span>`;
+                html += `</div>`;
+                html += `</div>`;
+                html += `<div class="diff-checkbox">`;
+                html += `<input type="checkbox" id="${fieldId}" class="field-checkbox" data-person-type="${type}" data-person-id="${person.id}" data-field="${field}" data-person-index="${type}-${index}" checked>`;
+                html += `</div>`;
+                html += `</div>`;
+            });
+        }
+    }
+
+    html += `</div></li>`;
+    return html;
+}
+document.querySelectorAll(".btn-sync").forEach(btn => {
+    btn.addEventListener("click", function() {
+        const familleId = this.dataset.id;
+        const resultDiv = document.getElementById("result-" + familleId);
+        const initialDiv = document.getElementById("initial-" + familleId);
+        const icon = this.querySelector(".fa-refresh");
+
+        this.disabled = true;
+        this.classList.add("loading");
+        resultDiv.style.display = "none";
+        initialDiv.innerHTML = '<p class="text-info"><i class="fa fa-spinner fa-spin"></i> Synchronisation en cours...</p>';
+
+        fetch("", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrftoken,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: "famille_id=" + familleId
+        })
+        .then(r => {
+            if (!r.ok) throw new Error("Erreur réseau");
+            return r.json();
+        })
+        .then(data => {
+            initialDiv.style.display = "none";
+            resultDiv.style.display = "block";
+
+            if (data.success) {
+                const repDiffs = data.differences.representants || [];
+                const enfDiffs = data.differences.enfants || [];
+                const hasDifferences = repDiffs.length > 0 || enfDiffs.length > 0;
+
+                let html = '<h5 class="mb-3"><i class="fa fa-exchange"></i> Résultat de la synchronisation</h5>';
+
+                // Afficher le message d'information si plusieurs personnes trouvées
+                if (data.differences.info_recherche) {
+                    const info = data.differences.info_recherche;
+                    const alertClass = info.type === 'warning' ? 'alert-warning' : 'alert-info';
+                    html += `<div class="alert ${alertClass}">`;
+                    html += `<i class="fa fa-info-circle"></i> <strong>${info.message}</strong>`;
+                    html += `</div>`;
+                }
+
+                if (!hasDifferences) {
+                    html += '<div class="success-badge"><i class="fa fa-check-circle"></i> Aucune différence trouvée - Données synchronisées</div>';
+                } else {
+                    html += '<ul class="diff-list">';
+
+                    // Regrouper les représentants par ID
+                    const groupedReps = groupPersonsByIndividuId(repDiffs);
+                    let repIndex = 0;
+                    Object.values(groupedReps).forEach(persons => {
+                        html += createGroupedDiffHTML(persons, 'representant', familleId, repIndex++);
+                    });
+
+                    // Regrouper les enfants par ID
+                    const groupedEnfs = groupPersonsByIndividuId(enfDiffs);
+                    let enfIndex = 0;
+                    Object.values(groupedEnfs).forEach(persons => {
+                        html += createGroupedDiffHTML(persons, 'enfant', familleId, enfIndex++);
+                    });
+
+                    html += '</ul>';
+
+                    // Compter uniquement les champs de la première personne de chaque groupe (celles visibles par défaut)
+                    let totalFields = 0;
+                    Object.values(groupedReps).forEach(persons => {
+                        if (persons.length > 0) {
+                            totalFields += Object.keys(persons[0].differences || {}).length;
+                        }
+                    });
+                    Object.values(groupedEnfs).forEach(persons => {
+                        if (persons.length > 0) {
+                            totalFields += Object.keys(persons[0].differences || {}).length;
+                        }
+                    });
+
+                    html += '<div class="sync-actions">';
+                    html += `<div class="selected-count">Modifications sélectionnées : <strong id="count-${familleId}">${totalFields}</strong></div>`;
+                    html += '<div>';
+                    html += `<button class="btn btn-primary btn-valider-sync" data-id="${familleId}">`;
+                    html += '<i class="fa fa-check"></i> Valider la synchronisation</button>';
+                    html += '</div>';
+                    html += '</div>';
+                }
+                resultDiv.innerHTML = html;
+                
+                // Ajout des event listeners pour les checkboxes
+                resultDiv.querySelectorAll('.field-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', () => updateSelectedCount(familleId));
+                });
+
+                // Event listeners pour les radio buttons de sélection de personne
+                resultDiv.querySelectorAll('.person-selector').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        const personId = this.dataset.personId;
+                        const selectedIndex = parseInt(this.value);
+
+                        // Trouver le diff-item parent
+                        const diffItem = this.closest('.diff-item');
+                        if (!diffItem) return;
+
+                        // Mettre à jour l'attribut data-index-personne
+                        diffItem.setAttribute('data-index-personne', selectedIndex);
+
+                        // Masquer tous les containers de champs pour cette personne
+                        const allContainers = diffItem.querySelectorAll('.fields-container');
+                        allContainers.forEach(container => {
+                            const containerIndex = parseInt(container.dataset.indexPersonne);
+                            if (containerIndex === selectedIndex) {
+                                container.style.display = 'block';
+                            } else {
+                                container.style.display = 'none';
+                            }
+                        });
+
+                        // Mettre à jour le compteur
+                        updateSelectedCount(familleId);
+                    });
+                });
+
+                // Event listeners pour "Tout sélectionner"
+                resultDiv.querySelectorAll('.select-all-person').forEach(selectAll => {
+                    selectAll.addEventListener('change', function() {
+                        const personIndex = this.dataset.person;
+                        const checkboxes = resultDiv.querySelectorAll(`.field-checkbox[data-person-index="${personIndex}"]`);
+                        checkboxes.forEach(cb => cb.checked = this.checked);
+                        updateSelectedCount(familleId);
+                    });
+                });
+                
+                // Event listener pour le bouton de validation
+                const validateBtn = resultDiv.querySelector('.btn-valider-sync');
+                if (validateBtn) {
+                    validateBtn.addEventListener('click', function() {
+                        const selectedFields = {};
+                        resultDiv.querySelectorAll('.field-checkbox:checked').forEach(checkbox => {
+                            // Vérifier que le checkbox est dans un container visible
+                            const fieldsContainer = checkbox.closest('.fields-container');
+                            if (fieldsContainer && fieldsContainer.style.display === 'none') {
+                                return; // Ignorer les checkboxes dans les containers masqués
+                            }
+
+                            const personId = checkbox.dataset.personId;
+                            const personType = checkbox.dataset.personType;
+                            const field = checkbox.dataset.field;
+
+                            // Récupérer l'index_personne depuis le container visible
+                            const indexPersonne = fieldsContainer ? parseInt(fieldsContainer.dataset.indexPersonne || 0) : 0;
+
+                            const key = `${personType}_${personId}_${indexPersonne}`;
+                            if (!selectedFields[key]) {
+                                selectedFields[key] = {
+                                    id: personId,
+                                    type: personType,
+                                    index_personne: indexPersonne,
+                                    fields: []
+                                };
+                            }
+                            selectedFields[key].fields.push(field);
+                        });
+                        
+                        if (Object.keys(selectedFields).length === 0) {
+                            alert('Veuillez sélectionner au moins un champ à synchroniser');
+                            return;
+                        }
+                        
+                        const selectedCount = Object.values(selectedFields).reduce((acc, p) => acc + p.fields.length, 0);
+                        
+                        if (!confirm(`Êtes-vous sûr de vouloir synchroniser ${selectedCount} champ(s) ?\n\nLes valeurs de la base de données seront remplacées par celles de l'ENT.`)) {
+                            return;
+                        }
+                        
+                        // Envoi de la validation au serveur
+                        this.disabled = true;
+                        this.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Validation en cours...';
+                        
+                        fetch("", {
+                            method: "POST",
+                            headers: {
+                                "X-CSRFToken": csrftoken,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                famille_id: familleId,
+                                action: 'validate',
+                                selected_fields: selectedFields
+                            })
+                        })
+                        .then(r => {
+                            if (!r.ok) throw new Error("Erreur réseau");
+                            return r.json();
+                        })
+                        .then(response => {
+                            if (response.success) {
+                                let successHtml = '<div class="alert alert-success">';
+                                successHtml += '<i class="fa fa-check-circle"></i> ';
+                                successHtml += `<strong>Synchronisation effectuée avec succès!</strong><br>`;
+                                successHtml += `${response.updated_count} champ(s) mis à jour.`;
+                                
+                                if (response.warnings && response.warnings.length > 0) {
+                                    successHtml += '</div>';
+                                    successHtml += '<div class="alert-warning-list">';
+                                    successHtml += '<strong><i class="fa fa-exclamation-triangle"></i> Avertissements :</strong>';
+                                    successHtml += '<ul>';
+                                    response.warnings.forEach(warning => {
+                                        successHtml += `<li>${warning}</li>`;
+                                    });
+                                    successHtml += '</ul>';
+                                    successHtml += '</div>';
+                                    
+                                    // Si des erreurs, demander si on recharge
+                                    successHtml += '<div class="mt-3">';
+                                    successHtml += '<button class="btn btn-primary" onclick="location.reload()"><i class="fa fa-refresh"></i> Recharger la page</button>';
+                                    successHtml += '</div>';
+                                } else {
+                                    successHtml += '</div>';
+                                    // Rechargement automatique seulement si pas d'erreurs
+                                    setTimeout(() => location.reload(), 2500);
+                                }
+                                
+                                resultDiv.innerHTML = successHtml;
+                            } else {
+                                resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur:</strong> ' + (response.error || 'Erreur inconnue') + '</div>';
+                            }
+                        })
+                        .catch(error => {
+                            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur de connexion:</strong> ' + error.message + '</div>';
+                        });
+                    });
+                }
+            } else {
+                resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur:</strong> ' + (data.error || 'Erreur inconnue') + '</div>';
+            }
+        })
+        .catch(error => {
+            initialDiv.style.display = "none";
+            resultDiv.style.display = "block";
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> <strong>Erreur de connexion:</strong> ' + error.message + '</div>';
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.classList.remove("loading");
+        });
+    });
+});
+</script>
+{% endblock %}

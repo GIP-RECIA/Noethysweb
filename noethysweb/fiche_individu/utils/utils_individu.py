@@ -19,6 +19,7 @@ LISTE_ONGLETS = [
     {"code": "contacts", "label": "Contacts", "icone": "fa-users", "url": "individu_contacts_liste"},
     {"code": "transports", "label": "Transports", "icone": "fa-bus", "url": "individu_transports_liste"},
     {"code": "consommations", "label": "Consommations", "icone": "fa-calendar", "url": "famille_consommations"},
+    {"code": "mise_a_jour_ent", "label": "Mise à jour ENT", "icone": "fa-refresh", "url": "maj_ent_individu"},
 ]
 
 def Get_filtered_onglets():

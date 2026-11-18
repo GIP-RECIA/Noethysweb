@@ -1,0 +1,307 @@
+{% extends "core/page.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block page_titre %}{{ page_titre }}{% endblock page_titre %}
+
+{% block contenu_page %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card card-outline card-primary">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-sync-alt"></i> {{ box_titre }}
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">{{ box_introduction }}</p>
+
+                    <!-- Informations de synchronisation -->
+                    {% if sync_en_cours %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-sync-alt fa-spin"></i>
+                            <strong>Synchronisation en cours</strong> depuis {{ sync_date_debut|date:"H:i:s" }}
+                            pour {{ sync_nb_individus }} individu(s)...
+                        </div>
+                    {% elif sync_date_derniere_fin %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Dernière synchronisation :</strong>
+                            {{ sync_date_derniere_fin|date:"d/m/Y à H:i:s" }}
+                            ({{ sync_nb_succes_dernier }} individu(s) synchronisé(s) avec succès)
+                        </div>
+                    {% endif %}
+
+                    <!-- Filtres -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-search"></i> Recherche
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form method="get" id="filterForm">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="search" class="font-weight-bold">Recherche textuelle</label>
+                                        <input type="text"
+                                               name="search"
+                                               id="search"
+                                               class="form-control"
+                                               placeholder="Nom, prénom, ENT ID..."
+                                               value="{{ search_query }}">
+                                    </div>
+
+                                    <div class="col-md-4 mb-3">
+                                        <label for="type" class="font-weight-bold">Type d'individu</label>
+                                        <select name="type" id="type" class="form-control">
+                                            <option value="">-- Tous les types --</option>
+                                            <option value="1" {% if type_filtre == "1" %}selected{% endif %}>Représentant</option>
+                                            <option value="2" {% if type_filtre == "2" %}selected{% endif %}>Enfant</option>
+                                            <option value="3" {% if type_filtre == "3" %}selected{% endif %}>Contact</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-2 mb-3 d-flex align-items-end">
+                                        <div>
+                                            <button type="submit" class="btn btn-primary btn-block mb-2">
+                                                <i class="fas fa-search"></i> Rechercher
+                                            </button>
+                                            <a href="{% url 'mettre_a_jour_liste_individu_ent' %}" class="btn btn-secondary btn-block">
+                                                <i class="fas fa-undo"></i> Réinitialiser
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Résultats -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span class="info-box-icon bg-success"><i class="fas fa-id-card"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Individus liés à l'ENT</span>
+                                    <span class="info-box-number">{{ total_count }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-box">
+                                <span class="info-box-icon bg-info"><i class="fas fa-users"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text">Total individus dans la base</span>
+                                    <span class="info-box-number">{{ total_all_individus }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="post" id="syncMasseForm">
+                        {% csrf_token %}
+                        
+                        <!-- Actions en masse -->
+                        <div class="mb-3 d-flex justify-content-between align-items-center">
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="selectAll">
+                                    <i class="fas fa-check-square"></i> Tout sélectionner
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAll">
+                                    <i class="fas fa-square"></i> Tout désélectionner
+                                </button>
+                            </div>
+                            <div>
+                                <span id="selectedCount" class="badge badge-primary badge-lg">0</span>
+                                <span class="ml-2">individu(s) sélectionné(s)</span>
+                            </div>
+                        </div>
+
+                        <!-- Table des individus -->
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-striped table-hover" id="individuTable">
+                                <thead class="thead-dark">
+                                    <tr>
+                                        <th style="width: 40px;">
+                                            <input type="checkbox" id="selectAllCheckbox">
+                                        </th>
+                                        <th>ENT ID</th>
+                                        <th>Civilité</th>
+                                        <th>Nom</th>
+                                        <th>Prénom</th>
+                                        <th>Type</th>
+                                        <th>École</th>
+                                        <th>Classe</th>
+                                        <th>Email</th>
+                                        <th>Téléphone</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if individus %}
+                                        {% for individu in individus %}
+                                            <tr class="individu-row">
+                                                <td class="text-center">
+                                                    <input type="checkbox"
+                                                           name="selected_individus"
+                                                           value="{{ individu.id }}"
+                                                           class="individu-checkbox">
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-info">{{ individu.ent_id }}</span>
+                                                </td>
+                                                <td>{{ individu.civilite }}</td>
+                                                <td><strong>{{ individu.nom }}</strong></td>
+                                                <td>{{ individu.prenom }}</td>
+                                                <td>
+                                                    {% if "Enfant" in individu.type %}
+                                                        <span class="badge badge-success">Enfant</span>
+                                                    {% endif %}
+                                                    {% if "Représentant" in individu.type %}
+                                                        <span class="badge badge-primary">Représentant</span>
+                                                    {% endif %}
+                                                    {% if "Contact" in individu.type %}
+                                                        <span class="badge badge-warning">Contact</span>
+                                                    {% endif %}
+                                                    {% if individu.type == "-" %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if "Enfant" in individu.type and individu.ecole != "-" %}
+                                                        <small>{{ individu.ecole }}</small>
+                                                    {% else %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if "Enfant" in individu.type and individu.classe != "-" %}
+                                                        <small>{{ individu.classe }}</small>
+                                                    {% else %}
+                                                        <span class="text-muted">-</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <small>{{ individu.mail }}</small>
+                                                </td>
+                                                <td>
+                                                    <small>{{ individu.tel_mobile }}</small>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="10" class="text-center text-muted py-4">
+                                                <i class="fas fa-inbox fa-3x mb-3"></i>
+                                                <p>Aucun individu trouvé avec les critères sélectionnés.</p>
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {% if individus %}
+                            <!-- Bouton de synchronisation -->
+                            <div class="mt-4 text-right">
+                                <button type="submit" 
+                                        class="btn btn-success btn-lg" 
+                                        id="submitBtn" 
+                                        disabled>
+                                    <i class="fas fa-sync-alt"></i> 
+                                    Lancer la synchronisation en masse
+                                </button>
+                            </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .badge-lg {
+        font-size: 1.1em;
+        padding: 0.5em 0.8em;
+    }
+    
+    .individu-row.selected {
+        background-color: #e3f2fd !important;
+    }
+    
+    #submitBtn:disabled {
+        cursor: not-allowed;
+    }
+    
+    .table th {
+        white-space: nowrap;
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+</style>
+
+<script>
+    $(document).ready(function() {
+        // Fonction pour mettre à jour le compteur
+        function updateCounter() {
+            const checkedCount = $('.individu-checkbox:checked').length;
+            $('#selectedCount').text(checkedCount);
+            $('#submitBtn').prop('disabled', checkedCount === 0);
+            
+            // Mettre à jour le style des lignes sélectionnées
+            $('.individu-row').removeClass('selected');
+            $('.individu-checkbox:checked').closest('.individu-row').addClass('selected');
+            
+            // Mettre à jour l'état du checkbox "tout sélectionner"
+            const totalCheckboxes = $('.individu-checkbox').length;
+            const checkedCheckboxes = $('.individu-checkbox:checked').length;
+            $('#selectAllCheckbox').prop('checked', checkedCheckboxes === totalCheckboxes && totalCheckboxes > 0);
+        }
+
+        // Gestion des checkboxes individuelles
+        $('.individu-checkbox').on('change', function() {
+            updateCounter();
+        });
+
+        // Checkbox "tout sélectionner" dans le header
+        $('#selectAllCheckbox').on('change', function() {
+            const isChecked = $(this).prop('checked');
+            $('.individu-checkbox').prop('checked', isChecked);
+            updateCounter();
+        });
+
+        // Bouton "Tout sélectionner"
+        $('#selectAll').on('click', function() {
+            $('.individu-checkbox').prop('checked', true);
+            updateCounter();
+        });
+
+        // Bouton "Tout désélectionner"
+        $('#deselectAll').on('click', function() {
+            $('.individu-checkbox').prop('checked', false);
+            updateCounter();
+        });
+
+        // Confirmation avant soumission
+        $('#syncMasseForm').on('submit', function(e) {
+            const checkedCount = $('.individu-checkbox:checked').length;
+            if (checkedCount > 0) {
+                const confirmed = confirm(
+                    `Êtes-vous sûr de vouloir synchroniser ${checkedCount} individu(s) ?\n\n` +
+                    `Cette opération va mettre à jour les données depuis l'ENT.`
+                );
+                if (!confirmed) {
+                    e.preventDefault();
+                }
+            }
+        });
+
+        // Initialisation
+        updateCounter();
+    });
+</script>
+{% endblock contenu_page %}

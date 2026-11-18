@@ -8,10 +8,12 @@ from django.forms import ModelForm
 from core.forms.base import FormulaireBase
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Hidden, Submit, HTML, Div, Column, Fieldset, ButtonHolder
-from crispy_forms.bootstrap import Field, FormActions, PrependedText, StrictButton, InlineRadios
+from crispy_forms.bootstrap import Field, InlineRadios
 from core.utils.utils_commandes import Commandes
-from core.models import Individu, Rattachement, CATEGORIES_RATTACHEMENT
+from core.models import Individu, Rattachement, CATEGORIES_RATTACHEMENT, Organisateur
 from core.forms.select2 import Select2Widget
+from core.utils.utils_ent import get_ent_users
+
 
 
 class Formulaire(FormulaireBase, ModelForm):
@@ -60,9 +62,14 @@ class Formulaire(FormulaireBase, ModelForm):
 
         # Si on saisit le premier individu de la fiche famille
         if not rattachements:
-            self.fields['categorie'].initial = 1
-            self.fields['categorie'].widget.attrs['disabled'] = 'disabled'
-            self.fields['titulaire'].disabled = True
+            organisateur = Organisateur.objects.filter(pk=1).first()
+            if not organisateur.ent_active:
+                self.fields['categorie'].initial = 1
+                self.fields['categorie'].widget.attrs['disabled'] = 'disabled'
+                self.fields['titulaire'].disabled = True
+            else:
+                self.fields['categorie'] = forms.ChoiceField(label="Catégorie*", widget=forms.RadioSelect, choices=[(1, "Représentant"), (2, "Enfant")], required=False)
+
 
         # Désactive l'autocomplete
         self.fields['nom'].widget.attrs.update({'autocomplete': 'off'})
@@ -106,7 +113,6 @@ class Formulaire(FormulaireBase, ModelForm):
         # Catégorie
         if "disabled" in self.fields['categorie'].widget.attrs:
             self.cleaned_data["categorie"] = 1
-
         if self.cleaned_data["categorie"] == "":
             self.add_error("categorie", "Vous devez sélectionner une catégorie")
             return
@@ -127,7 +133,35 @@ class Formulaire(FormulaireBase, ModelForm):
             if self.cleaned_data["civilite"] < 6 and self.cleaned_data["prenom"] in (None, ""):
                 self.add_error("prenom", "Vous devez saisir un prénom")
                 return
-
+            nom = self.cleaned_data.get("nom", "").strip()
+            prenom = self.cleaned_data.get("prenom", "").strip()
+            
+            if nom and prenom:
+                # Vérifier dans l'ENT
+                try:
+                    # Import dynamique pour éviter les problèmes de dépendances
+                    
+                    ent_result = get_ent_users(nom, prenom)
+                    print("*/*/*/*/")
+                    print(ent_result)
+                    # Si get_ent_users retourne une liste non vide, on stocke l'information pour redirection
+                    if isinstance(ent_result, list) and len(ent_result) > 0:
+                        self.redirect_to_ent_liste = True
+                        self.ent_users_data = ent_result
+                    else:
+                        # L'utilisateur n'existe ni dans la base ni dans l'ENT
+                        # On continue avec le traitement normal (pas de redirection)
+                        self.redirect_to_ent_liste = False
+                        
+                except ImportError:
+                    # Si la fonction get_ent_users n'existe pas encore, on continue normalement
+                    self.redirect_to_ent_liste = False
+                except Exception as e:
+                    # En cas d'erreur ENT, on continue normalement plutôt que de bloquer
+                    self.redirect_to_ent_liste = False
+            else:
+                # Pas de nom/prénom fournis, traitement normal
+                self.redirect_to_ent_liste = False
         # Action RATTACHER
         if self.cleaned_data["action"] == "RATTACHER":
 
@@ -144,7 +178,13 @@ class Formulaire(FormulaireBase, ModelForm):
 
         return self.cleaned_data
 
+    def has_redirect_to_ent_liste(self):
+        """Méthode pour vérifier si on doit rediriger vers ent_liste_famille"""
+        return hasattr(self, 'redirect_to_ent_liste') and self.redirect_to_ent_liste
 
+    def get_ent_users_data(self):
+        """Méthode pour récupérer les données ENT"""
+        return getattr(self, 'ent_users_data', [])
 
 EXTRA_SCRIPT = """
 

@@ -1,0 +1,387 @@
+{% extends "core/page.html" %}
+{% load static %}
+
+{% block styles %}
+    {{ block.super }}
+    <style>
+        .school-card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 1px solid #e1e5e9;
+            transition: all 0.2s ease;
+            background: white;
+        }
+        .school-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .school-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            font-weight: 600;
+            font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .school-type {
+            font-size: 12px;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .card-body {
+            padding: 20px;
+            background: #fafbfc;
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .school-info {
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            background: #f0f8ff;
+            border: 1px solid #bee3f8;
+            border-left: 4px solid #4299e1;
+            transition: all 0.15s ease;
+        }
+
+        .school-info:hover {
+            background: #e6f3ff;
+            border-color: #90cdf4;
+        }
+
+        .info-line {
+            font-size: 14px;
+            margin: 6px 0;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-line strong {
+            color: #2d3748;
+            font-weight: 600;
+            min-width: 120px;
+        }
+
+        .info-line .emoji {
+            font-size: 14px;
+            opacity: 0.8;
+            width: 20px;
+        }
+
+        .niveau-badge {
+            display: inline-block;
+            background: #e6fffa;
+            color: #319795;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin: 2px 4px 2px 0;
+            border: 1px solid #81e6d9;
+        }
+
+        .classe-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .classe-item:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+        }
+
+        .classe-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .classe-dates {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .btn-edit {
+            background: #48bb78;
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            font-size: 14px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-edit:hover {
+            background: #38a169;
+            transform: translateY(-1px);
+            color: white;
+        }
+
+        .separator {
+            border-top: 1px solid #e2e8f0;
+            margin: 25px 0;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 30px 20px;
+            color: #718096;
+            background: #f7fafc;
+            border-radius: 8px;
+            border: 1px dashed #cbd5e0;
+            font-style: italic;
+        }
+
+        .classes-by-niveau {
+            margin-bottom: 16px;
+        }
+
+        .niveau-title {
+            background: #667eea;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: inline-block;
+        }
+
+        .btn-back {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+        .btn-back:hover {
+            color: #5a67d8;
+            text-decoration: none;
+        }
+
+        .btn-add {
+            background: #48bb78;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            font-size: 13px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .btn-add:hover {
+            background: #48bb78;
+            transform: translateY(-1px);
+        }
+
+        .btn-add-new {
+            background: #48bb78;
+            border: none;
+            color: white;
+            padding: 12px 20px;
+            font-size: 14px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-add-new:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            color: white;
+        }
+    </style>
+{% endblock %}
+
+{% block contenu_page %}
+<div class="mb-4">
+    <a href="#" class="btn-back" onclick="history.back();">
+        <i class="fa fa-reply"></i> 
+        Retour
+    </a>
+</div>
+
+{% if ecole %}
+    <!-- Carte principale de l'école -->
+    <div class="school-card">
+        <div class="school-header">
+            <div>
+                <div>{{ ecole.nom }}</div>
+                <div style="font-size: 14px; opacity: 0.9; margin-top: 4px;">
+                    Code UAI: {{ ecole.uai }}
+                </div>
+            </div>
+            <form method="post" style="margin:0;">
+                {% csrf_token %}
+                <input type="hidden" name="ecole_id" value="{{ ecole.uai }}">
+                <button type="submit" class="btn-add">
+                    <i class="fa fa-user-plus"></i> Importer
+                </button>
+                <button type="submit" class="btn-add">
+                    <i class="fa fa-user-plus"></i> Importer nouvelle Ecole
+                </button>
+            </form>
+        </div>
+        <div class="card-body">
+            <!-- Informations générales -->
+            <div class="info-section">
+                <div class="section-title">
+                    <i class="fa fa-info-circle"></i>
+                    Informations générales
+                </div>
+                <div class="school-info">
+                    <div class="info-line">
+                        <span class="emoji">🏫</span>
+                        <strong>Nom :</strong>
+                        {{ ecole.nom }}
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">🆔</span>
+                        <strong>Code UAI :</strong>
+                        {{ ecole.uai }}
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">📍</span>
+                        <strong>Adresse :</strong>
+                        {{ ecole.rue }}, {{ ecole.cp }} {{ ecole.ville }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact -->
+            <div class="info-section">
+                <div class="section-title">
+                    <i class="fa fa-phone"></i>
+                    Informations de contact
+                </div>
+                <div class="school-info">
+                    <div class="info-line">
+                        <span class="emoji">📞</span>
+                        <strong>Téléphone :</strong>
+                        {{ ecole.telephone }}
+                    </div>
+                    <div class="info-line">
+                        <span class="emoji">📧</span>
+                        <strong>Email :</strong>
+                        <a href="mailto:{{ ecole.mail }}" style="color: #4299e1;">{{ ecole.mail }}</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistiques -->
+            <div class="info-section">
+                <div class="section-title">
+                    <i class="fa fa-chart-bar"></i>
+                    Statistiques
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number">{{ ecole.classes|length }}</span>
+                        <div class="stat-label">Classes</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">{{ ecole.niveaux|length }}</span>
+                        <div class="stat-label">Niveaux</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="separator"></div>
+        </div>
+    </div>
+{% else %}
+    <div class="no-data">
+        <i class="fa fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;"></i>
+        <p>École non trouvée.</p>
+    </div>
+{% endif %}
+<!-- Section "Ajouter une nouvelle école" -->
+<div class="school-card">
+    <div class="school-header">
+        Vous n’avez pas trouvé la bonne école ?
+    </div>
+    <div class="card-body text-center">
+        <p class="mb-3 text-gray-700">
+            Aucune école ne correspond à ce que vous souhaitez ajouter ?
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="ajouter_nouvelle_ecole">
+            <button type="submit" class="btn-add-new">
+                <i class="fa fa-school"></i> Ajouter une nouvelle école
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
