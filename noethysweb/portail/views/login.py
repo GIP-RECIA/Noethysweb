@@ -58,10 +58,15 @@ class LoginViewFamille(ClassCommuneLogin, LoginView):
     def form_valid(self, form):
         # Enregistre la date de la dernière connexion
         update_last_login(None, form.get_user())
-        # Enregistre la connexion dans le log
-        logger.debug("Connexion portail de la famille %s" % form.get_user())
+
+        user = form.get_user()
+        
         # Enregistre la connexion dans l'historique
-        utils_historique.Ajouter(titre="Connexion au portail", utilisateur=form.get_user(), famille=form.get_user().famille.pk, portail=True)
+        # Pour un compte famille → on prend user.famille.pk
+        # Pour un compte individu → famille_pk = None (pas de famille associée directement)
+        famille_pk = user.famille.pk if user.categorie == "famille" else None
+        utils_historique.Ajouter(titre="Connexion au portail", utilisateur=user, famille=famille_pk, portail=True)
+
         return super(LoginViewFamille, self).form_valid(form)
 
     def get_success_url(self):

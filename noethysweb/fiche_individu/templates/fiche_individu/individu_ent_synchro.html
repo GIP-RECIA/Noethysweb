@@ -1,0 +1,116 @@
+{% extends "fiche_individu/individu.html" %}
+{% load static %}
+{% load embed %}
+
+{% block detail_individu %}
+<div class="col-md-9">
+    {% embed 'core/box.html' %}
+        {% block box_theme %}card-outline card-lightblue{% endblock %}
+        {% block box_titre %}Synchronisation ENT{% endblock %}
+        {% block box_contenu %}
+
+        {% if erreur %}
+            <div class="alert alert-warning">
+                <i class="fa fa-exclamation-triangle"></i> {{ erreur }}
+            </div>
+        {% else %}
+            <p class="text-muted mb-2">
+                <i class="fa fa-info-circle"></i>
+                Cochez les champs que vous souhaitez mettre à jour avec les données de l'ENT, puis cliquez sur <strong>Synchroniser</strong>.
+            </p>
+            <div class="mb-3">
+                <span class="mr-4">
+                    <span style="display:inline-block; width:14px; height:14px; background-color:#fff9c4; border:1px solid #e0c200; vertical-align:middle;"></span>
+                    <span class="ml-1">Champ différent de l'ENT</span>
+                </span>
+                <span>
+                    <span style="display:inline-block; width:14px; height:14px; background-color:#f8d7da; border:1px solid #dc3545; vertical-align:middle;"></span>
+                    <span class="ml-1">École non reconnue - non synchronisable pour l'instant</span>
+                </span>
+            </div>
+
+            <form method="post" id="form_synchro_individu">
+                {% csrf_token %}
+                <table class="table table-bordered table-sm">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width:30px;">
+                                <input type="checkbox" id="select_all" title="Tout sélectionner">
+                            </th>
+                            <th>Champ</th>
+                            <th>Valeur actuelle</th>
+                            <th>ENT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr {% if ligne.ecole_non_reconnue %}style="background-color: #f8d7da;"{% elif ligne.different and ligne.val_ent %}style="background-color: #fff9c4;"{% endif %}>
+                            <td class="text-center">
+                                {% if ligne.val_ent and not ligne.ecole_non_reconnue %}
+                                    <input type="checkbox" name="champs" value="{{ ligne.code }}"
+                                        {% if ligne.different and ligne.val_ent %}checked{% endif %}>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ ligne.label }}</strong></td>
+                            <td>{{ ligne.val_noethys|default:"<span class='text-muted'>Vide</span>" }}</td>
+                            <td>
+                                {% if ligne.val_ent %}
+                                    {{ ligne.val_ent }}
+                                    {% if ligne.ecole_non_reconnue %}
+                                        <i class="fa fa-times-circle text-danger ml-1" title="École non reconnue"></i>
+                                        <div class="text-danger small mt-1">
+                                            Cette école n'est pas dans votre liste d'écoles - importez-la d'abord (Paramétrage > Écoles) pour pouvoir synchroniser cette information.
+                                        </div>
+                                    {% elif ligne.different %}
+                                        <i class="fa fa-exclamation-circle text-warning ml-1" title="Valeur différente"></i>
+                                    {% else %}
+                                        <i class="fa fa-check text-green ml-1" title="Identique"></i>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Non disponible dans l'ENT</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary" id="btn_synchro_individu">
+                        <i class="fa fa-refresh"></i> Synchroniser les champs sélectionnés
+                    </button>
+                    <a href="{% url 'individu_resume' idfamille=idfamille idindividu=idindividu %}" class="btn btn-default ml-2">
+                        <i class="fa fa-times"></i> Annuler
+                    </a>
+                </div>
+            </form>
+        {% endif %}
+
+        {% endblock %}
+    {% endembed %}
+</div>
+
+<script>
+    document.getElementById('select_all').addEventListener('change', function() {
+        document.querySelectorAll('input[name="champs"]').forEach(function(cb) {
+            cb.checked = document.getElementById('select_all').checked;
+        });
+    });
+
+    var form_synchro_individu = document.getElementById('form_synchro_individu');
+    if (form_synchro_individu) {
+        form_synchro_individu.addEventListener('submit', function() {
+            var btn = document.getElementById('btn_synchro_individu');
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Synchronisation en cours...';
+            window.addEventListener('pageshow', function(e) {
+                if (e.persisted) {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                }
+            });
+        });
+    }
+</script>
+{% endblock %}

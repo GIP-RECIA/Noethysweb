@@ -1,0 +1,636 @@
+# -*- coding: utf-8 -*-
+
+from datetime import date
+
+from django.views.generic import TemplateView
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.urls import reverse
+from django.db import transaction
+from django.utils import timezone
+from core.models import Individu, Scolarite, Rattachement, Famille
+from core.views.base import CustomView
+from core.utils import utils_historique
+from core.utils.utils_ent import get_user, get_user_ou_introuvable, get_headers, search_by_name, ent_est_actif
+from fiche_individu.views.individu import Onglet
+
+
+CHAMPS_SYNC = [
+    {"code": "nom",        "label": "Nom",              "ent_key": "lastName"},
+    {"code": "prenom",     "label": "Prénom",           "ent_key": "firstName"},
+    {"code": "mail",       "label": "Email",            "ent_key": "email"},
+    {"code": "tel_mobile", "label": "Téléphone mobile", "ent_key": "mobile"},
+    {"code": "rue_resid",  "label": "Adresse",          "ent_key": "address"},
+    {"code": "cp_resid",   "label": "Code postal",      "ent_key": "zipCode"},
+    {"code": "ville_resid","label": "Ville",            "ent_key": "city"},
+]
+
+
+def Maj_familles_representant(individu):
+    """
+    Recalcule le nom/l'adresse/le mail favori... des familles où cet individu est représentant
+    (Rattachement categorie=1). Famille.nom et les autres champs dupliqués ne sont jamais
+    recalculés automatiquement (aucun signal Django dessus, voir Famille.Maj_infos) - sans cet
+    appel après une synchronisation ENT qui change le nom/l'adresse d'un titulaire, la fiche
+    individu affiche la nouvelle valeur mais la fiche famille garde l'ancienne indéfiniment.
+    """
+    familles_ids = Rattachement.objects.filter(individu=individu, categorie=1).values_list("famille_id", flat=True).distinct()
+    for famille in Famille.objects.filter(pk__in=familles_ids):
+        famille.Maj_infos()
+
+
+def Get_scolarite_actuelle(individu):
+    """ Retourne la scolarité de l'individu dont la période couvre aujourd'hui, sinon la plus récente. """
+    aujourdhui = date.today()
+    scolarite = Scolarite.objects.filter(individu=individu, date_debut__lte=aujourdhui, date_fin__gte=aujourdhui).first()
+    if not scolarite:
+        scolarite = Scolarite.objects.filter(individu=individu).order_by("-date_debut").first()
+    return scolarite
+
+
+def Est_profil_eleve(data_ent):
+    """
+    Vérifie que les données ENT correspondent à un profil élève. L'ENT renvoie aussi un champ
+    "structures" pour les parents (rattachement administratif au portail de l'école), qu'il ne
+    faut pas confondre avec une vraie scolarité - seuls les élèves ont une classe.
+    """
+    type_profil = data_ent.get("type") or data_ent.get("profiles") or []
+    if isinstance(type_profil, str):
+        type_profil = [type_profil]
+    return "Student" in type_profil
+
+
+def Get_lignes_comparaison(individu, data_ent):
+    """ Retourne la liste des champs comparés entre Noethysweb et l'ENT pour un individu. """
+    # Import ici pour éviter un import circulaire au chargement du module
+    from fiche_famille.views.famille_ent import _normaliser_enfant, _trouver_ecole
+
+    lignes = []
+    for champ in CHAMPS_SYNC:
+        val_noethys = getattr(individu, champ["code"]) or ""
+        val_ent = data_ent.get(champ["ent_key"]) or ""
+        lignes.append({
+            "code": champ["code"],
+            "label": champ["label"],
+            "val_noethys": val_noethys,
+            "val_ent": val_ent,
+            "different": str(val_noethys).strip() != str(val_ent).strip(),
+        })
+
+    # Ecole / classe : cas particulier, ce n'est pas un champ direct sur l'individu mais une
+    # relation via Scolarité - on ne propose la comparaison que pour un élève (pas un parent,
+    # qui a lui aussi un champ "structures" côté ENT sans que ça soit une scolarité).
+    data_ent_norm = _normaliser_enfant(dict(data_ent))
+    ecole_ent = data_ent_norm.get("ecole_nom") or ""
+    if ecole_ent and Est_profil_eleve(data_ent):
+        classe_ent = data_ent_norm.get("classe_nom") or ""
+        scolarite_actuelle = Get_scolarite_actuelle(individu)
+        ecole_noethys = scolarite_actuelle.ecole.nom if scolarite_actuelle and scolarite_actuelle.ecole else ""
+        classe_noethys = scolarite_actuelle.classe.nom if scolarite_actuelle and scolarite_actuelle.classe else ""
+
+        # L'école actuelle de l'ENT n'est peut-être pas (encore) connue de Noethys - dans ce cas
+        # on ne doit pas proposer de synchroniser cette ligne (voir _trouver_ecole : on ne crée
+        # jamais d'école automatiquement).
+        ecole_connue = _trouver_ecole(ecole_ent, data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"))
+
+        lignes.append({
+            "code": "ecole_classe",
+            "label": "École / Classe",
+            "val_noethys": f"{ecole_noethys} - {classe_noethys}" if classe_noethys else ecole_noethys,
+            "val_ent": f"{ecole_ent} - {classe_ent}" if classe_ent else ecole_ent,
+            "different": ecole_noethys.strip() != ecole_ent.strip() or classe_noethys.strip() != classe_ent.strip(),
+            "ecole_non_reconnue": ecole_connue is None,
+        })
+
+    return lignes
+
+
+def Appliquer_sync_ecole_classe(individu, data_ent):
+    """
+    Met à jour la scolarité actuelle de l'individu avec l'école/classe de l'ENT (ou en crée
+    une s'il n'en a aucune). Ne garde pas d'historique des changements côté Noethys - l'ENT/
+    l'Éducation Nationale garde déjà cet historique de son côté (champ "oldClasses").
+    """
+    from fiche_famille.views.famille_ent import _normaliser_enfant, _trouver_ecole, _get_ou_creer_classe, _creer_scolarite
+
+    if not Est_profil_eleve(data_ent):
+        return False
+
+    data_ent = _normaliser_enfant(dict(data_ent))
+    if not data_ent.get("ecole_nom"):
+        return False
+
+    ecole = _trouver_ecole(data_ent.get("ecole_nom"), data_ent.get("ecole_uai"), data_ent.get("ecole_ent_id"))
+    if not ecole:
+        # École ENT pas encore connue de Noethys - on ne modifie rien plutôt que d'en créer une
+        # à la volée (décision d'équipe, voir _trouver_ecole).
+        return False
+
+    scolarite = Get_scolarite_actuelle(individu)
+    if scolarite:
+        scolarite.ecole = ecole
+        scolarite.classe = _get_ou_creer_classe(
+            ecole, data_ent.get("classe_nom"),
+            data_ent.get("startDateClasses"), data_ent.get("endDateClasses"),
+        )
+        scolarite.save()
+    else:
+        _creer_scolarite(individu, data_ent)
+    return True
+
+
+class SynchroniserIndividu(Onglet, TemplateView):
+    menu_code = "individus_toc"
+    template_name = "fiche_individu/individu_ent_synchro.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['box_titre'] = "Synchronisation ENT"
+        context['onglet_actif'] = "resume"
+
+        individu = context['individu']
+
+        if not ent_est_actif():
+            context['erreur'] = "L'intégration ENT est désactivée."
+            return context
+
+        if not individu.ent_id:
+            context['erreur'] = "Cet individu n'a pas été importé depuis l'ENT."
+            return context
+
+        data_ent, introuvable = get_user_ou_introuvable(individu.ent_id)
+        if introuvable:
+            context['erreur'] = "Cette personne n'existe plus dans l'ENT (compte supprimé, ou élève parti de l'établissement). Vous pouvez délier ce compte ENT depuis le Résumé si besoin."
+            return context
+        if not data_ent:
+            context['erreur'] = "Impossible de récupérer les données depuis l'ENT. Vérifiez la connexion."
+            return context
+
+        context['lignes'] = Get_lignes_comparaison(individu, data_ent)
+        return context
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        idfamille = self.kwargs['idfamille']
+        idindividu = self.kwargs['idindividu']
+        individu = Individu.objects.get(pk=idindividu)
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+        data_ent, introuvable = get_user_ou_introuvable(individu.ent_id)
+        if introuvable:
+            messages.error(request, "Cette personne n'existe plus dans l'ENT (compte supprimé, ou élève parti de l'établissement).")
+            return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+        if not data_ent:
+            messages.error(request, "Impossible de récupérer les données ENT.")
+            return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+        champs_selectionnes = request.POST.getlist('champs')
+        nb_modifs = 0
+
+        for champ in CHAMPS_SYNC:
+            if champ["code"] in champs_selectionnes:
+                val_ent = data_ent.get(champ["ent_key"]) or ""
+                setattr(individu, champ["code"], val_ent or None)
+                nb_modifs += 1
+
+        if "ecole_classe" in champs_selectionnes:
+            if Appliquer_sync_ecole_classe(individu, data_ent):
+                nb_modifs += 1
+
+        if nb_modifs:
+            individu.save()
+            Maj_familles_representant(individu)
+            messages.success(request, f"{nb_modifs} champ(s) synchronisé(s) depuis l'ENT.")
+        else:
+            messages.info(request, "Aucun champ sélectionné.")
+
+        return redirect(reverse('individu_ent_synchro', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+
+class LierCompteEnt(Onglet, TemplateView):
+    """
+    Permet de lier un individu déjà présent dans Noethys (saisi à la main, sans ent_id) à son
+    compte ENT correspondant - sans créer de doublon. Une fois lié, l'individu est reconnu par
+    l'import en masse (détection de fratrie) et par la synchronisation, comme s'il avait été
+    importé depuis le début.
+    """
+    menu_code = "individus_toc"
+    template_name = "fiche_individu/individu_ent_lier.html"
+
+    def _enrichir_membres_famille(self, resultat, membres_famille):
+        """Compare les parents/enfants ENT du candidat aux individus déjà connus dans cette
+        même famille sur Noethys - pour rassurer l'agent que c'est bien la bonne famille, et
+        lui permettre de les lier en même temps. Selon le profil trouvé : pour un élève on
+        regarde ses parents, pour un parent on regarde ses enfants (un adulte n'a jamais de
+        "parents" côté ENT - sans cette symétrie, chercher un parent directement n'aurait
+        aucune corroboration possible). Renseigne resultat['membres_label']/['membres_enrichis']
+        et renvoie la liste des membres enrichis."""
+        from fiche_famille.views.famille_ent import _normaliser_texte
+
+        if Est_profil_eleve(resultat):
+            membres_ent = resultat.get('parents', [])
+            resultat['membres_label'] = "Parents"
+        else:
+            membres_ent = resultat.get('children', [])
+            resultat['membres_label'] = "Enfants"
+
+        membres_enrichis = []
+        for membre_ent in membres_ent:
+            match = None
+            for ratt in membres_famille:
+                if (_normaliser_texte(ratt.individu.nom) == _normaliser_texte(membre_ent.get('lastName') or '')
+                        and _normaliser_texte(ratt.individu.prenom or '') == _normaliser_texte(membre_ent.get('firstName') or '')):
+                    match = ratt.individu
+                    break
+            # Important : on compare à l'id précis de CE candidat, pas juste "a-t-il un
+            # ent_id" - sinon un individu déjà lié à un tout autre compte ENT (erreur
+            # passée) afficherait à tort "déjà lié" comme si tout était en ordre.
+            deja_lie = bool(match and match.ent_id == membre_ent.get('id'))
+            lie_a_autre_compte = bool(match and match.ent_id and match.ent_id != membre_ent.get('id'))
+
+            # Le compte ENT candidat de ce membre est-il déjà utilisé par un AUTRE
+            # individu Noethys ? Dans ce cas il ne doit jamais être proposé : la
+            # confirmation échouerait de toute façon (et probablement une fiche en
+            # double existe quelque part).
+            membre_id = membre_ent.get('id')
+            detenteur = None
+            if membre_id:
+                qs_detenteur = Individu.objects.filter(ent_id=membre_id)
+                if match:
+                    qs_detenteur = qs_detenteur.exclude(pk=match.pk)
+                detenteur = qs_detenteur.first()
+            compte_deja_pris = detenteur is not None
+
+            membres_enrichis.append({
+                "ent": membre_ent,
+                "individu_correspondant": match,
+                "deja_lie": deja_lie,
+                "lie_a_autre_compte": lie_a_autre_compte,
+                "compte_deja_pris": compte_deja_pris,
+                "compte_pris_par": detenteur,
+                # Champ canonique "peut être coché pour liaison" - seule source de
+                # vérité, utilisée par le template ET par la pré-liaison ET les tests.
+                "proposable": bool(match and not deja_lie and not lie_a_autre_compte and not compte_deja_pris),
+            })
+        resultat['membres_enrichis'] = membres_enrichis
+        return membres_enrichis
+
+    def _verifier_compte_deja_utilise(self, resultat, idindividu_exclu):
+        """Le compte ENT du candidat principal lui-même est-il déjà utilisé par un autre
+        individu Noethys (autre que la personne qu'on cherche à lier) ? Si oui, cette carte ne
+        doit pas proposer de liaison du tout."""
+        candidat_id = resultat.get('id')
+        if candidat_id:
+            resultat['compte_deja_utilise_par'] = Individu.objects.filter(ent_id=candidat_id).exclude(pk=idindividu_exclu).first()
+        else:
+            resultat['compte_deja_utilise_par'] = None
+
+    def _verifier_date_coherente(self, resultat, date_naiss_noethys):
+        """Deuxième preuve indépendante du nom : la date de naissance ENT de ce candidat
+        correspond-elle à celle déjà connue dans Noethys pour la personne recherchée ? Renvoie
+        la date ENT parsée (utile pour les messages) et renseigne resultat['date_coherente']
+        (None si une des deux dates manque - rien à comparer, on ne pénalise pas une info
+        absente)."""
+        from fiche_famille.views.famille_ent import _parse_date
+
+        date_ent = _parse_date(resultat.get("birthDate"))
+        if date_naiss_noethys and date_ent:
+            resultat['date_coherente'] = (date_ent == date_naiss_noethys)
+        else:
+            resultat['date_coherente'] = None
+        return date_ent
+
+    def _verifier_ecole_coherente(self, resultat, idindividu_exclu):
+        """Troisième preuve indépendante : l'école/classe de ce candidat correspond-elle à la
+        scolarité déjà connue dans Noethys pour la personne recherchée ? Uniquement pour un
+        élève (un parent n'a pas de scolarité). Contrairement à la date, l'école et la classe
+        changent chaque année - une "contradiction" peut juste signifier que la Scolarité
+        Noethys n'a pas été mise à jour, pas que c'est la mauvaise personne. Ce signal peut donc
+        AIDER à corroborer, mais n'a jamais de pouvoir de veto (contrairement à date_coherente
+        qui peut faire échouer une corroboration par le nom)."""
+        from fiche_famille.views.famille_ent import _normaliser_texte, _normaliser_enfant, _trouver_ecole
+
+        resultat['ecole_coherente'] = None
+        resultat['ecole_nom_ent'] = None
+        resultat['classe_nom_ent'] = None
+        if not Est_profil_eleve(resultat):
+            return
+
+        # Copie : _normaliser_enfant ne doit pas polluer resultat de champs internes non
+        # voulus - seuls ecole_nom_ent/classe_nom_ent (ci-dessous) sont exposés, pour que
+        # le template puisse afficher ce qui a été comparé (comme pour la date).
+        data_ent_norm = _normaliser_enfant(dict(resultat))
+        resultat['ecole_nom_ent'] = data_ent_norm.get("ecole_nom")
+        resultat['classe_nom_ent'] = data_ent_norm.get("classe_nom")
+        ecole_ent = _trouver_ecole(
+            data_ent_norm.get("ecole_nom"), data_ent_norm.get("ecole_uai"), data_ent_norm.get("ecole_ent_id"),
+        )
+        scolarite_noethys = Get_scolarite_actuelle(idindividu_exclu)
+        if ecole_ent and scolarite_noethys and scolarite_noethys.ecole:
+            classe_ent = _normaliser_texte(data_ent_norm.get("classe_nom") or "")
+            classe_noethys = _normaliser_texte(scolarite_noethys.classe.nom) if scolarite_noethys.classe else ""
+            if ecole_ent != scolarite_noethys.ecole:
+                resultat['ecole_coherente'] = False
+            elif classe_ent and classe_noethys:
+                resultat['ecole_coherente'] = (classe_ent == classe_noethys)
+            # Sinon (classe absente d'un côté) : école seule concorde, mais pas assez
+            # précis à lui seul pour trancher - reste None (ni aide ni gêne).
+
+    def _decider_corroboration(self, resultat, membres_enrichis, date_ent, date_naiss_noethys):
+        """Combine les 3 preuves indépendantes (nom, date, école/classe) en une décision, et
+        construit le message d'avertissement affiché à l'agent quand la preuve n'est pas la
+        plus solide possible (jamais un motif de refus - toujours une invitation à vérifier)."""
+        # Avertit l'agent avant qu'il ne lie ce compte, si rien ne confirme que c'est la
+        # bonne personne (risque d'homonyme). Un membre "lié à un autre compte" ne compte
+        # pas comme une vraie preuve (son propre lien est déjà suspect) - même chose pour
+        # un membre dont le compte candidat est déjà pris par un autre individu (fiche en
+        # double probable, la correspondance est ambiguë).
+        nom_corrobore = any(m['individu_correspondant'] and not m['lie_a_autre_compte'] and not m['compte_deja_pris'] for m in membres_enrichis)
+        membres_lies_ailleurs = [m['ent'] for m in membres_enrichis if m['individu_correspondant'] and m['lie_a_autre_compte']]
+        membres_comptes_pris = [m for m in membres_enrichis if m['individu_correspondant'] and m['compte_deja_pris']]
+        # Exposé sur le résultat pour que la pré-liaison puisse distinguer "vraiment aucun
+        # nom ne correspond" de "un nom correspond mais la date le contredit".
+        resultat['nom_corrobore'] = nom_corrobore
+
+        # Décision combinée : le nom, la date et l'école/classe sont des preuves
+        # indépendantes. La date seule suffit si le nom échoue (utile quand le nom pose un
+        # problème qu'on ne peut pas corriger - nom de naissance/usage, faute de frappe).
+        # L'école/classe seule suffit aussi (même logique, ex: homonyme dans une autre
+        # école). Mais seule la date a un pouvoir de veto : si le nom corrobore ET que la
+        # date le contredit clairement, on ne fait plus confiance à ce nom (risque
+        # d'homonyme, même parent-là) - l'école/classe, elle, ne peut jamais faire échouer
+        # une corroboration par ailleurs (elle change chaque année, une Scolarité Noethys
+        # pas à jour ne prouve rien contre la personne).
+        if nom_corrobore and resultat['date_coherente'] is False:
+            vraie_corroboration = False
+        elif nom_corrobore:
+            vraie_corroboration = True
+        elif resultat['date_coherente']:
+            vraie_corroboration = True
+        else:
+            vraie_corroboration = bool(resultat['ecole_coherente'])
+
+        resultat['aucune_corroboration'] = not vraie_corroboration
+
+        # Cas limite : une SEULE preuve indépendante suffit (date, ou à défaut école+classe)
+        # mais AUCUN nom ne corrobore (famille Noethys vide, ou aucun parent retrouvé).
+        # Techniquement une corroboration valable, mais la preuve la plus faible qu'on
+        # accepte, et à l'écran rien ne la rend visible (les parents affichés sont tous en
+        # jaune). On lie donc, mais jamais en silence : avertissement sur l'écran
+        # individuel, et exclusion des propositions automatiques de la pré-liaison (voir
+        # _rechercher_toutes_correspondances).
+        resultat['corrobore_par_date_seule'] = bool(vraie_corroboration and not nom_corrobore and resultat['date_coherente'])
+        resultat['corrobore_par_ecole_seule'] = bool(
+            vraie_corroboration and not nom_corrobore and not resultat['date_coherente'] and resultat['ecole_coherente']
+        )
+
+        # Avertissement doux, non bloquant : le nom (et/ou la date) suffisent déjà à
+        # accepter la liaison, mais l'école/classe indiquée par l'ENT ne correspond pas à
+        # la Scolarité déjà enregistrée dans Noethys - jamais un motif de refus, juste une
+        # invitation à vérifier (scolarité probablement pas mise à jour côté Noethys).
+        resultat['ecole_incoherente_info'] = bool(vraie_corroboration and resultat['ecole_coherente'] is False)
+
+        if resultat['corrobore_par_date_seule']:
+            resultat['message_avertissement'] = (
+                f"Aucun parent/enfant ne correspond à un membre de cette famille : "
+                f"le seul point commun est la date de naissance "
+                f"({date_ent.strftime('%d/%m/%Y')})."
+            )
+        elif resultat['corrobore_par_ecole_seule']:
+            resultat['message_avertissement'] = (
+                "Aucun parent/enfant ne correspond à un membre de cette famille : "
+                "le seul point commun est l'école et la classe."
+            )
+        elif nom_corrobore and resultat['date_coherente'] is False:
+            resultat['message_avertissement'] = (
+                f"Un nom de parent correspond, mais la date de naissance de cette personne "
+                f"dans l'ENT ({date_ent.strftime('%d/%m/%Y')}) ne correspond pas à celle déjà "
+                f"connue ({date_naiss_noethys.strftime('%d/%m/%Y')}) - probable "
+                f"homonyme. Vérifiez avant de continuer."
+            )
+        elif not vraie_corroboration and membres_lies_ailleurs:
+            noms = ", ".join(f"{m.get('firstName', '')} {m.get('lastName', '')}".strip() for m in membres_lies_ailleurs)
+            resultat['message_avertissement'] = (
+                f"Le seul membre retrouvé pour cette famille ({noms}) est déjà "
+                f"lié à un autre compte ENT - ce n'est pas une preuve fiable. Vérifiez sa "
+                f"fiche avant de continuer."
+            )
+        elif not vraie_corroboration and membres_comptes_pris:
+            noms = ", ".join(f"{m['ent'].get('firstName', '')} {m['ent'].get('lastName', '')}".strip() for m in membres_comptes_pris)
+            resultat['message_avertissement'] = (
+                f"Le compte ENT du seul membre retrouvé ({noms}) est déjà utilisé par un "
+                f"autre individu - vérifiez s'il s'agit d'une fiche en double "
+                f"avant de continuer."
+            )
+        elif not vraie_corroboration:
+            resultat['message_avertissement'] = (
+                "Aucun parent/enfant ne correspond à un membre de cette famille."
+            )
+
+    def _rechercher(self, nom, prenom, idfamille, idindividu_exclu):
+        """ Retourne (resultats, erreur) - un seul des deux est renseigné. """
+        if not nom or not prenom:
+            return None, "Veuillez saisir le prénom ET le nom."
+        if get_headers() is None:
+            return None, "Impossible de se connecter à l'ENT. Vérifiez que la connexion est active et que les identifiants sont corrects, ou réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
+        resultats = search_by_name(last_name=nom, first_name=prenom)
+        # None = l'ENT n'a pas répondu (panne, timeout, coupure en cours de recherche). Le test
+        # get_headers() ci-dessus ne couvre pas ce cas : un token encore valide en cache le laisse
+        # passer. Sans cette distinction, une panne s'annonce comme "cette personne n'existe pas".
+        if resultats is None:
+            return None, "La connexion à l'ENT a échoué pendant la recherche. Réessayez dans quelques instants (le service ENT peut être temporairement indisponible)."
+        if not resultats:
+            return None, f"Aucun résultat pour « {prenom} {nom} » dans l'ENT. Cet individu n'y existe peut-être pas, ou son nom y est orthographié différemment - vous pouvez essayer une autre recherche ci-dessous."
+
+        # Date de naissance déjà connue dans Noethys pour la personne recherchée - sert de
+        # deuxième preuve indépendante du nom (voir _verifier_date_coherente), utile quand le
+        # nom d'un parent pose problème (nom de naissance/usage, faute de frappe) alors que la
+        # date, elle, ne varie jamais selon qui la saisit.
+        date_naiss_noethys = Individu.objects.filter(pk=idindividu_exclu).values_list("date_naiss", flat=True).first()
+
+        # On regarde TOUTES les familles de la personne recherchée, pas seulement idfamille : un
+        # enfant de famille séparée est rattaché à 2 familles (une par parent) - se limiter à
+        # idfamille raterait la corroboration par le parent de l'AUTRE famille.
+        familles_ids = Rattachement.objects.filter(individu_id=idindividu_exclu).values_list("famille_id", flat=True)
+        membres_famille = list(Rattachement.objects.filter(famille_id__in=familles_ids).exclude(individu_id=idindividu_exclu).select_related('individu'))
+
+        for resultat in resultats:
+            membres_enrichis = self._enrichir_membres_famille(resultat, membres_famille)
+            self._verifier_compte_deja_utilise(resultat, idindividu_exclu)
+            date_ent = self._verifier_date_coherente(resultat, date_naiss_noethys)
+            self._verifier_ecole_coherente(resultat, idindividu_exclu)
+            self._decider_corroboration(resultat, membres_enrichis, date_ent, date_naiss_noethys)
+
+        return resultats, None
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['box_titre'] = "Lier à un compte ENT"
+        return context
+
+    def get(self, request, *args, **kwargs):
+        idfamille = self.kwargs['idfamille']
+        idindividu = self.kwargs['idindividu']
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+        context = self.get_context_data()
+        individu = context['individu']
+
+        # Recherche automatique avec le nom déjà connu dans Noethys, pour éviter à l'agent
+        # de le retaper - le formulaire ci-dessous reste modifiable en cas d'échec (accent,
+        # orthographe différente, nom de naissance...).
+        context['nom_recherche'] = individu.nom
+        context['prenom_recherche'] = individu.prenom or ""
+        context['resultats'], context['erreur'] = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+        context['recherche_auto'] = True
+        return self.render_to_response(context)
+
+    def post(self, request, *args, **kwargs):
+        idfamille = self.kwargs['idfamille']
+        idindividu = self.kwargs['idindividu']
+
+        if not ent_est_actif():
+            messages.error(request, "L'intégration ENT est désactivée.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+        action = request.POST.get('action', 'rechercher')
+
+        if action == 'rechercher':
+            nom = request.POST.get('nom', '').strip()
+            prenom = request.POST.get('prenom', '').strip()
+            resultats, erreur = self._rechercher(nom, prenom, idfamille, idindividu)
+
+            context = self.get_context_data()
+            context['nom_recherche'] = nom
+            context['prenom_recherche'] = prenom
+            context['resultats'] = resultats
+            context['erreur'] = erreur
+            context['recherche_auto'] = False
+            return self.render_to_response(context)
+
+        elif action == 'delier':
+            individu = Individu.objects.get(pk=idindividu)
+            if individu.ent_id:
+                # Garde une trace de l'ancien lien avant de l'effacer - sinon on perd
+                # l'info "il y avait un lien, lequel, posé par qui" au moment précis où
+                # on la supprime (même exigence de traçabilité que pour les liaisons).
+                ancien_ent_id = individu.ent_id
+                ancien_lie_par = individu.ent_lie_par or "inconnu"
+                ancien_lie_le = individu.ent_lie_le.strftime('%d/%m/%Y %H:%M') if individu.ent_lie_le else "date inconnue"
+                utils_historique.Ajouter(
+                    titre="Liaison ENT supprimée (déliée)",
+                    detail=f"{individu.Get_nom()} délié(e) du compte ENT {ancien_ent_id} (lié précédemment par {ancien_lie_par}, le {ancien_lie_le}).",
+                    utilisateur=request.user,
+                    famille=idfamille,
+                    individu=idindividu,
+                )
+                individu.ent_id = None
+                individu.ent_lie_par = None
+                individu.ent_lie_le = None
+                individu.save()
+                messages.success(request, "Compte ENT délié. Vous pouvez maintenant lier cette fiche au bon compte.")
+            else:
+                messages.info(request, "Cette fiche n'était pas liée à un compte ENT.")
+            return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+        elif action == 'lier':
+            ent_id = request.POST.get('ent_id')
+            if not ent_id:
+                messages.error(request, "Donnée manquante.")
+            elif Individu.objects.filter(ent_id=ent_id).exists():
+                messages.error(request, "Ce compte ENT est déjà lié à un autre individu.")
+            else:
+                individu = Individu.objects.get(pk=idindividu)
+                # Ne jamais écraser un lien existant, même via une requête directe - même
+                # garde-fou que pour les parents cochés ci-dessous (l'écran n'affiche
+                # normalement cette page que pour un individu non lié, mais rien ne
+                # l'empêche d'être appelée directement).
+                if individu.ent_id:
+                    messages.error(request, "Cet individu est déjà lié à un compte ENT - aucune modification effectuée, pour ne pas écraser le lien existant. Vérifiez sa fiche.")
+                    return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+                # Recalcule côté serveur si CE candidat précis nécessitait de passer outre un
+                # avertissement (aucune preuve, ou preuve la plus faible - date seule ou
+                # école/classe seule) - pour tracer une liaison forcée de façon fiable en cas
+                # de contestation, sans se fier à ce que le navigateur affichait (demande de
+                # traçabilité légale/sécurité).
+                resultats_verif, _ = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+                candidat = next((r for r in (resultats_verif or []) if r.get('id') == ent_id), None)
+                liaison_forcee = bool(candidat and (
+                    candidat.get('aucune_corroboration') or candidat.get('corrobore_par_date_seule') or candidat.get('corrobore_par_ecole_seule')
+                ))
+
+                individu.ent_id = ent_id
+                individu.ent_lie_par = request.user.username
+                individu.ent_lie_le = timezone.now()
+                individu.save()
+
+                if liaison_forcee:
+                    if candidat.get('aucune_corroboration'):
+                        raison = "aucune correspondance"
+                    elif candidat.get('corrobore_par_date_seule'):
+                        raison = "date de naissance seule"
+                    else:
+                        raison = "école et classe seules"
+                    utils_historique.Ajouter(
+                        titre="Liaison ENT forcée sans corroboration fiable",
+                        detail=(
+                            f"{individu.Get_nom()} lié(e) au compte ENT {ent_id} malgré un avertissement "
+                            f"({raison} - validé manuellement par l'agent)."
+                        ),
+                        utilisateur=request.user,
+                        famille=idfamille,
+                        individu=idindividu,
+                    )
+
+                nb_lies = 1
+                echecs = {}  # {idindividu (str): raison}
+
+                # Lie aussi les parents cochés (correspondances trouvées dans la même famille)
+                for cle, valeur in request.POST.items():
+                    if cle.startswith('parent_lier_') and valeur:
+                        autre_id = cle.replace('parent_lier_', '')
+                        autre_individu = Individu.objects.filter(pk=autre_id).first()
+                        deja_utilise_par = Individu.objects.filter(ent_id=valeur).first()
+                        if deja_utilise_par:
+                            if autre_individu:
+                                echecs[autre_id] = deja_utilise_par
+                        # Ne jamais écraser un ent_id déjà existant (même écran normalement -
+                        # la case à cocher est cachée dans ce cas, mais on protège aussi côté
+                        # serveur, au cas où la requête serait envoyée directement).
+                        elif autre_individu and not autre_individu.ent_id:
+                            autre_individu.ent_id = valeur
+                            autre_individu.ent_lie_par = request.user.username
+                            autre_individu.ent_lie_le = timezone.now()
+                            autre_individu.save()
+                            nb_lies += 1
+
+                if nb_lies > 1:
+                    messages.success(request, f"{nb_lies} comptes ENT liés avec succès (individu + parent(s)). Ils seront désormais reconnus lors des prochains imports/synchronisations.")
+                else:
+                    messages.success(request, "Compte ENT lié avec succès. Cet individu sera désormais reconnu lors des prochains imports/synchronisations.")
+
+                if echecs:
+                    # Un message flash seul serait trop facile a manquer/oublier - on reste sur la
+                    # page et on affiche l'echec directement a cote du parent concerne, en clair.
+                    context = self.get_context_data()
+                    context['nom_recherche'] = individu.nom
+                    context['prenom_recherche'] = individu.prenom or ""
+                    context['resultats'], context['erreur'] = self._rechercher(individu.nom, individu.prenom, idfamille, idindividu)
+                    context['recherche_auto'] = False
+                    for resultat in (context['resultats'] or []):
+                        for membre in resultat.get('membres_enrichis', []):
+                            correspondant = membre['individu_correspondant']
+                            if correspondant and str(correspondant.pk) in echecs:
+                                membre['echec'] = echecs[str(correspondant.pk)]
+                    return self.render_to_response(context)
+
+                return redirect(reverse('individu_resume', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))
+
+            return redirect(reverse('individu_ent_lier', kwargs={'idfamille': idfamille, 'idindividu': idindividu}))

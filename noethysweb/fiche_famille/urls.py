@@ -10,7 +10,8 @@ from fiche_famille.views import famille, famille_questionnaire, famille_notes, f
                             famille_abo_recus_email, famille_abo_depots_email, famille_outils, famille_attestations, famille_devis, famille_historique, famille_export_xml, famille_sms, \
                             famille_voir_rappel, famille_rappels, famille_portail, famille_emails, reglement_recu, famille_messagerie_portail, famille_mandats, famille_voir_mandat, famille_prestations_modele, \
                             famille_attestations_fiscales, famille_voir_attestation_fiscale, famille_locations, famille_voir_location, famille_remboursement, famille_factures_consulter, famille_factures_selection, \
-                            famille_edition_renseignements, reglement_recu_auto, famille_formulaires, famille_releve_prestations, famille_liste_consommations
+                            famille_edition_renseignements, reglement_recu_auto, famille_formulaires, famille_releve_prestations, famille_liste_consommations, famille_ent, famille_ent_synchro, \
+                            civilite_verification
 
 urlpatterns = [
 
@@ -22,6 +23,13 @@ urlpatterns = [
     # Familles
     path('individus/familles/liste', famille.Liste.as_view(), name='famille_liste'),
     path('individus/familles/ajouter', famille_ajouter.Creer_famille.as_view(), name='famille_ajouter'),
+    path('individus/familles/ent/importer', famille_ent.ImporterFamilleEnt.as_view(), name='ent_import_famille'),
+    path('individus/familles/ent/importer_masse', famille_ent.ImporterEnMasseEnt.as_view(), name='ent_import_masse'),
+    path('individus/familles/ent/preliaison', famille_ent.PreLiaisonEnt.as_view(), name='ent_preliaison'),
+    path('individus/familles/ent/civilites_a_verifier', civilite_verification.ListeCivilitesAVerifier.as_view(), name='civilites_a_verifier'),
+    path('individus/familles/fusionner/<int:idfamille>', famille_ent.FusionnerFamilles.as_view(), name='famille_fusionner'),
+    path('individus/familles/separer/<int:idfamille>', famille_ent.SeparerFamille.as_view(), name='famille_separer'),
+    path('individus/familles/ent/synchronisation', famille_ent_synchro.ListeSynchro.as_view(), name='ent_synchro_masse'),
     path('individus/familles/supprimer/<int:idfamille>', famille.Supprimer_famille.as_view(), name='famille_supprimer'),
     path('individus/familles/resume/<int:idfamille>', famille.Resume.as_view(), name='famille_resume'),
 
@@ -76,6 +84,7 @@ urlpatterns = [
     path('individus/familles/prestations/modifier/<int:idfamille>/<int:pk>', famille_prestations.Modifier.as_view(), name='famille_prestations_modifier'),
     path('individus/familles/prestations/supprimer/<int:idfamille>/<int:pk>', famille_prestations.Supprimer.as_view(), name='famille_prestations_supprimer'),
     path('individus/familles/prestations/supprimer_plusieurs/<int:idfamille>/<str:listepk>', famille_prestations.Supprimer_plusieurs.as_view(), name='famille_prestations_supprimer_plusieurs'),
+    path('individus/familles/prestations/reattribuer/<int:idfamille>/<int:pk>', famille_prestations.ReattribuerPrestation.as_view(), name='famille_prestations_reattribuer'),
 
     path('individus/familles/factures/liste/<int:idfamille>', famille_factures.Liste.as_view(), name='famille_factures_liste'),
     path('individus/familles/factures/ajouter/<int:idfamille>', famille_factures.Ajouter.as_view(), name='famille_factures_ajouter'),
