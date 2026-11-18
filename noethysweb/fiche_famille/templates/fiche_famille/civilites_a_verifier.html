@@ -1,0 +1,81 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    {% if groupes %}
+        <form method="post" id="form_civilites">
+            {% csrf_token %}
+            <div class="d-flex align-items-center mb-3">
+                <button type="submit" class="btn btn-success mr-3">
+                    <i class="fa fa-check"></i> Confirmer les civilités sélectionnées
+                </button>
+                <label class="mb-0">
+                    <input type="checkbox" id="select_all_global"> Tout sélectionner ({{ nb_a_verifier }} individu{{ nb_a_verifier|pluralize }})
+                </label>
+            </div>
+
+            {% for groupe in groupes %}
+            <div class="card mb-3">
+                <div class="card-header p-2">
+                    <strong>
+                        <i class="fa fa-home"></i>
+                        {% if groupe.famille %}Famille {{ groupe.famille.nom }}{% else %}Sans famille{% endif %}
+                    </strong>
+                </div>
+                <div class="card-body p-2">
+                    <table class="table table-bordered table-sm mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th style="width:30px;"></th>
+                                <th>Individu</th>
+                                <th>Civilité</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ligne in groupe.lignes %}
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" name="individus_confirmes" value="{{ ligne.individu.pk }}" class="case_individu">
+                                </td>
+                                <td>{{ ligne.individu.nom }} {{ ligne.individu.prenom }}</td>
+                                <td>
+                                    {% for valeur, label in ligne.choix %}
+                                        <label class="mr-3">
+                                            <input type="radio" name="civilite_{{ ligne.individu.pk }}" value="{{ valeur }}" {% if forloop.first %}checked{% endif %}>
+                                            {{ label }}
+                                        </label>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </form>
+
+        <script>
+            document.getElementById('select_all_global').addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.case_individu').forEach(function(cb) {
+                    cb.checked = checked;
+                });
+            });
+        </script>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Aucune civilité à vérifier pour le moment.
+        </div>
+    {% endif %}
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}

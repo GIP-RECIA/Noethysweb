@@ -7,13 +7,17 @@ from decimal import Decimal
 from django.urls import reverse_lazy, reverse
 from django.db.models import Q, Sum
 from django.template import Template, RequestContext
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
+from django.views.generic import TemplateView
+from django.contrib import messages
+from django.shortcuts import get_object_or_404
+from core.views.base import CustomView
 from core.views.mydatatableview import MyDatatable, columns, helpers
 from core.views import crud
-from core.models import Famille, Prestation, Tarif, Inscription, Consommation
+from core.models import Cotisation, Deduction, Famille, Prestation, Tarif, Inscription, Consommation, Rattachement
 from fiche_famille.forms.famille_prestations import Formulaire, FORMSET_DEDUCTIONS
 from fiche_famille.views.famille import Onglet
-from core.utils import utils_texte
+from core.utils import utils_texte, utils_historique
 
 
 def Supprimer_consommation(request):
@@ -188,10 +192,92 @@ class Liste(Page, crud.Liste):
                     self.Create_bouton_modifier(url=reverse(view.url_modifier, kwargs=kwargs)),
                     self.Create_bouton_supprimer(url=reverse(view.url_supprimer, kwargs=kwargs)),
                 ]
+                # Réattribution manuelle : uniquement si non facturée et si l'individu est
+                # rattaché à plusieurs familles (ex: enfant partagé après une séparation)
+                if not instance.facture and instance.individu_id:
+                    nb_familles = Rattachement.objects.filter(individu_id=instance.individu_id).values("famille_id").distinct().count()
+                    if nb_familles > 1:
+                        html.append(self.Create_bouton(
+                            url=reverse("famille_prestations_reattribuer", kwargs={"idfamille": kwargs["idfamille"], "pk": instance.pk}),
+                            title="Réattribuer à une autre famille", icone="fa-exchange"
+                        ))
             else:
                 # Afficher que l'accès est interdit
                 html = ["<span class='text-red'><i class='fa fa-minus-circle margin-r-5' title='Accès non autorisé'></i>Accès interdit</span>",]
             return self.Create_boutons_actions(html)
+
+
+class ReattribuerPrestation(CustomView, TemplateView):
+    template_name = "fiche_famille/famille_prestations_reattribuer.html"
+    menu_code = "famille_prestations_liste"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        prestation = get_object_or_404(Prestation, pk=self.kwargs["pk"])
+
+        context["page_titre"] = "Réattribuer une prestation"
+        context["box_titre"] = "Réattribution manuelle"
+        context["box_introduction"] = "Sélectionnez la famille à laquelle vous souhaitez réattribuer cette prestation."
+        context["idfamille"] = self.kwargs["idfamille"]
+        context["prestation"] = prestation
+        context["familles"] = Famille.objects.filter(rattachement__individu_id=prestation.individu_id).distinct()
+        return context
+
+    def get(self, request, *args, **kwargs):
+        prestation = get_object_or_404(Prestation, pk=self.kwargs["pk"])
+        if prestation.facture_id:
+            messages.error(request, "Cette prestation est déjà facturée, elle ne peut pas être réattribuée.")
+            return HttpResponseRedirect(reverse("famille_prestations_liste", kwargs={"idfamille": self.kwargs["idfamille"]}))
+        return self.render_to_response(self.get_context_data())
+
+    def post(self, request, *args, **kwargs):
+        prestation = get_object_or_404(Prestation, pk=self.kwargs["pk"])
+        idfamille_cible = request.POST.get("idfamille_cible")
+
+        if prestation.facture_id:
+            messages.error(request, "Cette prestation est déjà facturée, elle ne peut pas être réattribuée.")
+            return HttpResponseRedirect(reverse("famille_prestations_liste", kwargs={"idfamille": self.kwargs["idfamille"]}))
+
+        if not idfamille_cible:
+            messages.error(request, "Veuillez sélectionner une famille.")
+            return HttpResponseRedirect(reverse("famille_prestations_reattribuer", kwargs={"idfamille": self.kwargs["idfamille"], "pk": prestation.pk}))
+
+        famille_cible = get_object_or_404(Famille, pk=idfamille_cible)
+
+        # Vérifie que l'individu est bien rattaché à cette famille cible (sécurité)
+        if not Rattachement.objects.filter(individu_id=prestation.individu_id, famille=famille_cible).exists():
+            messages.error(request, "Cette famille n'est pas autorisée pour cette prestation.")
+            return HttpResponseRedirect(reverse("famille_prestations_reattribuer", kwargs={"idfamille": self.kwargs["idfamille"], "pk": prestation.pk}))
+
+        famille_origine = prestation.famille
+        prestation.famille = famille_cible
+        prestation.save()
+
+        # Les déductions (aides financières) rattachées à cette prestation doivent suivre -
+        # même règle que la migration automatique lors d'une séparation de famille. Sans ça,
+        # la prestation et sa propre aide se retrouveraient dans deux familles différentes.
+        nb_deductions = Deduction.objects.filter(prestation=prestation).update(famille=famille_cible)
+
+        # Une cotisation (adhésion) a un lien direct un-pour-un avec sa prestation - même
+        # raisonnement que pour les déductions : sans ça, la carte d'adhérent resterait dans
+        # l'ancienne famille pendant que le paiement qui la finance part dans l'autre.
+        nb_cotisations = Cotisation.objects.filter(prestation=prestation).update(famille=famille_cible)
+
+        # Traçabilité (exigence de sécurité/légale, même principe que pour les liaisons ENT) :
+        # ce déplacement touche de l'argent (prestation + éventuellement déduction/cotisation
+        # liées) entre deux familles - il faut pouvoir remonter à l'agent qui l'a fait.
+        detail = f"Prestation « {prestation.label} » ({prestation.montant} €) déplacée de « {famille_origine.nom if famille_origine else '?'} » vers « {famille_cible.nom} »."
+        if nb_deductions:
+            detail += f" {nb_deductions} déduction(s) déplacée(s) avec elle."
+        if nb_cotisations:
+            detail += f" {nb_cotisations} cotisation(s) déplacée(s) avec elle."
+        utils_historique.Ajouter(
+            titre="Réattribution manuelle d'une prestation", detail=detail,
+            utilisateur=request.user, famille=famille_cible.pk, individu=prestation.individu_id,
+        )
+
+        messages.success(request, f"La prestation a été réattribuée à la famille {famille_cible.nom}.")
+        return HttpResponseRedirect(reverse("famille_prestations_liste", kwargs={"idfamille": famille_cible.pk}))
 
 
 
