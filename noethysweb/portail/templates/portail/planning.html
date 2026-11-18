@@ -86,15 +86,18 @@
 
     {# Grilles des réservations #}
     <div class="row">
-        <div class="col-md-12" >
-            <div class="card">
 
+        {% if parametres_portail.reservations_afficher_facturation %}
+            <div class="col-md-9">
+        {% else %}
+            <div class="col-md-12" >
+        {% endif %}
+
+            <div class="card">
                 {# Grille des consommations #}
                 <div class="card-body">
 
                     {# Texte d'introduction de la période #}
-                    {{ data.periode_reservation }}
-
                     {% if data.periode_reservation.introduction %}
                         <div class="d-print-none" style="margin-bottom: 10px;">
                             <i class="fa fa-info-circle margin-r-5"></i>{{ data.periode_reservation.introduction }}
@@ -125,13 +128,23 @@
                     </small></div>
 
                 </div>
-
             </div>
         </div>
+
+        {% if parametres_portail.reservations_afficher_facturation %}
+            <div class="col-md-3">
+                {% if parametres_portail.reservations_afficher_forfaits and data.tarifs_credits_exists %}
+                    {% include "consommations/grille_forfaits.html" %}
+                {% endif %}
+                {% include "consommations/grille_facturation.html" %}
+            </div>
+        {% endif %}
+
     </div>
 
     {% include 'consommations/grille_saisie_horaires.html' %}
     {% include 'consommations/grille_saisie_quantite.html' %}
     {% include 'consommations/grille_appliquer_semaine_type.html' %}
+    {% include 'consommations/grille_saisie_questionnaire.html' %}
 
 {% endblock contenu_page %}
