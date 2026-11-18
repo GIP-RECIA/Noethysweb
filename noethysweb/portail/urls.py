@@ -3,7 +3,7 @@
 #  Noethysweb, application de gestion multi-activités.
 #  Distribué sous licence GNU GPL.
 
-from django.urls import path
+from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from core.decorators import secure_ajax_portail
 from consommations.views import grille
@@ -23,6 +23,9 @@ urlpatterns = [
     # Connexion
     path('connexion', login.LoginViewFamille.as_view(), name='portail_connexion'),
     path('deconnexion', auth_views.LogoutView.as_view(next_page='portail_connexion'), name='portail_deconnexion'),
+
+    # SSO ENT (OIDC) - fournit oidc_authentication_init/oidc_authentication_callback/oidc_logout
+    path('sso/', include('mozilla_django_oidc.urls')),
 
     # Change mot de passe
     path('password_change/', change_password.MyPasswordChangeView.as_view(), name='password_change'),
@@ -143,7 +146,10 @@ urlpatterns = [
 
     # Contact
     path('contact', contact.View.as_view(), name='portail_contact'),
+    # Messagerie - URL de base (affiche sélecteur si plusieurs familles)
     path('contact/messagerie/<int:idstructure>', messagerie.Ajouter.as_view(), name='portail_messagerie'),
+    # Messagerie - Discussion d'une famille spécifique
+    path('contact/messagerie/<int:idstructure>/<int:idfamille>/', messagerie.Ajouter.as_view(), name='portail_messagerie_famille'),
 
     # Mentions
     path('mentions', mentions.View.as_view(), name='portail_mentions'),
@@ -164,4 +170,6 @@ urlpatterns = [
     path('individus/ajouter_assureur', secure_ajax_portail(individu_assurances.Ajouter_assureur), name='portail_ajax_ajouter_assureur'),
     path('activites/get_form_extra', secure_ajax_portail(inscrire_activite.Get_form_extra), name='portail_ajax_inscrire_get_form_extra'),
     path('activites/validation_form', secure_ajax_portail(inscrire_activite.Valid_form), name='portail_ajax_inscrire_valid_form'),
+    path('activites/get_individus_by_famille', secure_ajax_portail(transmettre_piece.Get_individus_by_famille), name='portail_ajax_inscrire_get_individus_by_famille'),
+    path('activites/get_pieces_by_famille', secure_ajax_portail(transmettre_piece.Get_pieces_by_famille), name='portail_ajax_transmettre_piece_get_pieces_by_famille'),
 ]

@@ -1,0 +1,67 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    <div class="alert alert-warning">
+        <i class="fa fa-exclamation-triangle"></i>
+        Vous allez fusionner la famille <strong>{{ famille.nom }}</strong> avec une autre famille.
+        Tous les membres seront regroupés dans une seule famille et l'autre famille sera supprimée.
+        Les factures, prestations, règlements et le payeur des deux familles seront également
+        regroupés — pensez à faire le point avec la famille sur la répartition des paiements
+        avant de valider si nécessaire.
+    </div>
+
+    {% if familles_candidates %}
+        <form method="post">
+            {% csrf_token %}
+            <table class="table table-bordered table-hover">
+                <thead class="thead-light">
+                    <tr>
+                        <th style="width:40px;"></th>
+                        <th>ID</th>
+                        <th>Nom de la famille</th>
+                        <th>Adresse</th>
+                        <th>Mode séparation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in familles_candidates %}
+                    <tr>
+                        <td><input type="radio" name="idfamille_source" value="{{ f.pk }}" required></td>
+                        <td>{{ f.pk }}</td>
+                        <td>{{ f.nom }}</td>
+                        <td>{{ f.rue_resid|default:"-" }} {{ f.ville_resid|default:"" }}</td>
+                        <td>{{ f.mode_separation|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="mt-3">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fa fa-compress"></i> Fusionner
+                </button>
+                <a href="{% url 'famille_resume' idfamille=idfamille %}" class="btn btn-default ml-2">
+                    <i class="fa fa-times"></i> Annuler
+                </a>
+            </div>
+        </form>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Aucune famille candidate trouvée (aucune famille ne partage les mêmes enfants).
+        </div>
+        <a href="{% url 'famille_resume' idfamille=idfamille %}" class="btn btn-default">
+            <i class="fa fa-arrow-left"></i> Retour
+        </a>
+    {% endif %}
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}

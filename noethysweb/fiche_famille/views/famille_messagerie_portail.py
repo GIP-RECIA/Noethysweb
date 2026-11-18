@@ -55,5 +55,11 @@ class Ajouter(Page, crud.Ajouter):
 
     def form_valid(self, form):
         """ Envoie une notification de nouveau message à la famille par email """
-        Envoi_notification_message(request=self.request, famille=form.cleaned_data["famille"], structure=form.cleaned_data["structure"])
+        emails_destinataires = form.cleaned_data.get("emails_destinataires", [])
+        Envoi_notification_message(
+            request=self.request,
+            famille=form.cleaned_data["famille"],
+            structure=form.cleaned_data["structure"],
+            emails_destinataires=emails_destinataires,
+        )
         return super(Ajouter, self).form_valid(form)

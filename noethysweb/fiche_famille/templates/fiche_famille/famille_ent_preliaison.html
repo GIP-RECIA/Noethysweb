@@ -1,0 +1,156 @@
+{% extends "core/box_in_page.html" %}
+{% load static %}
+{% load embed %}
+
+{% block contenu_page %}
+{% embed 'core/box.html' %}
+    {% block box_titre %}{{ box_titre }}{% endblock %}
+    {% block box_introduction %}{{ box_introduction }}{% endblock %}
+
+    {% block box_contenu %}
+
+    <form method="post" class="form_spinner mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rechercher">
+        <button type="submit" class="btn btn-info btn_spinner">
+            <i class="fa fa-search"></i> {% if recherche_lancee %}Relancer la recherche{% else %}Rechercher les correspondances{% endif %}
+        </button>
+    </form>
+
+    {% if groupes %}
+        <form method="post" id="form_preliaison" class="form_spinner">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirmer">
+            <div class="d-flex align-items-center mb-3">
+                <button type="submit" class="btn btn-success mr-3 btn_spinner">
+                    <i class="fa fa-check"></i> Confirmer les liaisons sélectionnées
+                </button>
+                <label class="mb-0">
+                    <input type="checkbox" id="select_all_global" checked> Tout sélectionner ({{ nb_correspondances }} correspondance{{ nb_correspondances|pluralize }})
+                </label>
+            </div>
+
+            {% for groupe in groupes %}
+            <div class="card mb-3">
+                <div class="card-header p-2">
+                    <strong>
+                        <i class="fa fa-home"></i>
+                        Famille {{ groupe.famille_nom }}
+                    </strong>
+                </div>
+                <div class="card-body p-2">
+                    <table class="table table-bordered table-sm mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th style="width:30px;"></th>
+                                <th style="width:100px;">Rôle</th>
+                                <th>Connu par l'ENT</th>
+                                <th>Correspond à (fiche existante)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ligne in groupe.lignes %}
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" name="liaisons_confirmees" value="{{ ligne.cle }}" class="case_correspondance" checked>
+                                </td>
+                                <td>
+                                    {% if ligne.role == "Enfant" %}
+                                        <span class="badge badge-info">Enfant</span>
+                                    {% else %}
+                                        <span class="badge badge-light">Parent</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ ligne.nom_ent }}</td>
+                                <td>{{ ligne.nom_individu }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </form>
+
+        <script>
+            document.getElementById('select_all_global').addEventListener('change', function() {
+                var checked = this.checked;
+                document.querySelectorAll('.case_correspondance').forEach(function(cb) {
+                    cb.checked = checked;
+                });
+            });
+        </script>
+    {% elif recherche_lancee %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Aucune correspondance trouvée.
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            <i class="fa fa-info-circle"></i> Cliquez sur "Rechercher les correspondances" pour commencer.
+        </div>
+    {% endif %}
+
+    {% if non_resolus %}
+        <hr>
+        <h5>À vérifier à la main</h5>
+        <p class="text-muted">
+            Ces personnes n'ont pas pu être traitées automatiquement - vérifiez-les une par une
+            avant de lancer l'import en masse, sinon elles risquent d'être importées en double.
+        </p>
+        {% for groupe in non_resolus %}
+        <div class="card mb-3">
+            <div class="card-header p-2">
+                <strong>
+                    <i class="fa fa-home"></i>
+                    Famille {{ groupe.famille_nom }}
+                </strong>
+            </div>
+            <div class="card-body p-2">
+                <table class="table table-bordered table-sm mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th style="width:100px;">Rôle</th>
+                            <th>Personne</th>
+                            <th>Raison</th>
+                            <th style="width:150px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for personne in groupe.personnes %}
+                        <tr>
+                            <td>
+                                {% if personne.role == "Enfant" %}
+                                    <span class="badge badge-info">Enfant</span>
+                                {% else %}
+                                    <span class="badge badge-light">Parent</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ personne.nom }}</td>
+                            <td>{{ personne.raison }}</td>
+                            <td>
+                                <a href="{% url 'individu_ent_lier' idfamille=groupe.famille_id idindividu=personne.individu_id %}" class="btn btn-sm btn-primary" target="_blank" rel="noopener">
+                                    <i class="fa fa-link"></i> Vérifier/lier
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <script>
+        document.querySelectorAll('.form_spinner').forEach(function(form) {
+            form.addEventListener('submit', function() {
+                var btn = form.querySelector('.btn_spinner');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Chargement...';
+            });
+        });
+    </script>
+
+    {% endblock %}
+{% endembed %}
+{% endblock %}
