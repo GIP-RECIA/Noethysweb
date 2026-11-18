@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.contrib import messages
 from eopayment import Payment
-from portail.views.base import CustomView
+from portail.views.base import CustomView, get_familles_from_request
 from core.models import Facture, Prestation, Ventilation, PortailPeriode, Paiement, Reglement, Payeur, ModeReglement, CompteBancaire, PortailRenseignement, ModeleImpression, Mandat
 from core.utils import utils_portail, utils_fichiers, utils_dates, utils_texte
 
@@ -71,18 +71,29 @@ def effectuer_paiement_en_ligne(request):
         return JsonResponse({"erreur": _("Le montant doit être supérieur à zéro !")}, status=401)
 
     # Vérifie que le montant est supérieur au montant minimal fixé
-    if montant_reglement < decimal.Decimal(parametres_portail.get("paiement_ligne_montant_minimal", 0.0)):
-        return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % parametres_portail.paiement_ligne_montant_minimal}, status=401)
-
-    # Vérifie que la famille a une adresse mail
-    if not request.user.famille.mail:
-        return JsonResponse({"erreur": _("Aucune adresse mail n'a été renseignée sur votre dossier. Le paiement en ligne est impossible sans cette information.")}, status=401)
+    montant_minimal = decimal.Decimal(str(parametres_portail.get("paiement_ligne_montant_minimal", 0)))
+    if montant_reglement < montant_minimal:
+        return JsonResponse({"erreur": _("Le paiement en ligne nécessite un montant minimal de %.2f € !") % montant_minimal}, status=401)
 
     # Mémorise les numéros de factures et la ventilation
     dict_ventilation = {"facture": {}, "periode": {}, "cotisation": {}}
     for texte in liste_impayes:
         type_impaye, ID, solde = texte.split("##")
         dict_ventilation[type_impaye][int(ID)] = decimal.Decimal(solde)
+
+    # Détermine la famille depuis la première facture cochée
+    familles_utilisateur = get_familles_from_request(request)
+    famille = None
+    if dict_ventilation["facture"]:
+        premiere_facture = Facture.objects.select_related("famille").get(pk=list(dict_ventilation["facture"].keys())[0])
+        if premiere_facture.famille in familles_utilisateur:
+            famille = premiere_facture.famille
+    if not famille:
+        famille = next((f for f in familles_utilisateur if f.mail), None)
+
+    # Vérifie que la famille a une adresse mail
+    if not famille or not famille.mail:
+        return JsonResponse({"erreur": _("Aucune adresse mail n'a été renseignée sur votre dossier. Le paiement en ligne est impossible sans cette information.")}, status=401)
 
     # Importation des factures
     liste_factures = Facture.objects.select_related("regie").filter(pk__in=dict_ventilation["facture"].keys()).all().order_by("date_debut")
@@ -100,14 +111,14 @@ def effectuer_paiement_en_ligne(request):
     # --------------------------- Mode démo -----------------------------
 
     if parametres_portail.get("paiement_ligne_systeme") == "demo":
-        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE MODE DEMO (Famille %s) : montant=%s ventilation_str=%s", request.user.famille, str(montant_reglement), ventilation_str)
+        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE MODE DEMO (Famille %s) : montant=%s ventilation_str=%s", famille, str(montant_reglement), ventilation_str)
         return JsonResponse({"systeme_paiement": "demo", "texte": "Paiement impossible, vous êtes en mode démo !"})
 
     # ----------------------- Paiement avec PAYFIP -------------------------
 
     if parametres_portail.get("paiement_ligne_systeme") == "payfip":
         payfip_mode = parametres_portail.get("payfip_mode")
-        logger.debug("Page EFFECTUER_PAIEMENT EN LIGNE : famille=%s payfip_mode=%s", request.user.famille, payfip_mode)
+        logger.debug("Page EFFECTUER_PAIEMENT EN LIGNE : famille=%s payfip_mode=%s", famille, payfip_mode)
 
         if payfip_mode == "validation": saisie = "X"
         elif payfip_mode == "production": saisie = "A"
@@ -115,18 +126,18 @@ def effectuer_paiement_en_ligne(request):
 
         # il y a plus d'une facture sélectionnée
         if len(dict_ventilation["facture"]) > 1:
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): plus d'une facture selectionnee pour PAYFIP NON TRAITE", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): plus d'une facture selectionnee pour PAYFIP NON TRAITE", famille)
             return JsonResponse({"erreur": "Paiement en ligne multi-factures impossible"}, status=401)
 
         # Vérifie qu'il n'y a pas de préfacturation dedans
         if len(dict_ventilation["periode"]) > 0 :
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): Il n'est pas possible de régler de la préfacturation avec PAYFIP", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): Il n'est pas possible de régler de la préfacturation avec PAYFIP", famille)
             return JsonResponse({"erreur": "Paiement de la prefacturation impossible avec TIPI"}, status=401)
 
         # Envoi de la requete
         facture = liste_factures[0]
         if not facture.regie:
-            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE TIPI (%s): Aucune régie n'a été paramétrée.", request.user.famille)
+            logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE TIPI (%s): Aucune régie n'a été paramétrée.", famille)
             return JsonResponse({"erreur": "Aucune régie n'a été paramétrée. Contactez l'administrateur du portail."}, status=401)
 
         p = Payment("tipi", {'numcli': facture.regie.numclitipi, "automatic_return_url": request.build_absolute_uri(reverse("retour_payfip"))})
@@ -137,12 +148,12 @@ def effectuer_paiement_en_ligne(request):
             exer=str(facture.date_debut.year),
             refdet=refdet,
             objet=objet,
-            email=request.user.famille.mail,
+            email=famille.mail,
             saisie=saisie)
-        logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): requete: %s // systeme_paiement(%s)", request.user.famille, requete, "payfip")
+        logger.debug(u"Page EFFECTUER_PAIEMENT_EN_LIGNE (%s): requete: %s // systeme_paiement(%s)", famille, requete, "payfip")
 
         # Enregistrement du paiement
-        Paiement.objects.create(famille=request.user.famille, systeme_paiement="payfip", idtransaction=requete[0],
+        Paiement.objects.create(famille=famille, systeme_paiement="payfip", idtransaction=requete[0],
                                 refdet=refdet, montant=montant_reglement, objet=objet, saisie=saisie, ventilation=ventilation_str)
 
         return JsonResponse({"systeme_paiement": "payfip", "urltoredirect": requete[2]})
@@ -172,13 +183,13 @@ def effectuer_paiement_en_ligne(request):
             # vads_payment_config = "MULTI_EXT:%s;%s;%s" % (paiement_1, paiement_2, paiement_3)
         else:
             vads_payment_config = "SINGLE"
-        requete = p.request(amount=montant_reglement, email=request.user.famille.mail, vads_payment_config=vads_payment_config)
-        transaction_id, f, form = requete
+        requete = p.request(amount=montant_reglement, email=famille.mail, vads_payment_config=vads_payment_config)
+        transaction_id, _ignored, form = requete
 
-        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE PAYZEN (Famille %s) : IDtransaction=%s montant=%s ventilation_str=%s", request.user.famille, transaction_id, str(montant_reglement), ventilation_str)
+        logger.debug("Page EFFECTUER_PAIEMENT_EN_LIGNE PAYZEN (Famille %s) : IDtransaction=%s montant=%s ventilation_str=%s", famille, transaction_id, str(montant_reglement), ventilation_str)
 
         # Enregistrement du paiement
-        Paiement.objects.create(famille=request.user.famille, systeme_paiement="payzen", idtransaction=transaction_id,
+        Paiement.objects.create(famille=famille, systeme_paiement="payzen", idtransaction=transaction_id,
                                 montant=montant_reglement, saisie=parametres_portail.get("payzen_mode"), ventilation=ventilation_str)
 
         # Renvoie le formulaire de paiement au template
@@ -393,7 +404,7 @@ def get_detail_facture(request):
 
     # Importation de la facture
     facture = Facture.objects.get(pk=idfacture)
-    if facture.famille != request.user.famille:
+    if facture.famille not in get_familles_from_request(request):
         return JsonResponse({"texte": "Accès interdit"}, status=401)
 
     # Importation des prestations
@@ -434,73 +445,96 @@ class View(CustomView, TemplateView):
         context = super(View, self).get_context_data(**kwargs)
         context['page_titre'] = "Facturation"
 
-        # Vérifie si la famille est abonnée au prélèvement automatique
-        context["prelevement_actif"] = Mandat.objects.filter(famille=self.request.user.famille, actif=True).exists()
-        context['paiement_actif'] = not (context['parametres_portail']["paiement_ligne_off_si_prelevement"] and context["prelevement_actif"])
+        familles = self.get_famille_object()
+        context["familles"] = familles
 
-        # Importation des paiements PAYFIP en cours
-        context['liste_paiements'] = Paiement.objects.filter(famille=self.request.user.famille, systeme_paiement="payfip", resultat__isnull=True, horodatage__gt=datetime.datetime.now() - datetime.timedelta(minutes=5))
-        dict_paiements = {"F": {}, "P": {}, "C": {}}
-        for paiement in context['liste_paiements']:
-            for texte in paiement.ventilation.split(","):
-                type_impaye = texte[0]
-                ID, montant = texte[1:].split("#")
-                ID, montant = int(ID), decimal.Decimal(montant)
-                dict_paiements[type_impaye].setdefault(ID, decimal.Decimal(0))
-                dict_paiements[type_impaye][ID] += montant
+        def _build_data_for_famille(famille, emit_notifications=False):
+            data = {"famille": famille}
 
-        # Affichage des notifications de paiements récents
-        for paiement in Paiement.objects.filter(famille=self.request.user.famille, notification__isnull=True, horodatage__gt=datetime.datetime.now() - datetime.timedelta(hours=1)):
-            if paiement.resultat == "PAID":
-                messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès" % paiement.montant)
-            elif paiement.resultat == "DENIED":
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé" % paiement.montant)
-            elif paiement.resultat == "CANCELLED":
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé" % paiement.montant)
-            else:
-                messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente." % paiement.montant)
-            paiement.notification = datetime.datetime.now()
-            paiement.save()
+            # Vérifie si la famille est abonnée au prélèvement automatique
+            data["prelevement_actif"] = Mandat.objects.filter(famille=famille, actif=True).exists()
+            data['paiement_actif'] = not (context['parametres_portail']["paiement_ligne_off_si_prelevement"] and data["prelevement_actif"])
 
-        # Importation des factures impayées
-        liste_factures = []
-        liste_factures_impayees = []
-        total_factures_impayees = decimal.Decimal(0)
-        for facture in Facture.objects.filter(famille=self.request.user.famille).exclude(etat="annulation").order_by("-date_edition"):
-            if facture.pk in dict_paiements["F"]:
-                facture.regle = facture.total
-                facture.solde_actuel = decimal.Decimal(0)
-            if facture.solde_actuel and (not facture.date_limite_paiement or datetime.date.today() <= facture.date_limite_paiement):
-                liste_factures_impayees.append(facture)
-                total_factures_impayees += facture.solde_actuel
-            liste_factures.append(facture)
-        context['liste_factures_impayees'] = liste_factures_impayees
-        context['liste_factures'] = liste_factures
+            # Importation des paiements PAYFIP en cours
+            data['liste_paiements'] = Paiement.objects.filter(
+                famille=famille,
+                systeme_paiement="payfip",
+                resultat__isnull=True,
+                horodatage__gt=datetime.datetime.now() - datetime.timedelta(minutes=5),
+            )
+            dict_paiements = {"F": {}, "P": {}, "C": {}}
+            for paiement in data['liste_paiements']:
+                for texte in paiement.ventilation.split(","):
+                    type_impaye = texte[0]
+                    ID, montant = texte[1:].split("#")
+                    ID, montant = int(ID), decimal.Decimal(montant)
+                    dict_paiements[type_impaye].setdefault(ID, decimal.Decimal(0))
+                    dict_paiements[type_impaye][ID] += montant
 
-        # Importation de la préfacturation des périodes
-        total_periodes_impayees = decimal.Decimal(0)
-        liste_finale_periodes = []
+            # Affichage des notifications de paiements récents
+            if emit_notifications:
+                for paiement in Paiement.objects.filter(
+                    famille=famille,
+                    notification__isnull=True,
+                    horodatage__gt=datetime.datetime.now() - datetime.timedelta(hours=1),
+                ):
+                    if paiement.resultat == "PAID":
+                        messages.add_message(self.request, messages.SUCCESS, "Le paiement en ligne de %.2f Euros a été enregistré avec succès (%s)" % (paiement.montant, famille.nom))
+                    elif paiement.resultat == "DENIED":
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été refusé (%s)" % (paiement.montant, famille.nom))
+                    elif paiement.resultat == "CANCELLED":
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a été annulé (%s)" % (paiement.montant, famille.nom))
+                    else:
+                        messages.add_message(self.request, messages.ERROR, "Le paiement en ligne de %.2f Euros a rencontré une erreur. La notification de paiement semble absente. (%s)" % (paiement.montant, famille.nom))
+                    paiement.notification = datetime.datetime.now()
+                    paiement.save()
 
-        # Récupération des périodes de réservations
-        liste_dates_extremes = []
-        liste_periodes = []
-        for periode in PortailPeriode.objects.select_related("activite").prefetch_related("categories").filter(prefacturation=True):
-            if periode.Is_famille_authorized(famille=self.request.user.famille):
-                periode.total = decimal.Decimal(0)
-                periode.regle = decimal.Decimal(0)
-                periode.solde = decimal.Decimal(0)
-                liste_periodes.append(periode)
-                liste_dates_extremes.append(periode.date_debut)
-                liste_dates_extremes.append(periode.date_fin)
-        if liste_periodes:
-            date_min = min(liste_dates_extremes)
-            date_max = max(liste_dates_extremes)
+            # Importation des factures impayées
+            liste_factures = []
+            liste_factures_impayees = []
+            total_factures_impayees = decimal.Decimal(0)
+            for facture in Facture.objects.filter(famille=famille).exclude(etat="annulation").order_by("-date_edition"):
+                if facture.pk in dict_paiements["F"]:
+                    facture.regle = facture.total
+                    facture.solde_actuel = decimal.Decimal(0)
+                if facture.solde_actuel and (not facture.date_limite_paiement or datetime.date.today() <= facture.date_limite_paiement):
+                    liste_factures_impayees.append(facture)
+                    total_factures_impayees += facture.solde_actuel
+                liste_factures.append(facture)
+            data['liste_factures_impayees'] = liste_factures_impayees
+            data['liste_factures'] = liste_factures
 
-            # Recherche les impayés par période de réservations
+            # Importation de la préfacturation des périodes
+            total_periodes_impayees = decimal.Decimal(0)
+            liste_finale_periodes = []
+
+            # Récupération des périodes de réservations
+            liste_dates_extremes = []
+            liste_periodes = []
+            for periode in PortailPeriode.objects.select_related("activite").prefetch_related("categories").filter(prefacturation=True):
+                if periode.Is_famille_authorized(famille=famille):
+                    periode.total = decimal.Decimal(0)
+                    periode.regle = decimal.Decimal(0)
+                    periode.solde = decimal.Decimal(0)
+                    liste_periodes.append(periode)
+                    liste_dates_extremes.append(periode.date_debut)
+                    liste_dates_extremes.append(periode.date_fin)
             if liste_periodes:
-                ventilations = Ventilation.objects.values("prestation").filter(famille=self.request.user.famille, prestation__date__gte=date_min, prestation__date__lte=date_max).annotate(total=Sum("montant"))
+                date_min = min(liste_dates_extremes)
+                date_max = max(liste_dates_extremes)
+
+                ventilations = Ventilation.objects.values("prestation").filter(
+                    famille=famille,
+                    prestation__date__gte=date_min,
+                    prestation__date__lte=date_max,
+                ).annotate(total=Sum("montant"))
                 dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
-                for prestation in Prestation.objects.filter(famille=self.request.user.famille, date__gte=date_min, date__lte=date_max, facture__isnull=True):
+                for prestation in Prestation.objects.filter(
+                    famille=famille,
+                    date__gte=date_min,
+                    date__lte=date_max,
+                    facture__isnull=True,
+                ):
                     solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
                     if solde_prestation > decimal.Decimal(0):
                         for periode in liste_periodes:
@@ -518,48 +552,72 @@ class View(CustomView, TemplateView):
                     if periode.solde:
                         liste_finale_periodes.append(periode)
 
-        context["liste_periodes_prefacturation"] = liste_finale_periodes
+            data["liste_periodes_prefacturation"] = liste_finale_periodes
 
-        # Importation de la préfacturation des cotisations
-        total_cotisations_impayees = decimal.Decimal(0)
-        liste_finale_cotisations = []
+            # Importation de la préfacturation des cotisations
+            total_cotisations_impayees = decimal.Decimal(0)
+            liste_finale_cotisations = []
 
-        ventilations = Ventilation.objects.values("prestation").filter(famille=self.request.user.famille, prestation__cotisation__isnull=False).annotate(total=Sum("montant"))
-        dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
-        for prestation in Prestation.objects.select_related("cotisation").filter(famille=self.request.user.famille, cotisation__isnull=False, facture__isnull=True, cotisation__unite_cotisation__prefacturation=True):
-            solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
-            if solde_prestation > decimal.Decimal(0):
-                prestation.total = prestation.montant
-                prestation.regle = dict_ventilations.get(prestation.pk, decimal.Decimal(0))
-                prestation.solde = solde_prestation
+            ventilations = Ventilation.objects.values("prestation").filter(
+                famille=famille,
+                prestation__cotisation__isnull=False,
+            ).annotate(total=Sum("montant"))
+            dict_ventilations = {ventilation["prestation"]: ventilation["total"] for ventilation in ventilations}
+            for prestation in Prestation.objects.select_related("cotisation").filter(
+                famille=famille,
+                cotisation__isnull=False,
+                facture__isnull=True,
+                cotisation__unite_cotisation__prefacturation=True,
+            ):
+                solde_prestation = prestation.montant - dict_ventilations.get(prestation.pk, decimal.Decimal(0))
+                if solde_prestation > decimal.Decimal(0):
+                    prestation.total = prestation.montant
+                    prestation.regle = dict_ventilations.get(prestation.pk, decimal.Decimal(0))
+                    prestation.solde = solde_prestation
 
-                # Ajoute les paiements en cours
-                if prestation.pk in dict_paiements["C"]:
-                    prestation.regle = prestation.total
-                    prestation.solde = decimal.Decimal(0)
-                total_cotisations_impayees += prestation.solde
-                if prestation.solde:
-                    liste_finale_cotisations.append(prestation)
+                    # Ajoute les paiements en cours
+                    if prestation.pk in dict_paiements["C"]:
+                        prestation.regle = prestation.total
+                        prestation.solde = decimal.Decimal(0)
+                    total_cotisations_impayees += prestation.solde
+                    if prestation.solde:
+                        liste_finale_cotisations.append(prestation)
 
-        context["liste_cotisations_prefacturation"] = liste_finale_cotisations
+            data["liste_cotisations_prefacturation"] = liste_finale_cotisations
 
-        # Création du texte de rappel des impayés
-        liste_impayes = []
-        texte_impayes = None
-        if liste_factures_impayees:
-            liste_impayes.append(_("1 facture à régler") if len(liste_factures_impayees) == 1 else _("%d factures à régler") % len(liste_factures_impayees))
-        if liste_finale_periodes or liste_finale_cotisations:
-            liste_impayes.append(_("des prestations à régler en avance"))
-        if liste_impayes:
-            texte_impayes = _("Il reste %s pour un total de") % utils_texte.Convert_liste_to_texte_virgules(liste_impayes) + " <strong>%s</strong>" % utils_texte.Formate_montant(total_factures_impayees + total_periodes_impayees + total_cotisations_impayees)
-        context["texte_impayes"] = texte_impayes
+            # Création du texte de rappel des impayés
+            liste_impayes = []
+            texte_impayes = None
+            if liste_factures_impayees:
+                liste_impayes.append(_("1 facture à régler") if len(liste_factures_impayees) == 1 else _("%d factures à régler") % len(liste_factures_impayees))
+            if liste_finale_periodes or liste_finale_cotisations:
+                liste_impayes.append(_("des prestations à régler en avance"))
+            if liste_impayes:
+                texte_impayes = _("Il reste %s pour un total de") % utils_texte.Convert_liste_to_texte_virgules(liste_impayes) + " <strong>%s</strong>" % utils_texte.Formate_montant(total_factures_impayees + total_periodes_impayees + total_cotisations_impayees)
+            data["texte_impayes"] = texte_impayes
 
-        # Calcul du solde
-        if context["parametres_portail"].get("facturation_afficher_solde_famille", False):
-            total_prestations = Prestation.objects.values('famille_id').filter(famille=self.request.user.famille).aggregate(total=Sum("montant"))
-            total_reglements = Reglement.objects.values('famille_id').filter(famille=self.request.user.famille).aggregate(total=Sum("montant"))
-            total_du = total_prestations["total"] if total_prestations["total"] else decimal.Decimal(0)
-            total_regle = total_reglements["total"] if total_reglements["total"] else decimal.Decimal(0)
-            context["solde_famille"] = total_du - total_regle
+            # Calcul du solde
+            solde_famille = None
+            if context["parametres_portail"].get("facturation_afficher_solde_famille", False):
+                total_prestations = Prestation.objects.values('famille_id').filter(famille=famille).aggregate(total=Sum("montant"))
+                total_reglements = Reglement.objects.values('famille_id').filter(famille=famille).aggregate(total=Sum("montant"))
+                total_du = total_prestations["total"] if total_prestations["total"] else decimal.Decimal(0)
+                total_regle = total_reglements["total"] if total_reglements["total"] else decimal.Decimal(0)
+                solde_famille = total_du - total_regle
+                data["solde_famille"] = solde_famille
+
+            # Structure attendue
+            data["factures"] = liste_factures
+            data["solde"] = solde_famille
+
+            return data
+
+        # -----------------------------
+        # Données par famille (multi-famille)
+        # -----------------------------
+        donnees_par_famille = []
+        for famille in familles:
+            donnees_par_famille.append(_build_data_for_famille(famille, emit_notifications=True))
+        context["donnees_par_famille"] = donnees_par_famille
 
         return context

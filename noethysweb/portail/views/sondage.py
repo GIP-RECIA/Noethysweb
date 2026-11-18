@@ -34,7 +34,7 @@ class View_questions(CustomView, TemplateView):
         # Création des pages et des formulaires
         liste_pages = []
         questions = SondageQuestion.objects.filter(page__sondage=sondage).order_by("ordre")
-        reponses = SondageReponse.objects.select_related("question").filter(repondant__sondage=sondage, repondant__famille=self.request.user.famille, repondant__individu=individu)
+        reponses = SondageReponse.objects.select_related("question").filter(repondant__sondage=sondage, repondant__famille=self.get_famille(), repondant__individu=individu)
         for page in SondagePage.objects.filter(sondage=sondage).order_by("ordre"):
             liste_pages.append((page, Formulaire(request=self.request, page=page, questions=questions, reponses=reponses)))
         context["pages"] = liste_pages
@@ -55,7 +55,7 @@ class View_questions(CustomView, TemplateView):
             valeurs.update(form.cleaned_data)
 
         # Création ou récupération du répondant
-        repondant, created = SondageRepondant.objects.get_or_create(sondage=sondage, famille=request.user.famille, individu_id=idindividu)
+        repondant, created = SondageRepondant.objects.get_or_create(sondage=sondage, famille=self.get_famille(), individu_id=idindividu)
         if not created:
             repondant.date_modification = datetime.datetime.now()
             repondant.save()
@@ -84,10 +84,11 @@ class View_introduction(CustomView, TemplateView):
         context["box_titre"] = sondage.titre
 
         # Importation des sondages existants
-        context["sondages_existants"] = SondageRepondant.objects.filter(sondage=sondage, famille=self.request.user.famille)
+        famille = self.get_famille()
+        context["sondages_existants"] = SondageRepondant.objects.filter(sondage=sondage, famille=famille)
 
         # Importation des rattachements
-        conditions_rattachements = Q(famille=self.request.user.famille, individu__deces=False)
+        conditions_rattachements = Q(famille=famille, individu__deces=False)
         if sondage.public == "individu":
             conditions_rattachements &= Q(categorie__in=[int(pk) for pk in sondage.categories_rattachements])
         context['rattachements'] = Rattachement.objects.prefetch_related("individu").filter(conditions_rattachements).order_by("individu__nom", "individu__prenom")

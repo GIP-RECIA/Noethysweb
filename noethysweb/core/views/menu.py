@@ -8,7 +8,9 @@ from django.urls import reverse_lazy
 from django.conf import settings
 
 
-def GetMenuPrincipal(organisateur=None, user=None, force_permissions=False):
+def GetMenuPrincipal(configuration_globale=None, organisateur=None, user=None, force_permissions=False):
+    configuration_globale = configuration_globale or {}  # Fallback to an empty dictionary
+
     menu = Menu(titre="Menu principal", user=user, force_permissions=force_permissions)
 
     # ------------------------------------ Accueil ------------------------------------
@@ -23,6 +25,7 @@ def GetMenuPrincipal(organisateur=None, user=None, force_permissions=False):
     else:
         menu_structure.Add(code="organisateur_ajouter", titre="Organisateur", icone="file-text-o", compatible_demo=False)
     menu_structure.Add(code="structures_liste", titre="Structures", icone="file-text-o", compatible_demo=False)
+    menu_structure.Add(code="configuration_globale", titre="Configuration globale", icone="file-text-o")
 
     # Activités
     menu_activites = menu_parametrage.Add(titre="Activités")
@@ -587,19 +590,19 @@ class Menu():
 
     def Add(self, code="", titre="", icone="", url=None, toujours_afficher=False, compatible_demo=True, args=None, superutilisateur_only=False, masquer=False):
         # Créer l'objet menu
-        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user, compatible_demo=compatible_demo, toujours_afficher=toujours_afficher, masquer=masquer, force_permissions=self.force_permissions)
-        
-        afficher = True # Par défaut, on affiche tout
-        
-        # Si on n'est pas en mode force_permissions pour générer les permissions, on vérifie si l'on doit ou non afficher le menu
-        if not self.force_permissions:
-            afficher = not code or not self.user or toujours_afficher or code.endswith("_toc") or self.user.has_perm("core.%s" % code)
-            
-            if masquer or (self.user and superutilisateur_only and not self.user.is_superuser):
-                afficher = False
-    
-        if afficher:
+        menu = Menu(self, code=code, titre=titre, icone=icone, url=url, args=args, user=self.user, compatible_demo=compatible_demo, toujours_afficher=toujours_afficher, force_permissions=self.force_permissions)
+
+        afficher = not code or not self.user or toujours_afficher or code.endswith("_toc") or self.user.has_perm("core.%s" % code)
+
+        if masquer or (self.user and superutilisateur_only and not self.user.is_superuser):
+            afficher = False
+
+        # Ajouter le menu uniquement s'il doit être affiché
+        #  ou pour la création des permissions
+        if afficher or self.force_permissions:
             self.children.append(menu)
+
+        # Retourne toujours le menu, même s'il n'est pas affiché
         return menu
 
     def GetUrl(self):
