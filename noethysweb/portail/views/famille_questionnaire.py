@@ -45,4 +45,4 @@ class Modifier(Consulter):
         for key, valeur in form.cleaned_data.items():
             if key.startswith("question_"):
                 idquestion = int(key.split("_")[1])
-                objet, created = QuestionnaireReponse.objects.update_or_create(famille=self.request.user.famille, question_id=idquestion, defaults={'reponse': valeur})
+                objet, created = QuestionnaireReponse.objects.update_or_create(famille=self.get_famille(), question_id=idquestion, defaults={'reponse': valeur})

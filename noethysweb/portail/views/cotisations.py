@@ -21,9 +21,10 @@ class View(CustomView, TemplateView):
         context['page_titre'] = _("Adhésions")
 
         # Adhésions à fournir
-        context['cotisations_fournir'] = utils_cotisations_manquantes.Get_cotisations_manquantes(famille=self.request.user.famille, exclure_individus=self.request.user.famille.individus_masques.all())
+        famille = self.get_famille()
+        context['cotisations_fournir'] = utils_cotisations_manquantes.Get_cotisations_manquantes(famille=famille, exclure_individus=famille.individus_masques.all()) if famille else []
 
         # Liste des dernières adhésions
-        context['liste_cotisations'] = Cotisation.objects.select_related("prestation", "individu").filter(famille=self.request.user.famille).order_by("date_debut")
+        context['liste_cotisations'] = Cotisation.objects.select_related("prestation", "individu").filter(famille=famille).order_by("date_debut") if famille else []
 
         return context

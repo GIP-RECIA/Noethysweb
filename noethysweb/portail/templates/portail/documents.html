@@ -40,16 +40,19 @@
         {% block box_theme %}card-outline card-lightblue{% endblock %}
         {% block box_titre %}{% blocktrans %}Pièces à fournir{% endblocktrans %}{% endblock %}
         {% block box_contenu %}
-            {% if pieces_fournir %}
-                <p>{% blocktrans %}Les pièces suivantes marquées d'une croix rouge sont à nous transmettre{% endblocktrans %} :</p>
-                <ul class="list-unstyled">
-                    {% for piece in pieces_fournir %}
-                        <li>{% if piece.valide %}<i class='fa fa-check fa-fw text-green'></i>{% else %}<i class='fa fa-close fa-fw text-red'></i>{% endif %} {{ piece.label }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                {% blocktrans %}Aucune pièce à fournir.{% endblocktrans %}
-            {% endif %}
+            {% for data in donnees_par_famille %}
+                <h3>Famille: {{ data.famille }}</h3>
+                {% if data.pieces_fournir %}
+                    <p>{% blocktrans %}Les pièces suivantes marquées d'une croix rouge sont à nous transmettre{% endblocktrans %} :</p>
+                    <ul class="list-unstyled">
+                        {% for piece in data.pieces_fournir %}
+                            <li>{% if piece.valide %}<i class='fa fa-check fa-fw text-green'></i>{% else %}<i class='fa fa-close fa-fw text-red'></i>{% endif %} {{ piece.label }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    {% blocktrans %}Aucune pièce à fournir.{% endblocktrans %}
+                {% endif %}
+            {% endfor %}
         {% endblock box_contenu %}
     {% endembed %}
 
@@ -64,7 +67,7 @@
     {% endembed %}
 
     {# Liste des documents à télécharger #}
-    {% if liste_documents %}
+    {% if liste_documents or donnees_par_famille %}
         {% embed 'core/box.html' with box_titre=True %}
             {% block box_theme %}card-outline card-lightblue{% endblock %}
             {% block box_titre %}{% blocktrans %}Documents à télécharger{% endblocktrans %}{% endblock %}
@@ -95,6 +98,26 @@
                         </div>
                     {% endfor %}
                 </div>
+
+                {% for data in donnees_par_famille %}
+                    {% if data.consentements %}
+                        <h3>Famille: {{ data.famille }}</h3>
+                        <div class="card-columns">
+                            {% for document in data.consentements %}
+                                <div class="card mb-4" style="margin-top: 1px;">
+                                    <div class="card-body pl-3 pr-3 pt-3 pb-1" style="background-color: #f4f6f9">
+                                        <h5 class="card-title"><a href="{{ document.fichier.url }}" target="_blank" title="{% trans "Télécharger le document" %}">{{ document.titre }}</a></h5>
+                                        <div class="card-text link-muted mt-1"><small>{{ document.texte|default:"&nbsp;" }}</small></div>
+                                        <span class="mailbox-attachment-size clearfix mt-1 mb-2">
+                                            <span>{{ document.fichier.size|filesizeformat }} - {{ document.extension|upper }}</span>
+                                            <a href="{{ document.fichier.url }}" class="btn btn-default btn-sm float-right" target="_blank" title="{% trans "Télécharger le document" %}"><i class="fa fa-download"></i></a>
+                                        </span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endfor %}
             {% endblock box_contenu %}
         {% endembed %}
     {% endif %}

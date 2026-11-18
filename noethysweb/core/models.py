@@ -621,6 +621,9 @@ class Organisateur(models.Model):
     logo = ResizedImageField(verbose_name="Logo", upload_to=get_uuid_path, blank=True, null=True)
     gps = models.CharField(verbose_name="GPS", max_length=200, blank=True, null=True)
     logo_update = models.DateTimeField(verbose_name="Date MAJ Logo", max_length=200, blank=True, null=True)
+    ent_active = models.BooleanField(verbose_name="ENT activé", default=False)
+    ent_username = models.CharField(verbose_name="Nom d'utilisateur", max_length=200, blank=True, null=True)
+    ent_password = encrypt(models.CharField(verbose_name="Mot de passe", max_length=200, blank=True, null=True))
 
     class Meta:
         db_table = 'organisateur'
@@ -806,6 +809,8 @@ class TypeVaccin(models.Model):
 class Ecole(models.Model):
     idecole = models.AutoField(verbose_name="ID", db_column='IDecole', primary_key=True)
     nom = models.CharField(verbose_name="Nom", max_length=300)
+    uai = models.CharField(verbose_name="Code UAI", max_length=20, blank=True, null=True, help_text="Identifiant officiel de l'établissement, utilisé pour faire correspondre l'école à celle de l'ENT lors d'un import.")
+    ent_id = models.CharField(verbose_name="ID ENT", max_length=200, blank=True, null=True, help_text="Identifiant interne de l'établissement dans l'ENT, plus fiable que l'UAI (toujours présent, contrairement à l'UAI parfois absent).")
     rue = models.CharField(verbose_name="Rue", max_length=200, blank=True, null=True)
     cp = models.CharField(verbose_name="Code postal", max_length=50, blank=True, null=True)
     ville = models.CharField(verbose_name="Ville", max_length=200, blank=True, null=True)
@@ -1660,11 +1665,22 @@ class Remplissage(models.Model):
     def __str__(self):
         return "Remplissage ID%d" % self.idremplissage if self.idremplissage else "Nouveau"
 
+class CategorieCompteInternet(models.Model):
+    idcategorie = models.AutoField(verbose_name="ID", db_column='IDcategorie', primary_key=True)
+    nom = models.CharField(verbose_name="Nom", max_length=200)
 
+    class Meta:
+        db_table = 'categories_compte_internet'
+        verbose_name = "catégorie de compte internet"
+        verbose_name_plural = "catégories de compte internet"
+
+    def __str__(self):
+        return self.nom
 
 class Individu(models.Model):
     idindividu = models.AutoField(verbose_name="ID", db_column='IDindividu', primary_key=True)
     civilite = models.IntegerField(verbose_name=_("Civilité"), db_column='IDcivilite', choices=data_civilites.GetListeCivilitesForModels(), default=1)
+    civilite_a_verifier = models.BooleanField(verbose_name="Civilité à vérifier", default=False, help_text="Coché automatiquement lors d'un import ENT, quand la civilité réelle n'est pas connue et doit être confirmée par un agent.")
     nom = models.CharField(verbose_name=_("Nom"), max_length=200)
     nom_jfille = models.CharField(verbose_name=_("Nom de naissance"), max_length=200, blank=True, null=True)
     prenom = models.CharField(verbose_name=_("Prénom"), max_length=200, blank=True, null=True)
@@ -1709,6 +1725,20 @@ class Individu(models.Model):
     type_garde_choix = [(1, "Mère"), (2, "Père"), (3, "Garde alternée"), (4, "Autre personne")]
     type_garde = models.IntegerField(verbose_name=_("Type de garde"), choices=type_garde_choix, blank=True, null=True)
     info_garde = models.TextField(verbose_name=_("Information sur la garde"), blank=True, null=True)
+    # new attributs
+    internet_categorie = models.ForeignKey(CategorieCompteInternet, verbose_name="Catégorie",related_name="internet_categori", on_delete=models.PROTECT, blank=True,null=True)
+    internet_actif = models.BooleanField(verbose_name="Compte internet activé", default=True)
+    internet_identifiant = encrypt(models.CharField(verbose_name="Identifiant", max_length=200, blank=True, null=True))
+    internet_mdp = encrypt(models.CharField(verbose_name="Mot de passe", max_length=200, blank=True, null=True))
+    internet_secquest = models.CharField(verbose_name="Question", max_length=200, blank=True, null=True)
+    internet_reservations = models.BooleanField(verbose_name="Autoriser les réservations sur le portail", default=True)
+    mobile = encrypt(models.CharField(verbose_name="Portable favori", max_length=100, blank=True, null=True))
+    utilisateur = models.OneToOneField(Utilisateur, on_delete=models.CASCADE, null=True)
+    certification_date = models.DateTimeField(verbose_name="Date de certification", blank=True, null=True)
+    blocage_impayes_off = models.BooleanField(verbose_name="Ne jamais appliquer le blocage des réservations si impayés",default=False,help_text="En cochant cette case, vous permettez à cette famille d'accéder aux réservations du portail même s'il y a des impayés et que le paramètre 'blocage si impayés' a été activé dans les paramètres généraux du portail.")
+    ent_id = models.CharField(verbose_name="ID ENT", max_length=200, blank=True, null=True)
+    ent_lie_par = models.CharField(verbose_name="Compte ENT lié par", max_length=150, blank=True, null=True, help_text="Identifiant de l'agent qui a posé ce lien, ou 'auto' si c'est un import en masse sans revue individuelle.")
+    ent_lie_le = models.DateTimeField(verbose_name="Compte ENT lié le", blank=True, null=True)
 
     class Meta:
         db_table = 'individus'
@@ -1800,19 +1830,6 @@ class Scolarite(models.Model):
         return "Etape de scolarité du %s au %s" % (self.date_debut.strftime('%d/%m/%Y'), self.date_fin.strftime('%d/%m/%Y'))
 
 
-class CategorieCompteInternet(models.Model):
-    idcategorie = models.AutoField(verbose_name="ID", db_column='IDcategorie', primary_key=True)
-    nom = models.CharField(verbose_name="Nom", max_length=200)
-
-    class Meta:
-        db_table = 'categories_compte_internet'
-        verbose_name = "catégorie de compte internet"
-        verbose_name_plural = "catégories de compte internet"
-
-    def __str__(self):
-        return self.nom
-
-
 class Famille(models.Model):
     idfamille = models.AutoField(verbose_name="ID", db_column='IDfamille', primary_key=True)
     date_creation = models.DateTimeField(verbose_name="Date de création", auto_now_add=True)
@@ -1862,6 +1879,7 @@ class Famille(models.Model):
     mobile_blocage = models.BooleanField(verbose_name="La famille ne souhaite pas recevoir de SMS groupés", default=False, help_text="L'éditeur de SMS groupés du menu Outils ne proposera pas cette famille dans les destinataires.")
     individus_masques = models.ManyToManyField(Individu, verbose_name="Individus masqués", related_name="individus_masques", blank=True)
     blocage_impayes_off = models.BooleanField(verbose_name="Ne jamais appliquer le blocage des réservations si impayés", default=False, help_text="En cochant cette case, vous permettez à cette famille d'accéder aux réservations du portail même s'il y a des impayés et que le paramètre 'blocage si impayés' a été activé dans les paramètres généraux du portail.")
+    mode_separation = models.CharField(verbose_name="Mode de séparation ENT", max_length=20, blank=True, null=True, choices=[("automatique", "Automatique"), ("force", "Forcé")])
 
     class Meta:
         db_table = 'familles'

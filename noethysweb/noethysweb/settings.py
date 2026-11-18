@@ -314,6 +314,12 @@ CSP_FRAME_ANCESTORS = (
     "'self'",
 )
 
+# Connexion ENT (identiques pour toutes les collectivités sur la même recette Edifice,
+# à surcharger dans settings_production.py)
+ENT_URL = ""
+ENT_CLIENT_ID = ""
+ENT_CLIENT_SECRET = ""
+
 # Chargement des settings de production
 try:
     from .settings_production import *
