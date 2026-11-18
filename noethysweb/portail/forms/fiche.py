@@ -5,6 +5,7 @@
 
 import json
 from django.utils.translation import gettext as _
+from django.forms import ModelForm as DjangoModelForm
 from crispy_forms.layout import Layout, HTML, Fieldset, ButtonHolder
 from crispy_forms.bootstrap import Field, StrictButton
 from core.models import PortailRenseignement
@@ -16,6 +17,10 @@ class FormulaireBase():
         self.request = kwargs.pop("request", None)
         if not hasattr(self, "mode"):
             self.mode = kwargs.pop("mode", None)
+        # Pour les forms.Form purs, instance n'existe pas — on la retire.
+        # Pour les ModelForm, on la conserve pour que l'instance DB soit chargée.
+        if not isinstance(self, DjangoModelForm):
+            kwargs.pop("instance", None)
         super(FormulaireBase, self).__init__(*args, **kwargs)
 
     def Set_layout(self):

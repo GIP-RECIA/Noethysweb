@@ -19,6 +19,8 @@ from core.widgets import DatePickerWidget, Crop_image
 
 
 class Widget_copie_tarif_evenement(ModelSelect2Widget):
+    # model requis par ModelSelect2Widget pour les requêtes AJAX d'autocomplétion
+    model = Evenement
     search_fields = ["nom__icontains"]
 
     def label_from_instance(widget, instance):

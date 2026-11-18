@@ -30,6 +30,17 @@ class View(CustomView, TemplateView):
         context['liste_structures_coords'] = [structure for structure in liste_structures if structure.afficher_coords]
 
         # Importation du nombre de messages non lus (regroupement par structure)
-        context['dict_messages_non_lus'] = {valeur["structure"]: valeur["nbre"] for valeur in PortailMessage.objects.values("structure").filter(famille=self.request.user.famille, utilisateur__isnull=False, date_lecture__isnull=True).annotate(nbre=Count('pk'))}
+        # Récupère toutes les familles de l'utilisateur
+        user = self.request.user
+        if hasattr(user, "famille") and user.famille:
+            familles = [user.famille]
+        elif hasattr(user, "individu") and user.individu:
+            from core.models import Rattachement
+            familles = [r.famille for r in Rattachement.objects.select_related("famille").filter(individu=user.individu, titulaire=1) if r.famille]
+        else:
+            familles = []
+        
+        context['dict_messages_non_lus'] = {valeur["structure"]: valeur["nbre"] for valeur in PortailMessage.objects.values("structure").filter(famille__in=familles, utilisateur__isnull=False, date_lecture__isnull=True).annotate(nbre=Count('pk'))}
+        context['familles'] = familles
 
         return context
